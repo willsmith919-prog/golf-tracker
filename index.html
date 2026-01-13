@@ -55,7 +55,27 @@
       const loadData = async () => {
         try {
           const coursesData = localStorage.getItem('golf-courses');
-          if (coursesData) setCourses(JSON.parse(coursesData));
+          if (coursesData) {
+            setCourses(JSON.parse(coursesData));
+          } else {
+            // Load default courses on first use
+            const defaultCourses = [
+              {
+                id: Date.now(),
+                name: "Davis Park",
+                teeColor: "White",
+                holes: [4,3,5,4,4,4,3,5,4,5,3,4,5,3,4,3,4,4]
+              },
+              {
+                id: Date.now() + 1,
+                name: "Valley View",
+                teeColor: "White",
+                holes: [4,5,4,3,4,4,3,4,5,4,5,3,4,4,4,3,5,4]
+              }
+            ];
+            setCourses(defaultCourses);
+            await saveCourses(defaultCourses);
+          }
         } catch (error) { console.log('No courses found'); }
 
         try {
@@ -608,8 +628,158 @@
         );
       }
 
-      // TODO: Add round-history, view-round, round-summary views
-      // (keeping them the same as previous version for now)
+      // ROUND HISTORY VIEW
+      if (view === 'round-history') {
+        const completedRounds = rounds.filter(r => r.isComplete);
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-green-800 to-teal-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('home')} className="text-white mb-6 hover:text-emerald-200">← Back</button>
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-3xl font-bold text-gray-900 mb-6" style={{ fontFamily: 'Georgia, serif' }}>Past Rounds</h2>
+                {completedRounds.length === 0 ? (
+                  <div className="text-center py-8">
+                    <Calendar />
+                    <p className="text-gray-600 mt-4">No completed rounds yet. Finish a round to see it here!</p>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {completedRounds.map((round) => {
+                      const { total, toPar } = calculateScore(round);
+                      return (
+                        <div key={round.key} className="bg-gray-50 rounded-xl p-4 hover:bg-gray-100 transition-colors">
+                          <div className="flex items-center justify-between">
+                            <button onClick={() => { setViewingRound(round); setView('view-round'); }} className="flex-1 text-left">
+                              <div className="font-bold text-lg text-gray-900">{round.courseName}</div>
+                              <div className="text-sm text-gray-600">{formatDate(round.date)} · {round.teeColor} Tees</div>
+                              <div className="flex gap-4 mt-2">
+                                <div className="text-sm"><span className="font-semibold">{total}</span> <span className="text-gray-500">Total</span></div>
+                                <div className="text-sm"><span className={`font-semibold ${toPar > 0 ? 'text-red-600' : toPar < 0 ? 'text-emerald-600' : 'text-gray-900'}`}>{toPar > 0 ? '+' : ''}{toPar}</span> <span className="text-gray-500">To Par</span></div>
+                              </div>
+                            </button>
+                            <button onClick={() => deleteRound(round.key)} className="ml-4 p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                              <Trash />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // VIEW ROUND DETAIL
+      if (view === 'view-round' && viewingRound) {
+        const { total, toPar, holesPlayed } = calculateScore(viewingRound);
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-green-800 to-teal-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('round-history')} className="text-white mb-6 hover:text-emerald-200">← Back to History</button>
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-6">
+                <h2 className="text-2xl font-bold text-gray-900">{viewingRound.courseName}</h2>
+                <p className="text-gray-600">{formatDate(viewingRound.date)} · {viewingRound.teeColor} Tees · {holesPlayed} holes</p>
+                <div className="grid grid-cols-2 gap-4 mt-6">
+                  <div className="text-center bg-emerald-50 rounded-xl p-4">
+                    <div className="text-3xl font-bold text-emerald-600">{total}</div>
+                    <div className="text-sm text-gray-600">Total Score</div>
+                  </div>
+                  <div className="text-center bg-emerald-50 rounded-xl p-4">
+                    <div className={`text-3xl font-bold ${toPar > 0 ? 'text-red-600' : toPar < 0 ? 'text-emerald-600' : 'text-gray-900'}`}>{toPar > 0 ? '+' : ''}{toPar}</div>
+                    <div className="text-sm text-gray-600">To Par</div>
+                  </div>
+                </div>
+              </div>
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-4">Scorecard</h3>
+                <div className="mb-6">
+                  <div className="text-xs text-gray-500 mb-2 font-semibold">Front 9</div>
+                  {viewingRound.scores.slice(0, 9).map((score, idx) => {
+                    const details = viewingRound.holeDetails[idx];
+                    const hasDetails = details && (details.putts || details.fairwayHit !== null || details.notes || details.gir);
+                    return (
+                      <div key={idx} className="mb-2">
+                        <button onClick={() => setExpandedHole(expandedHole === idx ? null : idx)} className="w-full bg-gray-50 hover:bg-gray-100 rounded-lg p-3 text-left">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="text-xs text-gray-500 w-8">#{idx + 1}</div>
+                              <div className="font-bold text-lg">{score || '-'}</div>
+                              <div className="text-xs text-gray-400">Par {viewingRound.coursePars[idx]}</div>
+                              {details?.gir && <span className="text-xs text-emerald-600 font-semibold">GIR</span>}
+                            </div>
+                            {hasDetails && <div className="flex items-center gap-2"><span className="text-xs text-emerald-600">Details</span><ChevronDown /></div>}
+                          </div>
+                        </button>
+                        {expandedHole === idx && hasDetails && (
+                          <div className="bg-emerald-50 border-2 border-emerald-100 rounded-lg p-3 mt-1 text-sm">
+                            {details.putts && <div>Putts: {details.putts}</div>}
+                            {details.fairwayHit !== null && <div>Fairway: {details.fairwayHit ? '✓ Hit' : '✗ Missed'}</div>}
+                            {details.notes && <div className="text-gray-600 mt-1">{details.notes}</div>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <div>
+                  <div className="text-xs text-gray-500 mb-2 font-semibold">Back 9</div>
+                  {viewingRound.scores.slice(9, 18).map((score, idx) => {
+                    const holeIdx = idx + 9;
+                    const details = viewingRound.holeDetails[holeIdx];
+                    const hasDetails = details && (details.putts || details.fairwayHit !== null || details.notes || details.gir);
+                    return (
+                      <div key={holeIdx} className="mb-2">
+                        <button onClick={() => setExpandedHole(expandedHole === holeIdx ? null : holeIdx)} className="w-full bg-gray-50 hover:bg-gray-100 rounded-lg p-3 text-left">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="text-xs text-gray-500 w-8">#{holeIdx + 1}</div>
+                              <div className="font-bold text-lg">{score || '-'}</div>
+                              <div className="text-xs text-gray-400">Par {viewingRound.coursePars[holeIdx]}</div>
+                              {details?.gir && <span className="text-xs text-emerald-600 font-semibold">GIR</span>}
+                            </div>
+                            {hasDetails && <div className="flex items-center gap-2"><span className="text-xs text-emerald-600">Details</span><ChevronDown /></div>}
+                          </div>
+                        </button>
+                        {expandedHole === holeIdx && hasDetails && (
+                          <div className="bg-emerald-50 border-2 border-emerald-100 rounded-lg p-3 mt-1 text-sm">
+                            {details.putts && <div>Putts: {details.putts}</div>}
+                            {details.fairwayHit !== null && <div>Fairway: {details.fairwayHit ? '✓ Hit' : '✗ Missed'}</div>}
+                            {details.notes && <div className="text-gray-600 mt-1">{details.notes}</div>}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // ROUND SUMMARY VIEW
+      if (view === 'round-summary') {
+        const { total, toPar } = calculateScore(currentRound);
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-green-800 to-teal-900 p-6">
+            <div className="max-w-2xl mx-auto pt-12">
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 text-center">
+                <div className="text-6xl mb-4">🏌️</div>
+                <h2 className="text-4xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>Round Complete!</h2>
+                <p className="text-gray-600 mb-8">{currentRound.courseName}</p>
+                <div className="grid grid-cols-2 gap-6 mb-8">
+                  <div className="bg-emerald-50 rounded-xl p-6"><div className="text-4xl font-bold text-emerald-600">{total}</div><div className="text-sm text-gray-600 mt-1">Total Score</div></div>
+                  <div className="bg-emerald-50 rounded-xl p-6"><div className={`text-4xl font-bold ${toPar > 0 ? 'text-red-600' : toPar < 0 ? 'text-emerald-600' : 'text-gray-900'}`}>{toPar > 0 ? '+' : ''}{toPar}</div><div className="text-sm text-gray-600 mt-1">To Par</div></div>
+                </div>
+                <button onClick={() => { setView('home'); setCurrentRound(null); setChatMessages([]); loadData(); }} className="w-full bg-emerald-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 shadow-lg">Back to Home</button>
+              </div>
+            </div>
+          </div>
+        );
+      }
 
       return null;
     }
