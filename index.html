@@ -415,11 +415,36 @@
       };
 
       const endRound = async () => {
-        if (confirm('Save and exit this round?')) {
+        const choice = confirm('Save progress?\n\nOK = Save and exit\nCancel = Discard round');
+        if (choice === true) {
+          // Save
           await saveRound(currentRound, false);
-          setView('home');
-          setCurrentRound(null);
-          setChatMessages([]);
+        } else if (choice === false) {
+          // Discard - delete if it exists
+          if (currentRound.key) {
+            localStorage.removeItem(currentRound.key);
+          }
+        } else {
+          // User cancelled the dialog
+          return;
+        }
+        setView('home');
+        setCurrentRound(null);
+        setChatMessages([]);
+        loadData();
+      };
+
+      const resetApp = () => {
+        if (confirm('Reset app? This will delete all courses and rounds. This cannot be undone.')) {
+          if (confirm('Are you sure? All data will be permanently deleted.')) {
+            localStorage.clear();
+            setView('home');
+            setCurrentRound(null);
+            setChatMessages([]);
+            setRounds([]);
+            setCourses([]);
+            loadData(); // This will reload default courses
+          }
         }
       };
 
@@ -502,6 +527,15 @@
                   <Calendar />
                   <p className="text-gray-700 mb-2 font-semibold">No courses yet</p>
                   <p className="text-gray-600 text-sm">Add your first course to start tracking rounds</p>
+                </div>
+              )}
+              
+              {/* Reset App Button */}
+              {(courses.length > 0 || rounds.length > 0) && (
+                <div className="mt-8 text-center">
+                  <button onClick={resetApp} className="text-red-400 hover:text-red-300 text-sm">
+                    Reset App
+                  </button>
                 </div>
               )}
             </div>
