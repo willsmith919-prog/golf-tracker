@@ -138,7 +138,7 @@
         setCurrentRound(round);
         setChatMessages([{
           role: 'assistant',
-          content: `Let's play ${course.name}! Starting on hole 1, par ${course.holes[0]}. What'd you score? ⛳`
+          content: `${course.name}. Hole 1, par ${course.holes[0]}. Your score?`
         }]);
         setView('play-round');
       };
@@ -148,7 +148,7 @@
         const { holesPlayed } = calculateScore(round);
         setChatMessages([{
           role: 'assistant',
-          content: `Welcome back! You're on hole ${round.currentHole}, par ${round.coursePars[round.currentHole - 1]}. ${holesPlayed} holes completed. What'd you score?`
+          content: `Hole ${round.currentHole}, par ${round.coursePars[round.currentHole - 1]}. ${holesPlayed} holes complete.`
         }]);
         setView('play-round');
       };
@@ -307,12 +307,12 @@
           }
 
           // If local parsing failed, try AI (fallback)
-          addMessage('assistant', "I didn't quite catch that. Try: '5 with 2 putts' or 'par' or 'birdie'");
+          addMessage('assistant', "Didn't catch that. Try '5 with 2 putts' or 'par'.");
           setIsProcessing(false);
 
         } catch (error) {
           console.error('Error:', error);
-          addMessage('assistant', "Sorry, something went wrong. Try again?");
+          addMessage('assistant', "Issue logging that score. Try again.");
           setIsProcessing(false);
         }
       };
@@ -351,7 +351,7 @@
         // Calculate updated score
         const { total, toPar } = calculateScore(updatedRound);
 
-        // Generate friendly response
+        // Generate professional caddy response
         let scoreName = '';
         const diff = scoreData.score - currentPar;
         if (diff === -3) scoreName = 'Albatross';
@@ -363,31 +363,30 @@
         else if (diff === 3) scoreName = 'Triple bogey';
         else scoreName = `${scoreData.score}`;
 
-        let message = `${scoreName} on hole ${currentHole}`;
-        if (scoreData.putts) message += ` with ${scoreData.putts} putt${scoreData.putts > 1 ? 's' : ''}`;
-        if (scoreData.fairwayHit === true) message += ', hit fairway';
+        let message = `${scoreName} on ${currentHole}`;
+        if (scoreData.putts) message += `, ${scoreData.putts} putt${scoreData.putts > 1 ? 's' : ''}`;
+        if (scoreData.fairwayHit === true) message += ', fairway';
         else if (scoreData.fairwayHit === false) message += `, ${scoreData.notes || 'missed fairway'}`;
-        if (gir) message += ' - GIR! 🎯';
+        if (gir) message += '. Green in regulation';
         
-        message += `. You're ${toPar > 0 ? '+' : ''}${toPar} through ${currentHole}.`;
+        message += `. ${toPar > 0 ? '+' : ''}${toPar} through ${currentHole}`;
 
-        // Add encouragement
-        if (diff <= -2) message += ' 🔥';
-        else if (diff === -1) message += ' 🐦';
-        else if (diff === 0 && gir) message += ' 💪';
+        // Subtle acknowledgment for exceptional shots
+        if (diff <= -2) message += '. Well played';
+        else if (diff === -1 && gir) message += '. Solid';
 
         // Check if round complete
         if (updatedRound.scores.every(s => s !== null)) {
           await saveRound(updatedRound, true);
           addMessage('assistant', message);
           setTimeout(() => {
-            addMessage('assistant', 'Round complete! Great playing! 🏌️');
+            addMessage('assistant', 'Round complete. Well done.');
             setTimeout(() => setView('round-summary'), 2000);
           }, 1000);
         } else {
           const nextHole = updatedRound.currentHole;
           const nextPar = updatedRound.coursePars[nextHole - 1];
-          message += ` On to hole ${nextHole}, par ${nextPar}! ⛳`;
+          message += `. Hole ${nextHole}, par ${nextPar}`;
           addMessage('assistant', message);
         }
       };
