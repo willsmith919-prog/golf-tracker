@@ -43,6 +43,7 @@
       const [newCourse, setNewCourse] = useState({ name: '', teeColor: '', holes: Array(18).fill(4) });
       const [pendingScore, setPendingScore] = useState(null);
       const [waitingFor, setWaitingFor] = useState(null);
+      const [showExitModal, setShowExitModal] = useState(false);
       const chatEndRef = useRef(null);
 
       useEffect(() => { loadData(); }, []);
@@ -414,24 +415,32 @@
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       };
 
-      const endRound = async () => {
-        const choice = confirm('Save progress?\n\nOK = Save and exit\nCancel = Discard round');
-        if (choice === true) {
-          // Save
-          await saveRound(currentRound, false);
-        } else if (choice === false) {
-          // Discard - delete if it exists
-          if (currentRound.key) {
-            localStorage.removeItem(currentRound.key);
-          }
-        } else {
-          // User cancelled the dialog
-          return;
-        }
+      const endRound = () => {
+        setShowExitModal(true);
+      };
+
+      const saveAndExit = async () => {
+        await saveRound(currentRound, false);
+        setShowExitModal(false);
         setView('home');
         setCurrentRound(null);
         setChatMessages([]);
         loadData();
+      };
+
+      const discardRound = () => {
+        if (currentRound.key) {
+          localStorage.removeItem(currentRound.key);
+        }
+        setShowExitModal(false);
+        setView('home');
+        setCurrentRound(null);
+        setChatMessages([]);
+        loadData();
+      };
+
+      const cancelExit = () => {
+        setShowExitModal(false);
       };
 
       const resetApp = () => {
@@ -617,6 +626,36 @@
                 </button>
               </div>
             </div>
+
+            {/* Exit Modal */}
+            {showExitModal && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-4">Exit Round</h3>
+                  <p className="text-gray-600 mb-6">What would you like to do with this round?</p>
+                  <div className="space-y-3">
+                    <button 
+                      onClick={saveAndExit}
+                      className="w-full bg-emerald-600 text-white py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-all"
+                    >
+                      Save & Exit
+                    </button>
+                    <button 
+                      onClick={discardRound}
+                      className="w-full bg-red-600 text-white py-3 rounded-xl font-semibold hover:bg-red-700 transition-all"
+                    >
+                      Discard Round
+                    </button>
+                    <button 
+                      onClick={cancelExit}
+                      className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300 transition-all"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
