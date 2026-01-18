@@ -45,6 +45,8 @@
       const [waitingFor, setWaitingFor] = useState(null);
       const [showExitModal, setShowExitModal] = useState(false);
       const [trackStats, setTrackStats] = useState(true);
+      const [roundSetup, setRoundSetup] = useState({ startingHole: 1, totalHoles: 18 });
+      const [selectedCourse, setSelectedCourse] = useState(null);
       const [isGroupRound, setIsGroupRound] = useState(false);
       const [groupPlayers, setGroupPlayers] = useState([]);
       const [currentPlayerIndex, setCurrentPlayerIndex] = useState(0);
@@ -146,17 +148,46 @@
         setTimeout(() => { setView('home'); }, 500);
       };
 
-      const startRound = (course) => {
+      const startRoundSetup = (course) => {
+        setSelectedCourse(course);
+        setRoundSetup({ startingHole: 1, totalHoles: 18 });
+        setView('round-setup');
+      };
+
+      const startRound = () => {
+        const course = selectedCourse;
+        const { startingHole, totalHoles } = roundSetup;
+        
+        // Determine which holes to play
+        let holesToPlay = [];
+        if (totalHoles === 9) {
+          if (startingHole === 1) {
+            holesToPlay = [1,2,3,4,5,6,7,8,9];
+          } else {
+            holesToPlay = [10,11,12,13,14,15,16,17,18];
+          }
+        } else { // 18 holes
+          if (startingHole === 1) {
+            holesToPlay = [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
+          } else {
+            holesToPlay = [10,11,12,13,14,15,16,17,18,1,2,3,4,5,6,7,8,9];
+          }
+        }
+        
         const round = {
           courseId: course.id, courseName: course.name, teeColor: course.teeColor,
           date: new Date().toISOString(), scores: Array(18).fill(null),
           holeDetails: Array(18).fill(null).map(() => ({ putts: null, fairwayHit: null, notes: '', gir: null })),
-          currentHole: 1, coursePars: course.holes, isComplete: false
+          currentHole: startingHole, 
+          coursePars: course.holes, 
+          isComplete: false,
+          holesToPlay: holesToPlay,
+          holesPlayedCount: 0
         };
         setCurrentRound(round);
         setChatMessages([{
           role: 'assistant',
-          content: `${course.name}. Hole 1, par ${course.holes[0]}. Your score?`
+          content: `${course.name}. Hole ${startingHole}, par ${course.holes[startingHole - 1]}. Your score?`
         }]);
         setView('play-round');
       };
@@ -360,9 +391,16 @@
           gir: gir
         };
 
-        // Move to next hole
-        if (currentRound.currentHole < 18) {
-          updatedRound.currentHole = currentRound.currentHole + 1;
+        // Track holes played
+        updatedRound.holesPlayedCount = (updatedRound.holesPlayedCount || 0) + 1;
+        
+        // Determine next hole based on holesToPlay
+        const holesToPlay = updatedRound.holesToPlay || [1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18];
+        const currentIndex = holesToPlay.indexOf(currentHole);
+        const isLastHole = updatedRound.holesPlayedCount >= holesToPlay.length;
+        
+        if (!isLastHole && currentIndex < holesToPlay.length - 1) {
+          updatedRound.currentHole = holesToPlay[currentIndex + 1];
         }
 
         setCurrentRound(updatedRound);
@@ -400,8 +438,11 @@
         if (diff <= -2) message += '. Well played';
         else if (diff === -1 && gir) message += '. Solid';
 
-        // Check if round complete
-        if (updatedRound.scores.every(s => s !== null)) {
+        // Check if round complete based on holes played
+        const holesToPlay = updatedRound.holesToPlay || [];
+        const roundComplete = updatedRound.holesPlayedCount >= holesToPlay.length;
+        
+        if (roundComplete) {
           await saveRound(updatedRound, true);
           addMessage('assistant', message);
           setTimeout(() => {
@@ -543,7 +584,7 @@
                 <div className="space-y-3">
                   <h2 className="text-white text-lg font-semibold mb-4 flex items-center gap-2"><MapPin />Your Courses</h2>
                   {courses.map((course) => (
-                    <button key={course.id} onClick={() => startRound(course)} className="w-full bg-white/90 backdrop-blur-sm p-5 rounded-xl shadow-lg hover:bg-white transition-all text-left">
+                    <button key={course.id} onClick={() => startRoundSetup(course)} className="w-full bg-white/90 backdrop-blur-sm p-5 rounded-xl shadow-lg hover:bg-white transition-all text-left">
                       <div className="flex items-center justify-between">
                         <div>
                           <div className="text-lg font-bold text-gray-900">{course.name}</div>
@@ -693,6 +734,82 @@
                 </div>
               </div>
             )}
+          </div>
+        );
+      }
+
+      // ROUND SETUP VIEW
+      if (view === 'round-setup') {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-emerald-900 via-green-800 to-teal-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('home')} className="text-white mb-6 hover:text-emerald-200">← Back</button>
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>{selectedCourse?.name}</h2>
+                <p className="text-gray-600 mb-8">{selectedCourse?.teeColor} Tees</p>
+                
+                <div className="space-y-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">Starting Hole</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setRoundSetup({ ...roundSetup, startingHole: 1 })}
+                        className={`py-4 rounded-xl font-semibold transition-all ${
+                          roundSetup.startingHole === 1
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Hole 1
+                      </button>
+                      <button
+                        onClick={() => setRoundSetup({ ...roundSetup, startingHole: 10 })}
+                        className={`py-4 rounded-xl font-semibold transition-all ${
+                          roundSetup.startingHole === 10
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Hole 10
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">Number of Holes</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        onClick={() => setRoundSetup({ ...roundSetup, totalHoles: 9 })}
+                        className={`py-4 rounded-xl font-semibold transition-all ${
+                          roundSetup.totalHoles === 9
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        9 Holes
+                      </button>
+                      <button
+                        onClick={() => setRoundSetup({ ...roundSetup, totalHoles: 18 })}
+                        className={`py-4 rounded-xl font-semibold transition-all ${
+                          roundSetup.totalHoles === 18
+                            ? 'bg-emerald-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        18 Holes
+                      </button>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={startRound} 
+                    className="w-full bg-emerald-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 shadow-lg mt-8"
+                  >
+                    Start Round
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
         );
       }
