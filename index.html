@@ -57,6 +57,7 @@
     const Trash = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>);
     const Trophy = () => (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>);
     const Link = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>);
+    const BarChart = () => (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>);
 
     function LiveLinks() {
       const [view, setView] = useState('home');
@@ -70,10 +71,22 @@
       const [newTeam, setNewTeam] = useState({ name: '', player1: '', player2: '' });
       const [joinCode, setJoinCode] = useState('');
       const [currentEvent, setCurrentEvent] = useState(null);
+      const [selectedTeam, setSelectedTeam] = useState(null);
       const [feedback, setFeedback] = useState('');
+      const [scoreConfirmation, setScoreConfirmation] = useState('');
+      const eventListenerRef = useRef(null);
       const deviceId = getDeviceId();
 
       useEffect(() => { loadCourses(); }, []);
+
+      // Cleanup Firebase listener on unmount
+      useEffect(() => {
+        return () => {
+          if (eventListenerRef.current) {
+            eventListenerRef.current.off();
+          }
+        };
+      }, []);
 
       const loadCourses = () => {
         try {
@@ -81,7 +94,6 @@
           if (coursesData) {
             setCourses(JSON.parse(coursesData));
           } else {
-            // Load default courses
             const defaultCourses = [
               { id: 'davis-park', name: "Davis Park", teeColor: "White", holes: [4,3,5,4,4,4,3,5,4,5,3,4,5,3,4,3,4,4] },
               { id: 'valley-view', name: "Valley View", teeColor: "White", holes: [4,5,4,3,4,4,3,4,5,4,5,3,4,4,4,3,5,4] },
@@ -142,7 +154,6 @@
             teams: {}
           };
 
-          // Add teams
           newEvent.teams.forEach((team, index) => {
             eventData.teams[`team${index + 1}`] = {
               name: team.name,
@@ -152,12 +163,10 @@
             };
           });
 
-          // Write to Firebase
           await database.ref(`events/${eventId}`).set(eventData);
           
           setFeedback(`Event created! Code: ${eventId}`);
           
-          // Auto-navigate to event after 2 seconds
           setTimeout(() => {
             setCurrentEvent({ id: eventId, ...eventData });
             setView('event-lobby');
@@ -195,6 +204,72 @@
           setFeedback('Error joining event. Please try again.');
           setTimeout(() => setFeedback(''), 3000);
         }
+      };
+
+      const startRealtimeSync = (eventId) => {
+        // Remove existing listener if any
+        if (eventListenerRef.current) {
+          eventListenerRef.current.off();
+        }
+
+        // Set up real-time listener
+        const eventRef = database.ref(`events/${eventId}`);
+        eventListenerRef.current = eventRef;
+
+        eventRef.on('value', (snapshot) => {
+          const eventData = snapshot.val();
+          if (eventData) {
+            setCurrentEvent({ id: eventId, ...eventData });
+          }
+        });
+      };
+
+      const selectTeam = (teamId) => {
+        setSelectedTeam(teamId);
+        startRealtimeSync(currentEvent.id);
+        setView('scoring');
+      };
+
+      const submitScore = async (score) => {
+        try {
+          const team = currentEvent.teams[selectedTeam];
+          const currentHoleIndex = team.currentHole - 1;
+          
+          // Update score
+          await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/scores/${currentHoleIndex}`).set(score);
+          
+          // Update current hole if not on 18
+          if (team.currentHole < 18) {
+            await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/currentHole`).set(team.currentHole + 1);
+          }
+
+          setScoreConfirmation(`${score} recorded on hole ${team.currentHole}`);
+          setTimeout(() => setScoreConfirmation(''), 2000);
+
+        } catch (error) {
+          console.error('Error submitting score:', error);
+          setScoreConfirmation('Error submitting score');
+          setTimeout(() => setScoreConfirmation(''), 2000);
+        }
+      };
+
+      const calculateTeamStats = (team) => {
+        const scores = team.scores || [];
+        const validScores = scores.filter(s => s !== null);
+        const total = validScores.reduce((sum, s) => sum + s, 0);
+        const holesCompleted = validScores.length;
+        
+        // Calculate par for holes played
+        const pars = currentEvent.meta.coursePars;
+        let parTotal = 0;
+        for (let i = 0; i < scores.length; i++) {
+          if (scores[i] !== null) {
+            parTotal += pars[i];
+          }
+        }
+        
+        const toPar = total - parTotal;
+        return { total, holesCompleted, toPar };
       };
 
       // HOME VIEW
@@ -255,8 +330,6 @@
 
       // CREATE EVENT VIEW
       if (view === 'create-event') {
-        const selectedCourse = courses.find(c => c.id === newEvent.courseId);
-        
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
             <div className="max-w-2xl mx-auto">
@@ -265,7 +338,6 @@
                 <h2 className="text-3xl font-bold text-gray-900 mb-6" style={{ fontFamily: 'Georgia, serif' }}>Create Event</h2>
                 
                 <div className="space-y-6">
-                  {/* Event Name */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Event Name</label>
                     <input
@@ -277,7 +349,6 @@
                     />
                   </div>
 
-                  {/* Course Selection */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Course</label>
                     <select
@@ -294,7 +365,6 @@
                     </select>
                   </div>
 
-                  {/* Date */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
                     <input
@@ -305,11 +375,9 @@
                     />
                   </div>
 
-                  {/* Teams */}
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-3">Teams ({newEvent.teams.length})</label>
                     
-                    {/* Existing Teams */}
                     {newEvent.teams.length > 0 && (
                       <div className="space-y-2 mb-4">
                         {newEvent.teams.map(team => (
@@ -326,7 +394,6 @@
                       </div>
                     )}
 
-                    {/* Add New Team */}
                     {newEvent.teams.length < 6 && (
                       <div className="bg-blue-50 p-4 rounded-xl space-y-3">
                         <input
@@ -412,9 +479,193 @@
                   </div>
                 </div>
 
-                <div className="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-xl text-center">
-                  <div className="text-yellow-800 font-semibold mb-2">Event is Ready!</div>
-                  <div className="text-sm text-yellow-700">Scoring interface coming next...</div>
+                <button
+                  onClick={() => setView('team-selection')}
+                  className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
+                >
+                  Select Team & Start Scoring
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // TEAM SELECTION VIEW
+      if (view === 'team-selection' && currentEvent) {
+        const teams = Object.entries(currentEvent.teams || {});
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('event-lobby')} className="text-white mb-6 hover:text-blue-200">← Back</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>Select Your Team</h2>
+                <p className="text-gray-600 mb-8">Choose which team you're scoring for</p>
+                
+                <div className="space-y-3">
+                  {teams.map(([teamId, team]) => (
+                    <button
+                      key={teamId}
+                      onClick={() => selectTeam(teamId)}
+                      className="w-full bg-gray-50 hover:bg-blue-50 p-6 rounded-xl transition-all text-left border-2 border-transparent hover:border-blue-500"
+                    >
+                      <div className="font-bold text-xl text-gray-900 mb-2">{team.name}</div>
+                      <div className="text-gray-600">{team.players.join(' & ')}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // SCORING VIEW
+      if (view === 'scoring' && currentEvent && selectedTeam) {
+        const team = currentEvent.teams[selectedTeam];
+        const currentHoleNum = team.currentHole;
+        const currentPar = currentEvent.meta.coursePars[currentHoleNum - 1];
+        const stats = calculateTeamStats(team);
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex flex-col">
+            {/* Header */}
+            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-6">
+              <div className="text-center mb-4">
+                <h2 className="text-2xl font-bold text-gray-900">{currentEvent.meta.name}</h2>
+                <div className="text-lg text-gray-600">{team.name}</div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-sm text-gray-600">Hole</div>
+                  <div className="text-3xl font-bold text-blue-600">{currentHoleNum}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Par</div>
+                  <div className="text-3xl font-bold text-gray-900">{currentPar}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Score</div>
+                  <div className={`text-3xl font-bold ${stats.toPar > 0 ? 'text-red-600' : stats.toPar < 0 ? 'text-green-600' : 'text-gray-900'}`}>
+                    {stats.toPar > 0 ? '+' : ''}{stats.toPar}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Score Buttons */}
+            <div className="flex-1 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">Enter Score</h3>
+              
+              <div className="grid grid-cols-5 gap-3 mb-6">
+                {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                  <button
+                    key={score}
+                    onClick={() => submitScore(score === 10 ? 10 : score)}
+                    className={`py-6 rounded-xl font-bold text-2xl transition-all ${
+                      score === currentPar
+                        ? 'bg-blue-600 text-white hover:bg-blue-700'
+                        : score < currentPar
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {score === 10 ? '10+' : score}
+                  </button>
+                ))}
+              </div>
+
+              {scoreConfirmation && (
+                <div className="bg-green-50 border-2 border-green-200 text-green-800 px-4 py-3 rounded-xl text-center mb-4">
+                  {scoreConfirmation}
+                </div>
+              )}
+
+              <button
+                onClick={() => setView('leaderboard')}
+                className="w-full bg-indigo-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-indigo-700 flex items-center justify-center gap-2"
+              >
+                <BarChart />
+                View Leaderboard
+              </button>
+            </div>
+          </div>
+        );
+      }
+
+      // LEADERBOARD VIEW
+      if (view === 'leaderboard' && currentEvent) {
+        const teams = Object.entries(currentEvent.teams || {}).map(([teamId, team]) => ({
+          teamId,
+          ...team,
+          stats: calculateTeamStats(team)
+        }));
+
+        // Sort by total score (lowest first)
+        teams.sort((a, b) => a.stats.total - b.stats.total);
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('scoring')} className="text-white mb-6 hover:text-blue-200">← Back to Scoring</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <div className="text-center mb-8">
+                  <div className="inline-block bg-blue-600 p-3 rounded-xl mb-4">
+                    <Trophy />
+                  </div>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Leaderboard</h2>
+                  <p className="text-gray-600">{currentEvent.meta.name}</p>
+                </div>
+
+                <div className="space-y-3">
+                  {teams.map((team, index) => (
+                    <div
+                      key={team.teamId}
+                      className={`p-5 rounded-xl ${
+                        index === 0
+                          ? 'bg-gradient-to-r from-yellow-400 to-yellow-500'
+                          : index === 1
+                          ? 'bg-gradient-to-r from-gray-300 to-gray-400'
+                          : index === 2
+                          ? 'bg-gradient-to-r from-orange-400 to-orange-500'
+                          : 'bg-gray-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className={`text-2xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                            #{index + 1}
+                          </div>
+                          <div>
+                            <div className={`font-bold text-lg ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                              {team.name}
+                            </div>
+                            <div className={`text-sm ${index < 3 ? 'text-white/80' : 'text-gray-600'}`}>
+                              Thru {team.stats.holesCompleted}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <div className={`text-3xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                            {team.stats.total}
+                          </div>
+                          <div className={`text-sm font-semibold ${
+                            team.stats.toPar > 0 
+                              ? (index < 3 ? 'text-white/80' : 'text-red-600')
+                              : team.stats.toPar < 0
+                              ? (index < 3 ? 'text-white/80' : 'text-green-600')
+                              : (index < 3 ? 'text-white/80' : 'text-gray-600')
+                          }`}>
+                            {team.stats.toPar > 0 ? '+' : ''}{team.stats.toPar}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
             </div>
