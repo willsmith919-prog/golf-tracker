@@ -50,6 +50,22 @@
       return deviceId;
     };
 
+    // Generate short event code
+    const generateEventCode = async (courseId) => {
+      const coursePrefix = courseId.split('-')[0].toUpperCase().substring(0, 4);
+      const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
+      const code = `${coursePrefix}-${randomPart}`;
+      
+      // Check if code exists
+      const snapshot = await database.ref('eventCodes').child(code).once('value');
+      if (snapshot.exists()) {
+        // Collision - regenerate
+        return generateEventCode(courseId);
+      }
+      
+      return code;
+    };
+
     // Icons
     const Plus = () => (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>);
     const Users = () => (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>);
@@ -58,6 +74,11 @@
     const Trophy = () => (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"></path><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"></path><path d="M4 22h16"></path><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"></path><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"></path><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"></path></svg>);
     const Link = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>);
     const BarChart = () => (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="20" x2="12" y2="10"></line><line x1="18" y1="20" x2="18" y2="4"></line><line x1="6" y1="20" x2="6" y2="16"></line></svg>);
+    const ClipboardList = () => (<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>);
+    const Copy = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>);
+    const ChevronDown = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>);
+    const ChevronUp = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15"></polyline></svg>);
+    const RotateCcw = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>);
 
     function LiveLinks() {
       const [view, setView] = useState('home');
@@ -73,17 +94,22 @@
       const [currentEvent, setCurrentEvent] = useState(null);
       const [selectedTeam, setSelectedTeam] = useState(null);
       const [feedback, setFeedback] = useState('');
-      const [scoreConfirmation, setScoreConfirmation] = useState('');
+      const [scoreConfirmation, setScoreConfirmation] = useState(null);
+      const [expandedTeams, setExpandedTeams] = useState([]);
+      const [editingHole, setEditingHole] = useState(null);
       const eventListenerRef = useRef(null);
+      const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
 
       useEffect(() => { loadCourses(); }, []);
 
-      // Cleanup Firebase listener on unmount
       useEffect(() => {
         return () => {
           if (eventListenerRef.current) {
             eventListenerRef.current.off();
+          }
+          if (undoTimerRef.current) {
+            clearTimeout(undoTimerRef.current);
           }
         };
       }, []);
@@ -138,6 +164,7 @@
         try {
           const course = courses.find(c => c.id === newEvent.courseId);
           const eventId = 'event-' + Date.now();
+          const eventCode = await generateEventCode(course.id);
           
           const eventData = {
             meta: {
@@ -149,7 +176,8 @@
               date: newEvent.date,
               createdBy: deviceId,
               status: "active",
-              createdAt: Date.now()
+              createdAt: Date.now(),
+              eventCode: eventCode
             },
             teams: {}
           };
@@ -163,9 +191,13 @@
             };
           });
 
+          // Write to Firebase
           await database.ref(`events/${eventId}`).set(eventData);
           
-          setFeedback(`Event created! Code: ${eventId}`);
+          // Store code mapping
+          await database.ref(`eventCodes/${eventCode}`).set(eventId);
+          
+          setFeedback(`Event created! Code: ${eventCode}`);
           
           setTimeout(() => {
             setCurrentEvent({ id: eventId, ...eventData });
@@ -187,7 +219,24 @@
         }
 
         try {
-          const snapshot = await database.ref(`events/${joinCode}`).once('value');
+          // Check if it's a short code
+          let eventId = joinCode.trim();
+          
+          if (!eventId.startsWith('event-')) {
+            // It's a short code - look up the real ID
+            const codeSnapshot = await database.ref(`eventCodes/${eventId}`).once('value');
+            const realId = codeSnapshot.val();
+            
+            if (!realId) {
+              setFeedback('Event not found. Check your code.');
+              setTimeout(() => setFeedback(''), 3000);
+              return;
+            }
+            
+            eventId = realId;
+          }
+          
+          const snapshot = await database.ref(`events/${eventId}`).once('value');
           const eventData = snapshot.val();
           
           if (!eventData) {
@@ -196,7 +245,7 @@
             return;
           }
 
-          setCurrentEvent({ id: joinCode, ...eventData });
+          setCurrentEvent({ id: eventId, ...eventData });
           setView('event-lobby');
           setJoinCode('');
         } catch (error) {
@@ -207,12 +256,10 @@
       };
 
       const startRealtimeSync = (eventId) => {
-        // Remove existing listener if any
         if (eventListenerRef.current) {
           eventListenerRef.current.off();
         }
 
-        // Set up real-time listener
         const eventRef = database.ref(`events/${eventId}`);
         eventListenerRef.current = eventRef;
 
@@ -230,26 +277,76 @@
         setView('scoring');
       };
 
-      const submitScore = async (score) => {
+      const submitScore = async (score, holeOverride = null) => {
         try {
           const team = currentEvent.teams[selectedTeam];
-          const currentHoleIndex = team.currentHole - 1;
+          const holeNum = holeOverride !== null ? holeOverride : team.currentHole;
+          const holeIndex = holeNum - 1;
+          
+          // Store previous values for undo
+          const previousScore = team.scores[holeIndex];
+          const previousHole = team.currentHole;
           
           // Update score
-          await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/scores/${currentHoleIndex}`).set(score);
+          await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/scores/${holeIndex}`).set(score);
           
-          // Update current hole if not on 18
-          if (team.currentHole < 18) {
+          // Update current hole if not on 18 and not editing
+          if (holeOverride === null && team.currentHole < 18) {
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/currentHole`).set(team.currentHole + 1);
           }
 
-          setScoreConfirmation(`${score} recorded on hole ${team.currentHole}`);
-          setTimeout(() => setScoreConfirmation(''), 2000);
+          // Show confirmation with undo option
+          setScoreConfirmation({
+            message: `${score} recorded on hole ${holeNum}`,
+            undoData: { holeIndex, previousScore, previousHole, score }
+          });
+
+          // Auto-hide after 5 seconds
+          if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+          undoTimerRef.current = setTimeout(() => {
+            setScoreConfirmation(null);
+          }, 5000);
 
         } catch (error) {
           console.error('Error submitting score:', error);
-          setScoreConfirmation('Error submitting score');
-          setTimeout(() => setScoreConfirmation(''), 2000);
+          setScoreConfirmation({ message: 'Error submitting score', undoData: null });
+          setTimeout(() => setScoreConfirmation(null), 2000);
+        }
+      };
+
+      const undoScore = async () => {
+        if (!scoreConfirmation?.undoData) return;
+        
+        const { holeIndex, previousScore, previousHole } = scoreConfirmation.undoData;
+        
+        try {
+          // Revert score
+          await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/scores/${holeIndex}`).set(previousScore);
+          
+          // Revert current hole
+          await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/currentHole`).set(previousHole);
+          
+          setScoreConfirmation({ message: 'Score removed', undoData: null });
+          setTimeout(() => setScoreConfirmation(null), 2000);
+          
+        } catch (error) {
+          console.error('Error undoing score:', error);
+        }
+      };
+
+      const copyEventCode = () => {
+        const code = currentEvent.meta.eventCode;
+        navigator.clipboard.writeText(code).then(() => {
+          setFeedback('Code copied!');
+          setTimeout(() => setFeedback(''), 2000);
+        });
+      };
+
+      const toggleTeamExpansion = (teamId) => {
+        if (expandedTeams.includes(teamId)) {
+          setExpandedTeams(expandedTeams.filter(id => id !== teamId));
+        } else {
+          setExpandedTeams([...expandedTeams, teamId]);
         }
       };
 
@@ -259,7 +356,6 @@
         const total = validScores.reduce((sum, s) => sum + s, 0);
         const holesCompleted = validScores.length;
         
-        // Calculate par for holes played
         const pars = currentEvent.meta.coursePars;
         let parTotal = 0;
         for (let i = 0; i < scores.length; i++) {
@@ -308,10 +404,10 @@
                     <input
                       type="text"
                       value={joinCode}
-                      onChange={(e) => setJoinCode(e.target.value)}
+                      onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
                       onKeyPress={(e) => e.key === 'Enter' && joinEvent()}
-                      placeholder="event-1234567890"
-                      className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none"
+                      placeholder="WOLF-A3X9"
+                      className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none uppercase"
                     />
                     <button
                       onClick={joinEvent}
@@ -463,7 +559,7 @@
                   <p className="text-gray-600 mb-4">{currentEvent.meta.courseName} - {currentEvent.meta.date}</p>
                   <div className="inline-block bg-blue-50 px-4 py-2 rounded-lg">
                     <div className="text-xs text-gray-600 mb-1">Event Code</div>
-                    <div className="font-mono font-bold text-blue-600">{currentEvent.id}</div>
+                    <div className="font-mono font-bold text-blue-600 text-xl">{currentEvent.meta.eventCode}</div>
                   </div>
                 </div>
 
@@ -579,19 +675,165 @@
               </div>
 
               {scoreConfirmation && (
-                <div className="bg-green-50 border-2 border-green-200 text-green-800 px-4 py-3 rounded-xl text-center mb-4">
-                  {scoreConfirmation}
+                <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl mb-4">
+                  <div className="text-green-800 text-center mb-3">{scoreConfirmation.message}</div>
+                  {scoreConfirmation.undoData && (
+                    <button
+                      onClick={undoScore}
+                      className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 font-semibold flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw />
+                      Undo
+                    </button>
+                  )}
                 </div>
               )}
 
-              <button
-                onClick={() => setView('leaderboard')}
-                className="w-full bg-indigo-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-indigo-700 flex items-center justify-center gap-2"
-              >
-                <BarChart />
-                View Leaderboard
-              </button>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setView('scorecard')}
+                  className="bg-gray-600 text-white py-4 rounded-xl font-semibold hover:bg-gray-700 flex items-center justify-center gap-2"
+                >
+                  <ClipboardList />
+                  Scorecard
+                </button>
+                <button
+                  onClick={() => setView('leaderboard')}
+                  className="bg-indigo-600 text-white py-4 rounded-xl font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2"
+                >
+                  <BarChart />
+                  Leaderboard
+                </button>
+              </div>
             </div>
+          </div>
+        );
+      }
+
+      // SCORECARD VIEW
+      if (view === 'scorecard' && currentEvent && selectedTeam) {
+        const team = currentEvent.teams[selectedTeam];
+        const pars = currentEvent.meta.coursePars;
+        
+        const front9Total = team.scores.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
+        const back9Total = team.scores.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
+        const front9Par = pars.slice(0, 9).reduce((sum, p) => sum + p, 0);
+        const back9Par = pars.slice(9, 18).reduce((sum, p) => sum + p, 0);
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('scoring')} className="text-white mb-6 hover:text-blue-200">← Back to Scoring</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">{team.name}</h2>
+                <p className="text-gray-600 mb-6 text-center">Scorecard</p>
+                
+                {/* Front 9 */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Front 9</h3>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {pars.slice(0, 9).map((par, idx) => (
+                      <button
+                        key={idx}
+                        onClick={() => setEditingHole(idx + 1)}
+                        className="bg-gray-50 hover:bg-blue-50 p-2 rounded text-center cursor-pointer"
+                      >
+                        <div className="text-xs text-gray-500">#{idx + 1}</div>
+                        <div className="text-xs text-gray-400">Par {par}</div>
+                        <div className={`font-bold ${
+                          team.scores[idx] === null ? 'text-gray-300' :
+                          team.scores[idx] < par ? 'text-green-600' :
+                          team.scores[idx] > par ? 'text-red-600' :
+                          'text-gray-900'
+                        }`}>
+                          {team.scores[idx] || '-'}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                  <div className="text-right text-sm font-semibold">
+                    Total: {front9Total} ({front9Total - front9Par > 0 ? '+' : ''}{front9Total - front9Par})
+                  </div>
+                </div>
+
+                {/* Back 9 */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Back 9</h3>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {pars.slice(9, 18).map((par, idx) => {
+                      const holeNum = idx + 10;
+                      const holeIdx = idx + 9;
+                      return (
+                        <button
+                          key={holeIdx}
+                          onClick={() => setEditingHole(holeNum)}
+                          className="bg-gray-50 hover:bg-blue-50 p-2 rounded text-center cursor-pointer"
+                        >
+                          <div className="text-xs text-gray-500">#{holeNum}</div>
+                          <div className="text-xs text-gray-400">Par {par}</div>
+                          <div className={`font-bold ${
+                            team.scores[holeIdx] === null ? 'text-gray-300' :
+                            team.scores[holeIdx] < par ? 'text-green-600' :
+                            team.scores[holeIdx] > par ? 'text-red-600' :
+                            'text-gray-900'
+                          }`}>
+                            {team.scores[holeIdx] || '-'}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right text-sm font-semibold">
+                    Total: {back9Total} ({back9Total - back9Par > 0 ? '+' : ''}{back9Total - back9Par})
+                  </div>
+                </div>
+
+                {/* Total */}
+                <div className="bg-blue-50 p-4 rounded-xl">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-gray-900">Total Score</span>
+                    <span className="text-2xl font-bold text-blue-600">
+                      {front9Total + back9Total} ({(front9Total + back9Total) - (front9Par + back9Par) > 0 ? '+' : ''}{(front9Total + back9Total) - (front9Par + back9Par)})
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Edit Score Modal */}
+            {editingHole && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Edit Hole {editingHole}</h3>
+                  <p className="text-gray-600 mb-4">
+                    Par {pars[editingHole - 1]} - Current: {team.scores[editingHole - 1] || 'Not recorded'}
+                  </p>
+                  
+                  <div className="grid grid-cols-5 gap-2 mb-4">
+                    {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                      <button
+                        key={score}
+                        onClick={() => {
+                          submitScore(score === 10 ? 10 : score, editingHole);
+                          setEditingHole(null);
+                        }}
+                        className="py-4 rounded-lg font-bold text-lg bg-gray-100 hover:bg-blue-100 text-gray-900"
+                      >
+                        {score === 10 ? '10+' : score}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <button
+                    onClick={() => setEditingHole(null)}
+                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -604,7 +846,6 @@
           stats: calculateTeamStats(team)
         }));
 
-        // Sort by total score (lowest first)
         teams.sort((a, b) => a.stats.total - b.stats.total);
         
         return (
@@ -621,51 +862,101 @@
                   <p className="text-gray-600">{currentEvent.meta.name}</p>
                 </div>
 
-                <div className="space-y-3">
-                  {teams.map((team, index) => (
-                    <div
-                      key={team.teamId}
-                      className={`p-5 rounded-xl ${
-                        index === 0
-                          ? 'bg-gradient-to-r from-yellow-400 to-yellow-500'
-                          : index === 1
-                          ? 'bg-gradient-to-r from-gray-300 to-gray-400'
-                          : index === 2
-                          ? 'bg-gradient-to-r from-orange-400 to-orange-500'
-                          : 'bg-gray-50'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-4">
-                          <div className={`text-2xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
-                            #{index + 1}
-                          </div>
-                          <div>
-                            <div className={`font-bold text-lg ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
-                              {team.name}
+                <div className="space-y-3 mb-8">
+                  {teams.map((team, index) => {
+                    const isExpanded = expandedTeams.includes(team.teamId);
+                    
+                    return (
+                      <div key={team.teamId}>
+                        <button
+                          onClick={() => toggleTeamExpansion(team.teamId)}
+                          className={`w-full p-5 rounded-xl ${
+                            index === 0
+                              ? 'bg-gradient-to-r from-yellow-400 to-yellow-500'
+                              : index === 1
+                              ? 'bg-gradient-to-r from-gray-300 to-gray-400'
+                              : index === 2
+                              ? 'bg-gradient-to-r from-orange-400 to-orange-500'
+                              : 'bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className={`text-2xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                                #{index + 1}
+                              </div>
+                              <div className="text-left">
+                                <div className={`font-bold text-lg ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                                  {team.name}
+                                </div>
+                                <div className={`text-sm ${index < 3 ? 'text-white/80' : 'text-gray-600'}`}>
+                                  Thru {team.stats.holesCompleted}
+                                </div>
+                              </div>
                             </div>
-                            <div className={`text-sm ${index < 3 ? 'text-white/80' : 'text-gray-600'}`}>
-                              Thru {team.stats.holesCompleted}
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <div className={`text-3xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                                  {team.stats.total}
+                                </div>
+                                <div className={`text-sm font-semibold ${
+                                  team.stats.toPar > 0 
+                                    ? (index < 3 ? 'text-white/80' : 'text-red-600')
+                                    : team.stats.toPar < 0
+                                    ? (index < 3 ? 'text-white/80' : 'text-green-600')
+                                    : (index < 3 ? 'text-white/80' : 'text-gray-600')
+                                }`}>
+                                  {team.stats.toPar > 0 ? '+' : ''}{team.stats.toPar}
+                                </div>
+                              </div>
+                              <div className={index < 3 ? 'text-white' : 'text-gray-600'}>
+                                {isExpanded ? <ChevronUp /> : <ChevronDown />}
+                              </div>
                             </div>
                           </div>
-                        </div>
-                        <div className="text-right">
-                          <div className={`text-3xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
-                            {team.stats.total}
+                        </button>
+                        
+                        {isExpanded && (
+                          <div className="bg-white p-4 rounded-b-xl -mt-2 border-2 border-gray-200">
+                            <div className="text-xs font-semibold text-gray-600 mb-2">Hole-by-Hole</div>
+                            <div className="grid grid-cols-9 gap-1">
+                              {team.scores.map((score, idx) => {
+                                const par = currentEvent.meta.coursePars[idx];
+                                return (
+                                  <div key={idx} className="text-center">
+                                    <div className="text-xs text-gray-400">#{idx + 1}</div>
+                                    <div className={`font-bold text-sm ${
+                                      score === null ? 'text-gray-300' :
+                                      score < par ? 'text-green-600' :
+                                      score > par ? 'text-red-600' :
+                                      'text-gray-900'
+                                    }`}>
+                                      {score || '-'}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div className={`text-sm font-semibold ${
-                            team.stats.toPar > 0 
-                              ? (index < 3 ? 'text-white/80' : 'text-red-600')
-                              : team.stats.toPar < 0
-                              ? (index < 3 ? 'text-white/80' : 'text-green-600')
-                              : (index < 3 ? 'text-white/80' : 'text-gray-600')
-                          }`}>
-                            {team.stats.toPar > 0 ? '+' : ''}{team.stats.toPar}
-                          </div>
-                        </div>
+                        )}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
+                </div>
+
+                {/* Event Code */}
+                <div className="bg-gray-50 p-4 rounded-xl text-center">
+                  <div className="text-xs text-gray-600 mb-2">Share this code with other groups</div>
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="font-mono font-bold text-blue-600 text-xl">{currentEvent.meta.eventCode}</div>
+                    <button
+                      onClick={copyEventCode}
+                      className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700"
+                    >
+                      <Copy />
+                    </button>
+                  </div>
+                  {feedback && <div className="text-sm text-green-600 mt-2">{feedback}</div>}
                 </div>
               </div>
             </div>
