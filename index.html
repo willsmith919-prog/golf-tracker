@@ -356,10 +356,10 @@
         const total = validScores.reduce((sum, s) => sum + s, 0);
         const holesCompleted = validScores.length;
         
-        const pars = currentEvent.meta.coursePars;
+        const pars = currentEvent?.meta?.coursePars || [];
         let parTotal = 0;
         for (let i = 0; i < scores.length; i++) {
-          if (scores[i] !== null) {
+          if (scores[i] !== null && pars[i]) {
             parTotal += pars[i];
           }
         }
@@ -622,7 +622,8 @@
       if (view === 'scoring' && currentEvent && selectedTeam) {
         const team = currentEvent.teams[selectedTeam];
         const currentHoleNum = team.currentHole;
-        const currentPar = currentEvent.meta.coursePars[currentHoleNum - 1];
+        const coursePars = currentEvent?.meta?.coursePars || [];
+        const currentPar = coursePars[currentHoleNum - 1] || 4;
         const stats = calculateTeamStats(team);
         
         return (
@@ -713,7 +714,7 @@
       // SCORECARD VIEW
       if (view === 'scorecard' && currentEvent && selectedTeam) {
         const team = currentEvent.teams[selectedTeam];
-        const pars = currentEvent.meta.coursePars;
+        const pars = currentEvent?.meta?.coursePars || Array(18).fill(4);
         
         const front9Total = team.scores.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
         const back9Total = team.scores.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
@@ -921,7 +922,8 @@
                             <div className="text-xs font-semibold text-gray-600 mb-2">Hole-by-Hole</div>
                             <div className="grid grid-cols-9 gap-1">
                               {team.scores.map((score, idx) => {
-                                const par = currentEvent.meta.coursePars[idx];
+                                const coursePars = currentEvent?.meta?.coursePars || [];
+                                const par = coursePars[idx] || 4;
                                 return (
                                   <div key={idx} className="text-center">
                                     <div className="text-xs text-gray-400">#{idx + 1}</div>
