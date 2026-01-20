@@ -263,17 +263,29 @@
         const eventRef = database.ref(`events/${eventId}`);
         eventListenerRef.current = eventRef;
 
-        eventRef.on('value', (snapshot) => {
-          const eventData = snapshot.val();
-          if (eventData) {
-            setCurrentEvent({ id: eventId, ...eventData });
-          }
+        return new Promise((resolve) => {
+          eventRef.once('value', (snapshot) => {
+            const eventData = snapshot.val();
+            if (eventData) {
+              setCurrentEvent({ id: eventId, ...eventData });
+              resolve(eventData);
+            }
+          });
+
+          // Then set up continuous listening
+          eventRef.on('value', (snapshot) => {
+            const eventData = snapshot.val();
+            if (eventData) {
+              setCurrentEvent({ id: eventId, ...eventData });
+            }
+          });
         });
       };
 
-      const selectTeam = (teamId) => {
+      const selectTeam = async (teamId) => {
         setSelectedTeam(teamId);
-        startRealtimeSync(currentEvent.id);
+        // Wait for initial data load before switching to scoring view
+        await startRealtimeSync(currentEvent.id);
         setView('scoring');
       };
 
