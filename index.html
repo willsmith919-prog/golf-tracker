@@ -283,14 +283,29 @@
       };
 
       const selectTeam = async (teamId) => {
+        console.log('=== SELECT TEAM DEBUG ===');
+        console.log('Team ID:', teamId);
+        console.log('Current Event before sync:', currentEvent);
+        
         setSelectedTeam(teamId);
         // Wait for initial data load before switching to scoring view
-        await startRealtimeSync(currentEvent.id);
+        const eventData = await startRealtimeSync(currentEvent.id);
+        
+        console.log('Event Data after sync:', eventData);
+        console.log('Teams in event:', eventData?.teams);
+        console.log('Selected team data:', eventData?.teams?.[teamId]);
+        
         setView('scoring');
       };
 
       const submitScore = async (score, holeOverride = null) => {
         try {
+          console.log('=== SUBMIT SCORE DEBUG ===');
+          console.log('Score:', score);
+          console.log('Current Event:', currentEvent);
+          console.log('Selected Team:', selectedTeam);
+          console.log('Current Event Teams:', currentEvent?.teams);
+          
           // Safety checks
           if (!currentEvent || !currentEvent.teams || !selectedTeam) {
             console.error('Missing event or team data');
@@ -298,6 +313,9 @@
           }
 
           const team = currentEvent.teams[selectedTeam];
+          console.log('Team object:', team);
+          console.log('Team scores:', team?.scores);
+          
           if (!team || !team.scores) {
             console.error('Team or scores array not found');
             return;
