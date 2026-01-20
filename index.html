@@ -183,10 +183,15 @@
           };
 
           newEvent.teams.forEach((team, index) => {
+            const scores = {};
+            for (let i = 0; i < 18; i++) {
+              scores[i] = -1; // -1 means not played yet (Firebase strips null values)
+            }
+            
             eventData.teams[`team${index + 1}`] = {
               name: team.name,
               players: [team.player1, team.player2],
-              scores: Array(18).fill(null),
+              scores: scores,
               currentHole: 1
             };
           });
@@ -392,18 +397,19 @@
       };
 
       const calculateTeamStats = (team) => {
-        const scores = team.scores || [];
-        const validScores = scores.filter(s => s !== null);
+        const scores = team.scores || {};
+        const scoresArray = Object.values(scores);
+        const validScores = scoresArray.filter(s => s !== null && s !== -1 && s > 0);
         const total = validScores.reduce((sum, s) => sum + s, 0);
         const holesCompleted = validScores.length;
         
         const pars = currentEvent?.meta?.coursePars || [];
         let parTotal = 0;
-        for (let i = 0; i < scores.length; i++) {
-          if (scores[i] !== null && pars[i]) {
+        scoresArray.forEach((score, i) => {
+          if (score !== null && score !== -1 && score > 0 && pars[i]) {
             parTotal += pars[i];
           }
-        }
+        });
         
         const toPar = total - parTotal;
         return { total, holesCompleted, toPar };
@@ -769,8 +775,15 @@
         const team = currentEvent.teams[selectedTeam];
         const pars = currentEvent?.meta?.coursePars || Array(18).fill(4);
         
-        const front9Total = team.scores.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
-        const back9Total = team.scores.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
+        // Convert scores object to array
+        const scoresObj = team.scores || {};
+        const scoresArray = [];
+        for (let i = 0; i < 18; i++) {
+          scoresArray[i] = scoresObj[i] === -1 ? null : scoresObj[i];
+        }
+        
+        const front9Total = scoresArray.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
+        const back9Total = scoresArray.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
         const front9Par = pars.slice(0, 9).reduce((sum, p) => sum + p, 0);
         const back9Par = pars.slice(9, 18).reduce((sum, p) => sum + p, 0);
         
@@ -796,12 +809,12 @@
                         <div className="text-xs text-gray-500">#{idx + 1}</div>
                         <div className="text-xs text-gray-400">Par {par}</div>
                         <div className={`font-bold ${
-                          team.scores[idx] === null ? 'text-gray-300' :
-                          team.scores[idx] < par ? 'text-green-600' :
-                          team.scores[idx] > par ? 'text-red-600' :
+                          scoresArray[idx] === null ? 'text-gray-300' :
+                          scoresArray[idx] < par ? 'text-green-600' :
+                          scoresArray[idx] > par ? 'text-red-600' :
                           'text-gray-900'
                         }`}>
-                          {team.scores[idx] || '-'}
+                          {scoresArray[idx] || '-'}
                         </div>
                       </button>
                     ))}
@@ -827,12 +840,12 @@
                           <div className="text-xs text-gray-500">#{holeNum}</div>
                           <div className="text-xs text-gray-400">Par {par}</div>
                           <div className={`font-bold ${
-                            team.scores[holeIdx] === null ? 'text-gray-300' :
-                            team.scores[holeIdx] < par ? 'text-green-600' :
-                            team.scores[holeIdx] > par ? 'text-red-600' :
+                            scoresArray[holeIdx] === null ? 'text-gray-300' :
+                            scoresArray[holeIdx] < par ? 'text-green-600' :
+                            scoresArray[holeIdx] > par ? 'text-red-600' :
                             'text-gray-900'
                           }`}>
-                            {team.scores[holeIdx] || '-'}
+                            {scoresArray[holeIdx] || '-'}
                           </div>
                         </button>
                       );
@@ -861,7 +874,7 @@
                 <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
                   <h3 className="text-xl font-bold text-gray-900 mb-2">Edit Hole {editingHole}</h3>
                   <p className="text-gray-600 mb-4">
-                    Par {pars[editingHole - 1]} - Current: {team.scores[editingHole - 1] || 'Not recorded'}
+                    Par {pars[editingHole - 1]} - Current: {scoresArray[editingHole - 1] || 'Not recorded'}
                   </p>
                   
                   <div className="grid grid-cols-5 gap-2 mb-4">
@@ -974,19 +987,21 @@
                           <div className="bg-white p-4 rounded-b-xl -mt-2 border-2 border-gray-200">
                             <div className="text-xs font-semibold text-gray-600 mb-2">Hole-by-Hole</div>
                             <div className="grid grid-cols-9 gap-1">
-                              {team.scores.map((score, idx) => {
+                              {Object.entries(team.scores || {}).map(([holeIdx, score]) => {
+                                const idx = parseInt(holeIdx);
                                 const coursePars = currentEvent?.meta?.coursePars || [];
                                 const par = coursePars[idx] || 4;
+                                const displayScore = score === -1 ? null : score;
                                 return (
                                   <div key={idx} className="text-center">
                                     <div className="text-xs text-gray-400">#{idx + 1}</div>
                                     <div className={`font-bold text-sm ${
-                                      score === null ? 'text-gray-300' :
-                                      score < par ? 'text-green-600' :
-                                      score > par ? 'text-red-600' :
+                                      displayScore === null ? 'text-gray-300' :
+                                      displayScore < par ? 'text-green-600' :
+                                      displayScore > par ? 'text-red-600' :
                                       'text-gray-900'
                                     }`}>
-                                      {score || '-'}
+                                      {displayScore || '-'}
                                     </div>
                                   </div>
                                 );
