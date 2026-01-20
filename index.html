@@ -279,7 +279,18 @@
 
       const submitScore = async (score, holeOverride = null) => {
         try {
+          // Safety checks
+          if (!currentEvent || !currentEvent.teams || !selectedTeam) {
+            console.error('Missing event or team data');
+            return;
+          }
+
           const team = currentEvent.teams[selectedTeam];
+          if (!team || !team.scores) {
+            console.error('Team or scores array not found');
+            return;
+          }
+
           const holeNum = holeOverride !== null ? holeOverride : team.currentHole;
           const holeIndex = holeNum - 1;
           
@@ -620,6 +631,18 @@
 
       // SCORING VIEW
       if (view === 'scoring' && currentEvent && selectedTeam) {
+        // Safety check - make sure team exists
+        if (!currentEvent.teams || !currentEvent.teams[selectedTeam]) {
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+              <div className="bg-white/95 p-8 rounded-2xl text-center">
+                <p className="text-gray-900 mb-4">Loading team data...</p>
+                <button onClick={() => setView('team-selection')} className="text-blue-600">Go Back</button>
+              </div>
+            </div>
+          );
+        }
+
         const team = currentEvent.teams[selectedTeam];
         const currentHoleNum = team.currentHole;
         const coursePars = currentEvent?.meta?.coursePars || [];
