@@ -99,7 +99,8 @@
       const [scoreConfirmation, setScoreConfirmation] = useState(null);
       const [expandedTeams, setExpandedTeams] = useState([]);
       const [editingHole, setEditingHole] = useState(null);
-      const [playerScores, setPlayerScores] = useState(null); // For bestball/shamble: {player1Score, player2Score, usedPlayer}
+      const [playerScores, setPlayerScores] = useState(null);
+      const [viewingTeamScorecard, setViewingTeamScorecard] = useState(null); // For viewing other teams' scorecards
       const eventListenerRef = useRef(null);
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
@@ -347,13 +348,14 @@
         setView('scoring');
       };
 
-      const submitScore = async (score, holeOverride = null, playerUsed = null, player1Score = null, player2Score = null) => {
+      const submitScore = async (score, holeOverride = null, playerUsed = null, player1Score = null, player2Score = null, drivePlayer = null) => {
         try {
           console.log('=== SUBMIT SCORE DEBUG ===');
           console.log('Score:', score);
           console.log('Player Used:', playerUsed);
           console.log('Player 1 Score:', player1Score);
           console.log('Player 2 Score:', player2Score);
+          console.log('Drive Player:', drivePlayer);
           console.log('Current Event:', currentEvent);
           console.log('Selected Team:', selectedTeam);
           console.log('Current Event Teams:', currentEvent?.teams);
@@ -391,6 +393,10 @@
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/player1Scores/${holeIndex}`).set(player1Score);
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/player2Scores/${holeIndex}`).set(player2Score);
           }
+          // Store drive player for shamble
+          if (drivePlayer) {
+            await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/driveUsed/${holeIndex}`).set(drivePlayer);
+          }
           
           // Update current hole if not on 18 and not editing
           if (holeOverride === null && team.currentHole < 18) {
@@ -401,6 +407,9 @@
           let confirmMessage = `${score} recorded on hole ${holeNum}`;
           if (playerUsed && player1Score !== null && player2Score !== null) {
             confirmMessage = `${team.players[0]}: ${player1Score}, ${team.players[1]}: ${player2Score} → Used ${playerUsed}'s ${score}`;
+            if (drivePlayer) {
+              confirmMessage += ` (${drivePlayer}'s drive)`;
+            }
           }
           
           setScoreConfirmation({
@@ -976,19 +985,45 @@
                   
                   {/* Submit Button */}
                   {playerScores?.player1Score && playerScores?.player2Score && (
-                    <button
-                      onClick={() => {
-                        const bestScore = Math.min(playerScores.player1Score, playerScores.player2Score);
-                        const usedPlayer = playerScores.player1Score <= playerScores.player2Score 
-                          ? team.players[0] 
-                          : team.players[1];
-                        submitScore(bestScore, null, usedPlayer, playerScores.player1Score, playerScores.player2Score);
-                        setPlayerScores(null);
-                      }}
-                      className="w-full bg-emerald-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 shadow-lg"
-                    >
-                      Submit Scores (Best: {Math.min(playerScores.player1Score, playerScores.player2Score)})
-                    </button>
+                    <>
+                      {currentEvent.meta.format === 'shamble' && !playerScores.driveSelected ? (
+                        <div className="bg-purple-50 p-4 rounded-xl">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3 text-center">Whose drive was used?</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              onClick={() => setPlayerScores({ ...playerScores, driveUsedPlayer: team.players[0], driveSelected: true })}
+                              className="bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 font-semibold"
+                            >
+                              {team.players[0]}'s Drive
+                            </button>
+                            <button
+                              onClick={() => setPlayerScores({ ...playerScores, driveUsedPlayer: team.players[1], driveSelected: true })}
+                              className="bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 font-semibold"
+                            >
+                              {team.players[1]}'s Drive
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const bestScore = Math.min(playerScores.player1Score, playerScores.player2Score);
+                            const usedPlayer = playerScores.player1Score <= playerScores.player2Score 
+                              ? team.players[0] 
+                              : team.players[1];
+                            const drivePlayer = playerScores.driveUsedPlayer || null;
+                            submitScore(bestScore, null, usedPlayer, playerScores.player1Score, playerScores.player2Score, drivePlayer);
+                            setPlayerScores(null);
+                          }}
+                          className="w-full bg-emerald-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 shadow-lg"
+                        >
+                          Submit Scores (Best: {Math.min(playerScores.player1Score, playerScores.player2Score)})
+                          {playerScores.driveUsedPlayer && (
+                            <div className="text-sm opacity-90">Drive: {playerScores.driveUsedPlayer}</div>
+                          )}
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               ) : (
@@ -1056,6 +1091,7 @@
         const playerUsed = team.playerUsed || {};
         const player1Scores = team.player1Scores || {};
         const player2Scores = team.player2Scores || {};
+        const driveUsed = team.driveUsed || {};
         
         // Convert scores object to array
         const scoresObj = team.scores || {};
@@ -1093,6 +1129,7 @@
                       const p1Score = player1Scores[idx];
                       const p2Score = player2Scores[idx];
                       const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      const drive = format === 'shamble' ? driveUsed[idx] : null;
                       
                       return (
                         <button
@@ -1110,13 +1147,14 @@
                           }`}>
                             {scoresArray[idx] || '-'}
                           </div>
-                          {showBothScores ? (
+                          {showBothScores && (
                             <div className="text-xs text-gray-600 mt-1">
                               <div className={p1Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
                               <div className={p2Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
                             </div>
-                          ) : playerName && (
-                            <div className="text-xs text-blue-600 font-semibold">{getInitials(playerName)}</div>
+                          )}
+                          {drive && (
+                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
                           )}
                         </button>
                       );
@@ -1138,6 +1176,7 @@
                       const p1Score = player1Scores[holeIdx];
                       const p2Score = player2Scores[holeIdx];
                       const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      const drive = format === 'shamble' ? driveUsed[holeIdx] : null;
                       
                       return (
                         <button
@@ -1155,13 +1194,14 @@
                           }`}>
                             {scoresArray[holeIdx] || '-'}
                           </div>
-                          {showBothScores ? (
+                          {showBothScores && (
                             <div className="text-xs text-gray-600 mt-1">
                               <div className={p1Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
                               <div className={p2Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
                             </div>
-                          ) : playerName && (
-                            <div className="text-xs text-blue-600 font-semibold">{getInitials(playerName)}</div>
+                          )}
+                          {drive && (
+                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
                           )}
                         </button>
                       );
@@ -1189,10 +1229,14 @@
                     <div className="grid grid-cols-2 gap-3">
                       {team.players.map(player => {
                         const holesUsed = Object.values(playerUsed).filter(p => p === player).length;
+                        const drivesUsed = format === 'shamble' ? Object.values(driveUsed).filter(p => p === player).length : null;
                         return (
                           <div key={player} className="text-center">
                             <div className="text-lg font-bold text-gray-900">{player}</div>
                             <div className="text-sm text-gray-600">{holesUsed} hole{holesUsed !== 1 ? 's' : ''}</div>
+                            {drivesUsed !== null && (
+                              <div className="text-xs text-purple-600">{drivesUsed} drive{drivesUsed !== 1 ? 's' : ''}</div>
+                            )}
                           </div>
                         );
                       })}
@@ -1332,7 +1376,7 @@
                         {isExpanded && (
                           <div className="bg-white p-4 rounded-b-xl -mt-2 border-2 border-gray-200">
                             <div className="text-xs font-semibold text-gray-600 mb-2">Hole-by-Hole</div>
-                            <div className="grid grid-cols-9 gap-1">
+                            <div className="grid grid-cols-9 gap-1 mb-3">
                               {Object.entries(team.scores || {}).map(([holeIdx, score]) => {
                                 const idx = parseInt(holeIdx);
                                 const coursePars = currentEvent?.meta?.coursePars || [];
@@ -1353,6 +1397,12 @@
                                 );
                               })}
                             </div>
+                            <button
+                              onClick={() => setViewingTeamScorecard(team.teamId)}
+                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold text-sm"
+                            >
+                              View Full Scorecard
+                            </button>
                           </div>
                         )}
                       </div>
@@ -1374,6 +1424,167 @@
                   </div>
                   {feedback && <div className="text-sm text-green-600 mt-2">{feedback}</div>}
                 </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // TEAM SCORECARD VIEWER (for viewing other teams' scorecards from leaderboard)
+      if (viewingTeamScorecard && currentEvent) {
+        const team = currentEvent.teams[viewingTeamScorecard];
+        if (!team) {
+          setViewingTeamScorecard(null);
+          return null;
+        }
+        
+        const pars = currentEvent?.meta?.coursePars || Array(18).fill(4);
+        const format = currentEvent.meta.format;
+        const showPlayerUsed = format === 'bestball' || format === 'shamble';
+        const playerUsed = team.playerUsed || {};
+        const player1Scores = team.player1Scores || {};
+        const player2Scores = team.player2Scores || {};
+        const driveUsed = team.driveUsed || {};
+        
+        const scoresObj = team.scores || {};
+        const scoresArray = [];
+        for (let i = 0; i < 18; i++) {
+          scoresArray[i] = scoresObj[i] === -1 ? null : scoresObj[i];
+        }
+        
+        const front9Total = scoresArray.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
+        const back9Total = scoresArray.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
+        const front9Par = pars.slice(0, 9).reduce((sum, p) => sum + p, 0);
+        const back9Par = pars.slice(9, 18).reduce((sum, p) => sum + p, 0);
+        
+        const getInitials = (name) => {
+          return name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
+        };
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setViewingTeamScorecard(null)} className="text-white mb-6 hover:text-blue-200">← Back to Leaderboard</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">{team.name}</h2>
+                <p className="text-gray-600 mb-6 text-center">Scorecard</p>
+                
+                {/* Front 9 */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Front 9</h3>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {pars.slice(0, 9).map((par, idx) => {
+                      const playerName = showPlayerUsed ? playerUsed[idx] : null;
+                      const p1Score = player1Scores[idx];
+                      const p2Score = player2Scores[idx];
+                      const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      const drive = format === 'shamble' ? driveUsed[idx] : null;
+                      
+                      return (
+                        <div key={idx} className="bg-gray-50 p-2 rounded text-center">
+                          <div className="text-xs text-gray-500">#{idx + 1}</div>
+                          <div className="text-xs text-gray-400">Par {par}</div>
+                          <div className={`font-bold ${
+                            scoresArray[idx] === null ? 'text-gray-300' :
+                            scoresArray[idx] < par ? 'text-green-600' :
+                            scoresArray[idx] > par ? 'text-red-600' :
+                            'text-gray-900'
+                          }`}>
+                            {scoresArray[idx] || '-'}
+                          </div>
+                          {showBothScores && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <div className={p1Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
+                              <div className={p2Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
+                            </div>
+                          )}
+                          {drive && (
+                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right text-sm font-semibold">
+                    Total: {front9Total} ({front9Total - front9Par > 0 ? '+' : ''}{front9Total - front9Par})
+                  </div>
+                </div>
+
+                {/* Back 9 */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Back 9</h3>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {pars.slice(9, 18).map((par, idx) => {
+                      const holeNum = idx + 10;
+                      const holeIdx = idx + 9;
+                      const playerName = showPlayerUsed ? playerUsed[holeIdx] : null;
+                      const p1Score = player1Scores[holeIdx];
+                      const p2Score = player2Scores[holeIdx];
+                      const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      const drive = format === 'shamble' ? driveUsed[holeIdx] : null;
+                      
+                      return (
+                        <div key={holeIdx} className="bg-gray-50 p-2 rounded text-center">
+                          <div className="text-xs text-gray-500">#{holeNum}</div>
+                          <div className="text-xs text-gray-400">Par {par}</div>
+                          <div className={`font-bold ${
+                            scoresArray[holeIdx] === null ? 'text-gray-300' :
+                            scoresArray[holeIdx] < par ? 'text-green-600' :
+                            scoresArray[holeIdx] > par ? 'text-red-600' :
+                            'text-gray-900'
+                          }`}>
+                            {scoresArray[holeIdx] || '-'}
+                          </div>
+                          {showBothScores && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <div className={p1Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
+                              <div className={p2Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
+                            </div>
+                          )}
+                          {drive && (
+                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right text-sm font-semibold">
+                    Total: {back9Total} ({back9Total - back9Par > 0 ? '+' : ''}{back9Total - back9Par})
+                  </div>
+                </div>
+
+                {/* Total */}
+                <div className="bg-blue-50 p-4 rounded-xl mb-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-gray-900">Total Score</span>
+                    <span className="text-2xl font-bold text-blue-600">
+                      {front9Total + back9Total} ({(front9Total + back9Total) - (front9Par + back9Par) > 0 ? '+' : ''}{(front9Total + back9Total) - (front9Par + back9Par)})
+                    </span>
+                  </div>
+                </div>
+                
+                {/* Player Usage Stats */}
+                {showPlayerUsed && (
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Player Usage</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {team.players.map(player => {
+                        const holesUsed = Object.values(playerUsed).filter(p => p === player).length;
+                        const drivesUsed = format === 'shamble' ? Object.values(driveUsed).filter(p => p === player).length : null;
+                        return (
+                          <div key={player} className="text-center">
+                            <div className="text-lg font-bold text-gray-900">{player}</div>
+                            <div className="text-sm text-gray-600">{holesUsed} hole{holesUsed !== 1 ? 's' : ''}</div>
+                            {drivesUsed !== null && (
+                              <div className="text-xs text-purple-600">{drivesUsed} drive{drivesUsed !== 1 ? 's' : ''}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
