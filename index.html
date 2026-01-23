@@ -88,6 +88,7 @@
         courseId: '',
         date: new Date().toISOString().split('T')[0],
         format: 'scramble',
+        startingHole: 1,
         teams: []
       });
       const [newTeam, setNewTeam] = useState({ name: '', player1: '', player2: '' });
@@ -98,6 +99,7 @@
       const [scoreConfirmation, setScoreConfirmation] = useState(null);
       const [expandedTeams, setExpandedTeams] = useState([]);
       const [editingHole, setEditingHole] = useState(null);
+      const [playerScores, setPlayerScores] = useState(null); // For bestball/shamble: {player1Score, player2Score, usedPlayer}
       const eventListenerRef = useRef(null);
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
@@ -234,7 +236,7 @@
               name: team.name,
               players: newEvent.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
               scores: scores,
-              currentHole: 1
+              currentHole: newEvent.startingHole
             };
           });
 
@@ -345,10 +347,11 @@
         setView('scoring');
       };
 
-      const submitScore = async (score, holeOverride = null) => {
+      const submitScore = async (score, holeOverride = null, playerUsed = null) => {
         try {
           console.log('=== SUBMIT SCORE DEBUG ===');
           console.log('Score:', score);
+          console.log('Player Used:', playerUsed);
           console.log('Current Event:', currentEvent);
           console.log('Selected Team:', selectedTeam);
           console.log('Current Event Teams:', currentEvent?.teams);
@@ -378,14 +381,23 @@
           // Update score
           await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/scores/${holeIndex}`).set(score);
           
+          // Store player attribution if provided (for bestball/shamble)
+          if (playerUsed) {
+            await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/playerUsed/${holeIndex}`).set(playerUsed);
+          }
+          
           // Update current hole if not on 18 and not editing
           if (holeOverride === null && team.currentHole < 18) {
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/currentHole`).set(team.currentHole + 1);
           }
 
           // Show confirmation with undo option
+          const confirmMessage = playerUsed 
+            ? `${score} recorded (${playerUsed}) on hole ${holeNum}`
+            : `${score} recorded on hole ${holeNum}`;
+          
           setScoreConfirmation({
-            message: `${score} recorded on hole ${holeNum}`,
+            message: confirmMessage,
             undoData: { holeIndex, previousScore, previousHole, score }
           });
 
@@ -589,6 +601,34 @@
                   </div>
 
                   <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Starting Hole</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setNewEvent({ ...newEvent, startingHole: 1 })}
+                        className={`py-3 rounded-xl font-semibold transition-all ${
+                          newEvent.startingHole === 1
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Hole 1 (Front 9)
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setNewEvent({ ...newEvent, startingHole: 10 })}
+                        className={`py-3 rounded-xl font-semibold transition-all ${
+                          newEvent.startingHole === 10
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                        }`}
+                      >
+                        Hole 10 (Back 9)
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-3">
                       {newEvent.format === 'stableford' ? 'Players' : 'Teams'} ({newEvent.teams.length})
                     </label>
@@ -786,8 +826,55 @@
         const stats = calculateTeamStats(team);
         const isStableford = currentEvent.meta.format === 'stableford';
         
+        // Check if round is complete (18 holes played)
+        const roundComplete = stats.holesCompleted >= 18;
+        
+        // If round complete, show completion screen
+        if (roundComplete) {
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+                <div className="text-6xl mb-4">🏆</div>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Round Complete!</h2>
+                <p className="text-gray-600 mb-4">{team.name}</p>
+                <div className="bg-gray-50 p-4 rounded-xl mb-6">
+                  <div className="text-sm text-gray-600 mb-1">{isStableford ? 'Total Points' : 'Final Score'}</div>
+                  <div className="text-4xl font-bold text-blue-600 mb-1">{stats.total}</div>
+                  {!isStableford && (
+                    <div className={`text-lg font-semibold ${stats.toPar > 0 ? 'text-red-600' : stats.toPar < 0 ? 'text-green-600' : 'text-gray-900'}`}>
+                      {stats.toPar > 0 ? '+' : ''}{stats.toPar}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setView('leaderboard')}
+                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
+                  >
+                    View Leaderboard
+                  </button>
+                  <button
+                    onClick={() => setView('scorecard')}
+                    className="w-full bg-gray-600 text-white py-3 rounded-xl font-semibold hover:bg-gray-700"
+                  >
+                    View Scorecard
+                  </button>
+                  <button
+                    onClick={() => setView('team-selection')}
+                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
+                  >
+                    Back to Team Selection
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex flex-col">
+            <button onClick={() => setView('team-selection')} className="text-white mb-4 hover:text-blue-200">← Back</button>
+            
             {/* Header */}
             <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-6">
               <div className="text-center mb-4">
@@ -823,11 +910,25 @@
             <div className="flex-1 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6">
               <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">Enter Score</h3>
               
+              {/* Show player names for bestball/shamble */}
+              {(currentEvent.meta.format === 'bestball' || currentEvent.meta.format === 'shamble') && (
+                <div className="mb-4 text-center text-sm text-gray-600">
+                  {team.players[0]} or {team.players[1]}'s score?
+                </div>
+              )}
+              
               <div className="grid grid-cols-5 gap-3 mb-6">
                 {[1,2,3,4,5,6,7,8,9,10].map(score => (
                   <button
                     key={score}
-                    onClick={() => submitScore(score === 10 ? 10 : score)}
+                    onClick={() => {
+                      const actualScore = score === 10 ? 10 : score;
+                      if (currentEvent.meta.format === 'bestball' || currentEvent.meta.format === 'shamble') {
+                        setPlayerScores({ score: actualScore, needsPlayerSelection: true });
+                      } else {
+                        submitScore(actualScore);
+                      }
+                    }}
                     className={`py-6 rounded-xl font-bold text-2xl transition-all ${
                       score === currentPar
                         ? 'bg-blue-600 text-white hover:bg-blue-700'
@@ -873,6 +974,44 @@
                 </button>
               </div>
             </div>
+            
+            {/* Player Selection Modal for Best Ball / Shamble */}
+            {playerScores?.needsPlayerSelection && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Whose score?</h3>
+                  <p className="text-gray-600 mb-4">Score of {playerScores.score} on hole {currentHoleNum}</p>
+                  
+                  <div className="space-y-3 mb-4">
+                    <button
+                      onClick={() => {
+                        submitScore(playerScores.score, null, team.players[0]);
+                        setPlayerScores(null);
+                      }}
+                      className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700"
+                    >
+                      {team.players[0]}
+                    </button>
+                    <button
+                      onClick={() => {
+                        submitScore(playerScores.score, null, team.players[1]);
+                        setPlayerScores(null);
+                      }}
+                      className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700"
+                    >
+                      {team.players[1]}
+                    </button>
+                  </div>
+                  
+                  <button
+                    onClick={() => setPlayerScores(null)}
+                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         );
       }
@@ -881,6 +1020,9 @@
       if (view === 'scorecard' && currentEvent && selectedTeam) {
         const team = currentEvent.teams[selectedTeam];
         const pars = currentEvent?.meta?.coursePars || Array(18).fill(4);
+        const format = currentEvent.meta.format;
+        const showPlayerUsed = format === 'bestball' || format === 'shamble';
+        const playerUsed = team.playerUsed || {};
         
         // Convert scores object to array
         const scoresObj = team.scores || {};
@@ -893,6 +1035,12 @@
         const back9Total = scoresArray.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
         const front9Par = pars.slice(0, 9).reduce((sum, p) => sum + p, 0);
         const back9Par = pars.slice(9, 18).reduce((sum, p) => sum + p, 0);
+        
+        // Get player initials
+        const getInitials = (name) => {
+          return name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
+        };
+
         
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
@@ -907,24 +1055,30 @@
                 <div className="mb-6">
                   <h3 className="text-sm font-semibold text-gray-700 mb-3">Front 9</h3>
                   <div className="grid grid-cols-9 gap-1 mb-2">
-                    {pars.slice(0, 9).map((par, idx) => (
-                      <button
-                        key={idx}
-                        onClick={() => setEditingHole(idx + 1)}
-                        className="bg-gray-50 hover:bg-blue-50 p-2 rounded text-center cursor-pointer"
-                      >
-                        <div className="text-xs text-gray-500">#{idx + 1}</div>
-                        <div className="text-xs text-gray-400">Par {par}</div>
-                        <div className={`font-bold ${
-                          scoresArray[idx] === null ? 'text-gray-300' :
-                          scoresArray[idx] < par ? 'text-green-600' :
-                          scoresArray[idx] > par ? 'text-red-600' :
-                          'text-gray-900'
-                        }`}>
-                          {scoresArray[idx] || '-'}
-                        </div>
-                      </button>
-                    ))}
+                    {pars.slice(0, 9).map((par, idx) => {
+                      const playerName = showPlayerUsed ? playerUsed[idx] : null;
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => setEditingHole(idx + 1)}
+                          className="bg-gray-50 hover:bg-blue-50 p-2 rounded text-center cursor-pointer"
+                        >
+                          <div className="text-xs text-gray-500">#{idx + 1}</div>
+                          <div className="text-xs text-gray-400">Par {par}</div>
+                          <div className={`font-bold ${
+                            scoresArray[idx] === null ? 'text-gray-300' :
+                            scoresArray[idx] < par ? 'text-green-600' :
+                            scoresArray[idx] > par ? 'text-red-600' :
+                            'text-gray-900'
+                          }`}>
+                            {scoresArray[idx] || '-'}
+                          </div>
+                          {playerName && (
+                            <div className="text-xs text-blue-600 font-semibold">{getInitials(playerName)}</div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
                   <div className="text-right text-sm font-semibold">
                     Total: {front9Total} ({front9Total - front9Par > 0 ? '+' : ''}{front9Total - front9Par})
@@ -938,6 +1092,7 @@
                     {pars.slice(9, 18).map((par, idx) => {
                       const holeNum = idx + 10;
                       const holeIdx = idx + 9;
+                      const playerName = showPlayerUsed ? playerUsed[holeIdx] : null;
                       return (
                         <button
                           key={holeIdx}
@@ -954,6 +1109,9 @@
                           }`}>
                             {scoresArray[holeIdx] || '-'}
                           </div>
+                          {playerName && (
+                            <div className="text-xs text-blue-600 font-semibold">{getInitials(playerName)}</div>
+                          )}
                         </button>
                       );
                     })}
@@ -964,7 +1122,7 @@
                 </div>
 
                 {/* Total */}
-                <div className="bg-blue-50 p-4 rounded-xl">
+                <div className="bg-blue-50 p-4 rounded-xl mb-4">
                   <div className="flex justify-between items-center">
                     <span className="font-semibold text-gray-900">Total Score</span>
                     <span className="text-2xl font-bold text-blue-600">
@@ -972,6 +1130,24 @@
                     </span>
                   </div>
                 </div>
+                
+                {/* Player Usage Stats for Best Ball / Shamble */}
+                {showPlayerUsed && (
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Player Usage</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {team.players.map(player => {
+                        const holesUsed = Object.values(playerUsed).filter(p => p === player).length;
+                        return (
+                          <div key={player} className="text-center">
+                            <div className="text-lg font-bold text-gray-900">{player}</div>
+                            <div className="text-sm text-gray-600">{holesUsed} hole{holesUsed !== 1 ? 's' : ''}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
