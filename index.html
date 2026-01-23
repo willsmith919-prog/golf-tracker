@@ -87,6 +87,7 @@
         name: '',
         courseId: '',
         date: new Date().toISOString().split('T')[0],
+        format: 'scramble',
         teams: []
       });
       const [newTeam, setNewTeam] = useState({ name: '', player1: '', player2: '' });
@@ -100,6 +101,32 @@
       const eventListenerRef = useRef(null);
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
+
+      // Format helpers
+      const formatNames = {
+        scramble: "2-Man Scramble",
+        shamble: "2-Man Shamble",
+        bestball: "2-Man Best Ball",
+        stableford: "Individual Stableford"
+      };
+
+      const formatDescriptions = {
+        scramble: "Both players hit, pick the best shot, both play from there. One team score per hole.",
+        shamble: "Both players hit, pick the best drive, then each plays their own ball. Best individual score counts.",
+        bestball: "Each player plays their own ball. Lower score of the two counts for the team.",
+        stableford: "Individual scoring. Points awarded based on score vs par. Highest points wins."
+      };
+
+      const calculateStablefordPoints = (score, par) => {
+        const diff = score - par;
+        if (diff >= 2) return 0; // Double bogey or worse
+        if (diff === 1) return 1; // Bogey
+        if (diff === 0) return 2; // Par
+        if (diff === -1) return 3; // Birdie
+        if (diff === -2) return 4; // Eagle
+        if (diff <= -3) return 5; // Albatross
+        return 0;
+      };
 
       useEffect(() => { loadCourses(); }, []);
 
@@ -135,16 +162,29 @@
       };
 
       const addTeam = () => {
-        if (!newTeam.name || !newTeam.player1 || !newTeam.player2) {
-          setFeedback('Please fill in all team fields');
-          setTimeout(() => setFeedback(''), 2000);
-          return;
+        if (newEvent.format === 'stableford') {
+          if (!newTeam.name) {
+            setFeedback('Please enter player name');
+            setTimeout(() => setFeedback(''), 2000);
+            return;
+          }
+          setNewEvent({
+            ...newEvent,
+            teams: [...newEvent.teams, { name: newTeam.name, player1: newTeam.name, id: Date.now() }]
+          });
+          setNewTeam({ name: '', player1: '', player2: '' });
+        } else {
+          if (!newTeam.name || !newTeam.player1 || !newTeam.player2) {
+            setFeedback('Please fill in all team fields');
+            setTimeout(() => setFeedback(''), 2000);
+            return;
+          }
+          setNewEvent({
+            ...newEvent,
+            teams: [...newEvent.teams, { ...newTeam, id: Date.now() }]
+          });
+          setNewTeam({ name: '', player1: '', player2: '' });
         }
-        setNewEvent({
-          ...newEvent,
-          teams: [...newEvent.teams, { ...newTeam, id: Date.now() }]
-        });
-        setNewTeam({ name: '', player1: '', player2: '' });
       };
 
       const removeTeam = (teamId) => {
@@ -155,8 +195,10 @@
       };
 
       const createEvent = async () => {
-        if (!newEvent.name || !newEvent.courseId || newEvent.teams.length < 2) {
-          setFeedback('Please add event name, course, and at least 2 teams');
+        const minPlayers = newEvent.format === 'stableford' ? 1 : 2;
+        if (!newEvent.name || !newEvent.courseId || newEvent.teams.length < minPlayers) {
+          const teamWord = newEvent.format === 'stableford' ? 'player' : 'teams';
+          setFeedback(`Please add event name, course, and at least ${minPlayers} ${teamWord}`);
           setTimeout(() => setFeedback(''), 3000);
           return;
         }
@@ -172,7 +214,7 @@
               courseId: course.id,
               courseName: course.name,
               coursePars: course.holes,
-              format: "2-man-scramble",
+              format: newEvent.format,
               date: newEvent.date,
               createdBy: deviceId,
               status: "active",
@@ -190,7 +232,7 @@
             
             eventData.teams[`team${index + 1}`] = {
               name: team.name,
-              players: [team.player1, team.player2],
+              players: newEvent.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
               scores: scores,
               currentHole: 1
             };
@@ -400,19 +442,32 @@
         const scores = team.scores || {};
         const scoresArray = Object.values(scores);
         const validScores = scoresArray.filter(s => s !== null && s !== -1 && s > 0);
-        const total = validScores.reduce((sum, s) => sum + s, 0);
         const holesCompleted = validScores.length;
         
         const pars = currentEvent?.meta?.coursePars || [];
-        let parTotal = 0;
-        scoresArray.forEach((score, i) => {
-          if (score !== null && score !== -1 && score > 0 && pars[i]) {
-            parTotal += pars[i];
-          }
-        });
+        const format = currentEvent?.meta?.format || 'scramble';
         
-        const toPar = total - parTotal;
-        return { total, holesCompleted, toPar };
+        if (format === 'stableford') {
+          // Calculate Stableford points
+          let totalPoints = 0;
+          scoresArray.forEach((score, i) => {
+            if (score !== null && score !== -1 && score > 0 && pars[i]) {
+              totalPoints += calculateStablefordPoints(score, pars[i]);
+            }
+          });
+          return { total: totalPoints, holesCompleted, toPar: 0, isStableford: true };
+        } else {
+          // Stroke play formats
+          const total = validScores.reduce((sum, s) => sum + s, 0);
+          let parTotal = 0;
+          scoresArray.forEach((score, i) => {
+            if (score !== null && score !== -1 && score > 0 && pars[i]) {
+              parTotal += pars[i];
+            }
+          });
+          const toPar = total - parTotal;
+          return { total, holesCompleted, toPar, isStableford: false };
+        }
       };
 
       // HOME VIEW
@@ -509,6 +564,21 @@
                   </div>
 
                   <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
+                    <select
+                      value={newEvent.format}
+                      onChange={(e) => setNewEvent({ ...newEvent, format: e.target.value, teams: [] })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                    >
+                      <option value="scramble">2-Man Scramble</option>
+                      <option value="shamble">2-Man Shamble</option>
+                      <option value="bestball">2-Man Best Ball</option>
+                      <option value="stableford">Individual Stableford</option>
+                    </select>
+                    <p className="text-xs text-gray-600 mt-2">{formatDescriptions[newEvent.format]}</p>
+                  </div>
+
+                  <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
                     <input
                       type="date"
@@ -519,7 +589,9 @@
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">Teams ({newEvent.teams.length})</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      {newEvent.format === 'stableford' ? 'Players' : 'Teams'} ({newEvent.teams.length})
+                    </label>
                     
                     {newEvent.teams.length > 0 && (
                       <div className="space-y-2 mb-4">
@@ -527,7 +599,9 @@
                           <div key={team.id} className="bg-gray-50 p-4 rounded-xl flex items-center justify-between">
                             <div>
                               <div className="font-semibold text-gray-900">{team.name}</div>
-                              <div className="text-sm text-gray-600">{team.player1} & {team.player2}</div>
+                              {newEvent.format !== 'stableford' && (
+                                <div className="text-sm text-gray-600">{team.player1} & {team.player2}</div>
+                              )}
                             </div>
                             <button onClick={() => removeTeam(team.id)} className="text-red-600 hover:text-red-700 p-2">
                               <Trash />
@@ -537,37 +611,57 @@
                       </div>
                     )}
 
-                    {newEvent.teams.length < 6 && (
+                    {newEvent.teams.length < (newEvent.format === 'stableford' ? 20 : 6) && (
                       <div className="bg-blue-50 p-4 rounded-xl space-y-3">
-                        <input
-                          type="text"
-                          value={newTeam.name}
-                          onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
-                          placeholder="Team name"
-                          className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                        />
-                        <div className="grid grid-cols-2 gap-3">
-                          <input
-                            type="text"
-                            value={newTeam.player1}
-                            onChange={(e) => setNewTeam({ ...newTeam, player1: e.target.value })}
-                            placeholder="Player 1"
-                            className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                          />
-                          <input
-                            type="text"
-                            value={newTeam.player2}
-                            onChange={(e) => setNewTeam({ ...newTeam, player2: e.target.value })}
-                            placeholder="Player 2"
-                            className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <button
-                          onClick={addTeam}
-                          className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
-                        >
-                          Add Team
-                        </button>
+                        {newEvent.format === 'stableford' ? (
+                          <>
+                            <input
+                              type="text"
+                              value={newTeam.name}
+                              onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
+                              placeholder="Player name"
+                              className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
+                            />
+                            <button
+                              onClick={addTeam}
+                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
+                            >
+                              Add Player
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              value={newTeam.name}
+                              onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
+                              placeholder="Team name"
+                              className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
+                            />
+                            <div className="grid grid-cols-2 gap-3">
+                              <input
+                                type="text"
+                                value={newTeam.player1}
+                                onChange={(e) => setNewTeam({ ...newTeam, player1: e.target.value })}
+                                placeholder="Player 1"
+                                className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
+                              />
+                              <input
+                                type="text"
+                                value={newTeam.player2}
+                                onChange={(e) => setNewTeam({ ...newTeam, player2: e.target.value })}
+                                placeholder="Player 2"
+                                className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
+                              />
+                            </div>
+                            <button
+                              onClick={addTeam}
+                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
+                            >
+                              Add Team
+                            </button>
+                          </>
+                        )}
                       </div>
                     )}
                   </div>
@@ -603,7 +697,8 @@
               <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
                 <div className="text-center mb-8">
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">{currentEvent.meta.name}</h2>
-                  <p className="text-gray-600 mb-4">{currentEvent.meta.courseName} - {currentEvent.meta.date}</p>
+                  <p className="text-gray-600 mb-2">{currentEvent.meta.courseName} - {currentEvent.meta.date}</p>
+                  <p className="text-sm text-gray-500 mb-4">{formatNames[currentEvent.meta.format || 'scramble']}</p>
                   <div className="inline-block bg-blue-50 px-4 py-2 rounded-lg">
                     <div className="text-xs text-gray-600 mb-1">Event Code</div>
                     <div className="font-mono font-bold text-blue-600 text-xl">{currentEvent.meta.eventCode}</div>
@@ -637,6 +732,7 @@
       // TEAM SELECTION VIEW
       if (view === 'team-selection' && currentEvent) {
         const teams = Object.entries(currentEvent.teams || {});
+        const isStableford = currentEvent.meta.format === 'stableford';
         
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
@@ -644,8 +740,12 @@
               <button onClick={() => setView('event-lobby')} className="text-white mb-6 hover:text-blue-200">← Back</button>
               
               <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-                <h2 className="text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>Select Your Team</h2>
-                <p className="text-gray-600 mb-8">Choose which team you're scoring for</p>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>
+                  {isStableford ? 'Select Your Player' : 'Select Your Team'}
+                </h2>
+                <p className="text-gray-600 mb-8">
+                  {isStableford ? 'Choose which player you\'re scoring for' : 'Choose which team you\'re scoring for'}
+                </p>
                 
                 <div className="space-y-3">
                   {teams.map(([teamId, team]) => (
@@ -684,6 +784,7 @@
         const coursePars = currentEvent?.meta?.coursePars || [];
         const currentPar = coursePars[currentHoleNum - 1] || 4;
         const stats = calculateTeamStats(team);
+        const isStableford = currentEvent.meta.format === 'stableford';
         
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex flex-col">
@@ -692,6 +793,7 @@
               <div className="text-center mb-4">
                 <h2 className="text-2xl font-bold text-gray-900">{currentEvent.meta.name}</h2>
                 <div className="text-lg text-gray-600">{team.name}</div>
+                <div className="text-sm text-gray-500">{formatNames[currentEvent.meta.format || 'scramble']}</div>
               </div>
               
               <div className="grid grid-cols-3 gap-4 text-center">
@@ -704,9 +806,14 @@
                   <div className="text-3xl font-bold text-gray-900">{currentPar}</div>
                 </div>
                 <div>
-                  <div className="text-sm text-gray-600">Score</div>
-                  <div className={`text-3xl font-bold ${stats.toPar > 0 ? 'text-red-600' : stats.toPar < 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                    {stats.toPar > 0 ? '+' : ''}{stats.toPar}
+                  <div className="text-sm text-gray-600">{isStableford ? 'Points' : 'Score'}</div>
+                  <div className={`text-3xl font-bold ${
+                    isStableford ? 'text-blue-600' :
+                    stats.toPar > 0 ? 'text-red-600' : 
+                    stats.toPar < 0 ? 'text-green-600' : 
+                    'text-gray-900'
+                  }`}>
+                    {isStableford ? stats.total : (stats.toPar > 0 ? '+' : '') + stats.toPar}
                   </div>
                 </div>
               </div>
@@ -907,13 +1014,17 @@
 
       // LEADERBOARD VIEW
       if (view === 'leaderboard' && currentEvent) {
+        const format = currentEvent.meta.format || 'scramble';
+        const isStableford = format === 'stableford';
+        
         const teams = Object.entries(currentEvent.teams || {}).map(([teamId, team]) => ({
           teamId,
           ...team,
           stats: calculateTeamStats(team)
         }));
 
-        teams.sort((a, b) => a.stats.total - b.stats.total);
+        // Sort: Stableford = high to low, others = low to high
+        teams.sort((a, b) => isStableford ? b.stats.total - a.stats.total : a.stats.total - b.stats.total);
         
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
@@ -927,6 +1038,7 @@
                   </div>
                   <h2 className="text-3xl font-bold text-gray-900 mb-2">Leaderboard</h2>
                   <p className="text-gray-600">{currentEvent.meta.name}</p>
+                  <p className="text-sm text-gray-500">{formatNames[format]}</p>
                 </div>
 
                 <div className="space-y-3 mb-8">
@@ -966,15 +1078,22 @@
                                 <div className={`text-3xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
                                   {team.stats.total}
                                 </div>
-                                <div className={`text-sm font-semibold ${
-                                  team.stats.toPar > 0 
-                                    ? (index < 3 ? 'text-white/80' : 'text-red-600')
-                                    : team.stats.toPar < 0
-                                    ? (index < 3 ? 'text-white/80' : 'text-green-600')
-                                    : (index < 3 ? 'text-white/80' : 'text-gray-600')
-                                }`}>
-                                  {team.stats.toPar > 0 ? '+' : ''}{team.stats.toPar}
-                                </div>
+                                {!isStableford && (
+                                  <div className={`text-sm font-semibold ${
+                                    team.stats.toPar > 0 
+                                      ? (index < 3 ? 'text-white/80' : 'text-red-600')
+                                      : team.stats.toPar < 0
+                                      ? (index < 3 ? 'text-white/80' : 'text-green-600')
+                                      : (index < 3 ? 'text-white/80' : 'text-gray-600')
+                                  }`}>
+                                    {team.stats.toPar > 0 ? '+' : ''}{team.stats.toPar}
+                                  </div>
+                                )}
+                                {isStableford && (
+                                  <div className={`text-sm font-semibold ${index < 3 ? 'text-white/80' : 'text-gray-600'}`}>
+                                    points
+                                  </div>
+                                )}
                               </div>
                               <div className={index < 3 ? 'text-white' : 'text-gray-600'}>
                                 {isExpanded ? <ChevronUp /> : <ChevronDown />}
