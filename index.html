@@ -347,11 +347,13 @@
         setView('scoring');
       };
 
-      const submitScore = async (score, holeOverride = null, playerUsed = null) => {
+      const submitScore = async (score, holeOverride = null, playerUsed = null, player1Score = null, player2Score = null) => {
         try {
           console.log('=== SUBMIT SCORE DEBUG ===');
           console.log('Score:', score);
           console.log('Player Used:', playerUsed);
+          console.log('Player 1 Score:', player1Score);
+          console.log('Player 2 Score:', player2Score);
           console.log('Current Event:', currentEvent);
           console.log('Selected Team:', selectedTeam);
           console.log('Current Event Teams:', currentEvent?.teams);
@@ -381,9 +383,13 @@
           // Update score
           await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/scores/${holeIndex}`).set(score);
           
-          // Store player attribution if provided (for bestball/shamble)
+          // Store player attribution and individual scores if provided (for bestball/shamble)
           if (playerUsed) {
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/playerUsed/${holeIndex}`).set(playerUsed);
+          }
+          if (player1Score !== null && player2Score !== null) {
+            await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/player1Scores/${holeIndex}`).set(player1Score);
+            await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/player2Scores/${holeIndex}`).set(player2Score);
           }
           
           // Update current hole if not on 18 and not editing
@@ -392,9 +398,10 @@
           }
 
           // Show confirmation with undo option
-          const confirmMessage = playerUsed 
-            ? `${score} recorded (${playerUsed}) on hole ${holeNum}`
-            : `${score} recorded on hole ${holeNum}`;
+          let confirmMessage = `${score} recorded on hole ${holeNum}`;
+          if (playerUsed && player1Score !== null && player2Score !== null) {
+            confirmMessage = `${team.players[0]}: ${player1Score}, ${team.players[1]}: ${player2Score} → Used ${playerUsed}'s ${score}`;
+          }
           
           setScoreConfirmation({
             message: confirmMessage,
@@ -910,37 +917,99 @@
             <div className="flex-1 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6">
               <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">Enter Score</h3>
               
-              {/* Show player names for bestball/shamble */}
-              {(currentEvent.meta.format === 'bestball' || currentEvent.meta.format === 'shamble') && (
-                <div className="mb-4 text-center text-sm text-gray-600">
-                  {team.players[0]} or {team.players[1]}'s score?
+              {/* Show two-player entry for bestball/shamble */}
+              {(currentEvent.meta.format === 'bestball' || currentEvent.meta.format === 'shamble') ? (
+                <div className="space-y-4 mb-6">
+                  {/* Player 1 Score */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{team.players[0]}'s Score</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                        <button
+                          key={score}
+                          onClick={() => {
+                            const actualScore = score === 10 ? 10 : score;
+                            setPlayerScores({ ...playerScores, player1Score: actualScore });
+                          }}
+                          className={`py-4 rounded-lg font-bold text-lg transition-all ${
+                            playerScores?.player1Score === (score === 10 ? 10 : score)
+                              ? 'bg-blue-600 text-white'
+                              : score === currentPar
+                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                              : score < currentPar
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {score === 10 ? '10+' : score}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Player 2 Score */}
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{team.players[1]}'s Score</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                        <button
+                          key={score}
+                          onClick={() => {
+                            const actualScore = score === 10 ? 10 : score;
+                            setPlayerScores({ ...playerScores, player2Score: actualScore });
+                          }}
+                          className={`py-4 rounded-lg font-bold text-lg transition-all ${
+                            playerScores?.player2Score === (score === 10 ? 10 : score)
+                              ? 'bg-blue-600 text-white'
+                              : score === currentPar
+                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                              : score < currentPar
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {score === 10 ? '10+' : score}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {/* Submit Button */}
+                  {playerScores?.player1Score && playerScores?.player2Score && (
+                    <button
+                      onClick={() => {
+                        const bestScore = Math.min(playerScores.player1Score, playerScores.player2Score);
+                        const usedPlayer = playerScores.player1Score <= playerScores.player2Score 
+                          ? team.players[0] 
+                          : team.players[1];
+                        submitScore(bestScore, null, usedPlayer, playerScores.player1Score, playerScores.player2Score);
+                        setPlayerScores(null);
+                      }}
+                      className="w-full bg-emerald-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 shadow-lg"
+                    >
+                      Submit Scores (Best: {Math.min(playerScores.player1Score, playerScores.player2Score)})
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-5 gap-3 mb-6">
+                  {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                    <button
+                      key={score}
+                      onClick={() => submitScore(score === 10 ? 10 : score)}
+                      className={`py-6 rounded-xl font-bold text-2xl transition-all ${
+                        score === currentPar
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : score < currentPar
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {score === 10 ? '10+' : score}
+                    </button>
+                  ))}
                 </div>
               )}
-              
-              <div className="grid grid-cols-5 gap-3 mb-6">
-                {[1,2,3,4,5,6,7,8,9,10].map(score => (
-                  <button
-                    key={score}
-                    onClick={() => {
-                      const actualScore = score === 10 ? 10 : score;
-                      if (currentEvent.meta.format === 'bestball' || currentEvent.meta.format === 'shamble') {
-                        setPlayerScores({ score: actualScore, needsPlayerSelection: true });
-                      } else {
-                        submitScore(actualScore);
-                      }
-                    }}
-                    className={`py-6 rounded-xl font-bold text-2xl transition-all ${
-                      score === currentPar
-                        ? 'bg-blue-600 text-white hover:bg-blue-700'
-                        : score < currentPar
-                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                    }`}
-                  >
-                    {score === 10 ? '10+' : score}
-                  </button>
-                ))}
-              </div>
 
               {scoreConfirmation && (
                 <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl mb-4">
@@ -974,44 +1043,6 @@
                 </button>
               </div>
             </div>
-            
-            {/* Player Selection Modal for Best Ball / Shamble */}
-            {playerScores?.needsPlayerSelection && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Whose score?</h3>
-                  <p className="text-gray-600 mb-4">Score of {playerScores.score} on hole {currentHoleNum}</p>
-                  
-                  <div className="space-y-3 mb-4">
-                    <button
-                      onClick={() => {
-                        submitScore(playerScores.score, null, team.players[0]);
-                        setPlayerScores(null);
-                      }}
-                      className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700"
-                    >
-                      {team.players[0]}
-                    </button>
-                    <button
-                      onClick={() => {
-                        submitScore(playerScores.score, null, team.players[1]);
-                        setPlayerScores(null);
-                      }}
-                      className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700"
-                    >
-                      {team.players[1]}
-                    </button>
-                  </div>
-                  
-                  <button
-                    onClick={() => setPlayerScores(null)}
-                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         );
       }
@@ -1023,6 +1054,8 @@
         const format = currentEvent.meta.format;
         const showPlayerUsed = format === 'bestball' || format === 'shamble';
         const playerUsed = team.playerUsed || {};
+        const player1Scores = team.player1Scores || {};
+        const player2Scores = team.player2Scores || {};
         
         // Convert scores object to array
         const scoresObj = team.scores || {};
@@ -1057,6 +1090,10 @@
                   <div className="grid grid-cols-9 gap-1 mb-2">
                     {pars.slice(0, 9).map((par, idx) => {
                       const playerName = showPlayerUsed ? playerUsed[idx] : null;
+                      const p1Score = player1Scores[idx];
+                      const p2Score = player2Scores[idx];
+                      const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      
                       return (
                         <button
                           key={idx}
@@ -1073,7 +1110,12 @@
                           }`}>
                             {scoresArray[idx] || '-'}
                           </div>
-                          {playerName && (
+                          {showBothScores ? (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <div className={p1Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
+                              <div className={p2Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
+                            </div>
+                          ) : playerName && (
                             <div className="text-xs text-blue-600 font-semibold">{getInitials(playerName)}</div>
                           )}
                         </button>
@@ -1093,6 +1135,10 @@
                       const holeNum = idx + 10;
                       const holeIdx = idx + 9;
                       const playerName = showPlayerUsed ? playerUsed[holeIdx] : null;
+                      const p1Score = player1Scores[holeIdx];
+                      const p2Score = player2Scores[holeIdx];
+                      const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      
                       return (
                         <button
                           key={holeIdx}
@@ -1109,7 +1155,12 @@
                           }`}>
                             {scoresArray[holeIdx] || '-'}
                           </div>
-                          {playerName && (
+                          {showBothScores ? (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <div className={p1Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
+                              <div className={p2Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
+                            </div>
+                          ) : playerName && (
                             <div className="text-xs text-blue-600 font-semibold">{getInitials(playerName)}</div>
                           )}
                         </button>
