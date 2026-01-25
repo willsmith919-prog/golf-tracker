@@ -1112,6 +1112,32 @@
         }));
         const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
 
+        const handleRemoveMember = async (memberUid, memberName) => {
+          if (!confirm(`Remove ${memberName} from the league?`)) {
+            return;
+          }
+
+          try {
+            // Remove from league members
+            await database.ref(`leagues/${currentLeague.id}/members/${memberUid}`).remove();
+            
+            // Remove league from user's profile
+            await database.ref(`users/${memberUid}/leagues/${currentLeague.id}`).remove();
+
+            // Reload league data
+            const leagueSnapshot = await database.ref(`leagues/${currentLeague.id}`).once('value');
+            const updatedLeague = leagueSnapshot.val();
+            setCurrentLeague({ id: currentLeague.id, ...updatedLeague, userRole: currentLeague.userRole });
+
+            setFeedback(`${memberName} removed from league`);
+            setTimeout(() => setFeedback(''), 3000);
+          } catch (error) {
+            console.error('Error removing member:', error);
+            setFeedback('Error removing member');
+            setTimeout(() => setFeedback(''), 3000);
+          }
+        };
+
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
             <div className="max-w-2xl mx-auto">
@@ -1163,7 +1189,10 @@
                         )}
                       </div>
                       {isCommissioner && member.role !== 'commissioner' && (
-                        <button className="text-red-600 hover:text-red-700 text-sm font-semibold">
+                        <button
+                          onClick={() => handleRemoveMember(member.uid, member.displayName)}
+                          className="text-red-600 hover:text-red-700 text-sm font-semibold"
+                        >
                           Remove
                         </button>
                       )}
