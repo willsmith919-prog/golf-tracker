@@ -1373,9 +1373,12 @@
                         <div key={event.id} className="bg-gray-50 p-4 rounded-xl">
                           <div className="flex items-start justify-between mb-2">
                             <div>
-                              <div className="font-semibold text-gray-900">
+                              <div className="font-bold text-lg text-gray-900">
+                                {event.meta.name}
+                              </div>
+                              <div className="text-sm text-gray-600">
                                 {new Date(event.meta.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                                {event.meta.time && ` · ${event.meta.time}`}
+                                {event.meta.time && ` at ${event.meta.time}`}
                               </div>
                               <div className="text-sm text-gray-600">{event.meta.courseName}</div>
                               <div className="text-sm text-gray-600">{formatNames[event.meta.format]}</div>
@@ -2814,13 +2817,105 @@
                   </div>
 
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">Teams ({editForm.teams.length})</label>
-                    {editForm.teams.map((team, idx) => (
-                      <div key={idx} className="bg-gray-50 p-3 rounded-xl mb-2">
-                        <div className="text-sm font-semibold text-gray-900">{team.name}</div>
-                        <div className="text-xs text-gray-600">{team.player1} {team.player2 && `& ${team.player2}`}</div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">
+                      {editForm.format === 'stableford' ? 'Players' : 'Teams'} ({editForm.teams.length})
+                    </label>
+                    
+                    {editForm.teams.length > 0 && (
+                      <div className="space-y-2 mb-4">
+                        {editForm.teams.map((team, idx) => (
+                          <div key={idx} className="bg-gray-50 p-4 rounded-xl flex items-center justify-between">
+                            <div>
+                              <div className="font-semibold text-gray-900">{team.name}</div>
+                              {editForm.format !== 'stableford' && (
+                                <div className="text-sm text-gray-600">{team.player1} & {team.player2}</div>
+                              )}
+                            </div>
+                            <button 
+                              onClick={() => {
+                                const newTeams = editForm.teams.filter((_, i) => i !== idx);
+                                setEditForm({ ...editForm, teams: newTeams });
+                              }}
+                              className="text-red-600 hover:text-red-700 p-2"
+                            >
+                              <Trash />
+                            </button>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
+
+                    {editForm.teams.length < (editForm.format === 'stableford' ? 20 : 6) && (
+                      <div className="bg-blue-50 p-4 rounded-xl space-y-3">
+                        {editForm.format === 'stableford' ? (
+                          <>
+                            <input
+                              type="text"
+                              value={newTeam.name}
+                              onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
+                              placeholder="Player name"
+                              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                            />
+                            <button
+                              onClick={() => {
+                                if (newTeam.name.trim()) {
+                                  const newTeams = [...editForm.teams, { 
+                                    id: `team${editForm.teams.length + 1}`, 
+                                    name: newTeam.name, 
+                                    player1: newTeam.name,
+                                    player2: ''
+                                  }];
+                                  setEditForm({ ...editForm, teams: newTeams });
+                                  setNewTeam({ name: '', player1: '', player2: '' });
+                                }
+                              }}
+                              className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700"
+                            >
+                              Add Player
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <input
+                              type="text"
+                              value={newTeam.name}
+                              onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
+                              placeholder="Team name"
+                              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={newTeam.player1}
+                              onChange={(e) => setNewTeam({ ...newTeam, player1: e.target.value })}
+                              placeholder="Player 1 name"
+                              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                            />
+                            <input
+                              type="text"
+                              value={newTeam.player2}
+                              onChange={(e) => setNewTeam({ ...newTeam, player2: e.target.value })}
+                              placeholder="Player 2 name"
+                              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                            />
+                            <button
+                              onClick={() => {
+                                if (newTeam.name.trim() && newTeam.player1.trim() && newTeam.player2.trim()) {
+                                  const newTeams = [...editForm.teams, { 
+                                    id: `team${editForm.teams.length + 1}`, 
+                                    ...newTeam 
+                                  }];
+                                  setEditForm({ ...editForm, teams: newTeams });
+                                  setNewTeam({ name: '', player1: '', player2: '' });
+                                }
+                              }}
+                              className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700"
+                            >
+                              Add Team
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                   <button onClick={saveEventEdits} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700">
