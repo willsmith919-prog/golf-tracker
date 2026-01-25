@@ -127,22 +127,52 @@
       const [leagueCode, setLeagueCode] = useState('');
       const [creatingEventForLeague, setCreatingEventForLeague] = useState(null); // {leagueId, seasonId}
       const [editingEvent, setEditingEvent] = useState(null);
+      const [editForm, setEditForm] = useState(null);
       const [leagueEvents, setLeagueEvents] = useState([]); // Events for current league
       const eventListenerRef = useRef(null);
+
+      // Populate edit form when editingEvent changes
+      useEffect(() => {
+        if (editingEvent && view === 'edit-event') {
+          setEditForm({
+            name: editingEvent.meta.name,
+            courseId: editingEvent.meta.courseId,
+            date: editingEvent.meta.date,
+            time: editingEvent.meta.time || '',
+            format: editingEvent.meta.format,
+            startingHole: Object.values(editingEvent.teams || {})[0]?.currentHole || 1,
+            teams: Object.values(editingEvent.teams || {}).map((team, idx) => ({
+              id: `team${idx + 1}`,
+              name: team.name,
+              player1: team.players[0] || '',
+              player2: team.players[1] || ''
+            }))
+          });
+        } else {
+          setEditForm(null);
+        }
+      }, [editingEvent, view]);
 
       // Load league events when viewing dashboard
       useEffect(() => {
         const loadLeagueEvents = async () => {
+          console.log('loadLeagueEvents triggered:', { view, currentLeague: currentLeague?.id });
+          
           if (view !== 'league-dashboard' || !currentLeague) {
             setLeagueEvents([]);
             return;
           }
 
           const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
+          console.log('Active season:', activeSeason);
+          
           if (!activeSeason || !activeSeason.events) {
+            console.log('No active season or events array');
             setLeagueEvents([]);
             return;
           }
+
+          console.log('Loading events:', activeSeason.events);
 
           try {
             const eventsData = [];
@@ -155,6 +185,7 @@
             }
             // Sort by date (soonest first)
             eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
+            console.log('Loaded events:', eventsData);
             setLeagueEvents(eventsData);
           } catch (error) {
             console.error('Error loading league events:', error);
@@ -396,8 +427,13 @@
             const eventsRef = database.ref(`leagues/${leagueId}/seasons/${seasonId}/events`);
             const eventsSnapshot = await eventsRef.once('value');
             const events = eventsSnapshot.val() || [];
-            events.push(eventId);
-            await eventsRef.set(events);
+            
+            // Ensure it's an array
+            const eventsArray = Array.isArray(events) ? events : [];
+            eventsArray.push(eventId);
+            
+            console.log('Adding event to league:', { leagueId, seasonId, eventId, eventsArray });
+            await eventsRef.set(eventsArray);
           }
           
           setFeedback(`Event created! ${creatingEventForLeague ? 'Status: Draft' : `Code: ${eventCode}`}`);
@@ -407,6 +443,8 @@
               // Reload league data to get updated events array
               const leagueSnapshot = await database.ref(`leagues/${creatingEventForLeague.leagueId}`).once('value');
               const updatedLeague = leagueSnapshot.val();
+              console.log('Reloaded league after event creation:', updatedLeague);
+              
               if (updatedLeague) {
                 setCurrentLeague({ 
                   id: creatingEventForLeague.leagueId, 
@@ -2673,23 +2711,7 @@
       }
 
       // EDIT EVENT VIEW
-      if (view === 'edit-event' && editingEvent) {
-        // Pre-populate form with existing event data
-        const [editForm, setEditForm] = React.useState({
-          name: editingEvent.meta.name,
-          courseId: editingEvent.meta.courseId,
-          date: editingEvent.meta.date,
-          time: editingEvent.meta.time || '',
-          format: editingEvent.meta.format,
-          startingHole: Object.values(editingEvent.teams || {})[0]?.currentHole || 1,
-          teams: Object.values(editingEvent.teams || {}).map((team, idx) => ({
-            id: `team${idx + 1}`,
-            name: team.name,
-            player1: team.players[0] || '',
-            player2: team.players[1] || ''
-          }))
-        });
-
+      if (view === 'edit-event' && editingEvent && editForm) {
         const saveEventEdits = async () => {
           try {
             const course = courses.find(c => c.id === editForm.courseId);
