@@ -129,6 +129,40 @@
       const [editingEvent, setEditingEvent] = useState(null);
       const [leagueEvents, setLeagueEvents] = useState([]); // Events for current league
       const eventListenerRef = useRef(null);
+
+      // Load league events when viewing dashboard
+      useEffect(() => {
+        const loadLeagueEvents = async () => {
+          if (view !== 'league-dashboard' || !currentLeague) {
+            setLeagueEvents([]);
+            return;
+          }
+
+          const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
+          if (!activeSeason || !activeSeason.events) {
+            setLeagueEvents([]);
+            return;
+          }
+
+          try {
+            const eventsData = [];
+            for (const eventId of activeSeason.events) {
+              const snapshot = await database.ref(`events/${eventId}`).once('value');
+              const event = snapshot.val();
+              if (event) {
+                eventsData.push({ id: eventId, ...event });
+              }
+            }
+            // Sort by date (soonest first)
+            eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
+            setLeagueEvents(eventsData);
+          } catch (error) {
+            console.error('Error loading league events:', error);
+          }
+        };
+
+        loadLeagueEvents();
+      }, [view, currentLeague]);
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
 
@@ -1149,34 +1183,6 @@
           ...data
         }));
         const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
-
-        // Load league events
-        React.useEffect(() => {
-          const loadLeagueEvents = async () => {
-            if (!activeSeason || !activeSeason.events) {
-              setLeagueEvents([]);
-              return;
-            }
-
-            try {
-              const eventsData = [];
-              for (const eventId of activeSeason.events) {
-                const snapshot = await database.ref(`events/${eventId}`).once('value');
-                const event = snapshot.val();
-                if (event) {
-                  eventsData.push({ id: eventId, ...event });
-                }
-              }
-              // Sort by date (soonest first)
-              eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
-              setLeagueEvents(eventsData);
-            } catch (error) {
-              console.error('Error loading league events:', error);
-            }
-          };
-
-          loadLeagueEvents();
-        }, [currentLeague, activeSeason]);
 
         const handleRemoveMember = async (memberUid, memberName) => {
           if (!confirm(`Remove ${memberName} from the league?`)) {
