@@ -402,8 +402,18 @@
           
           setFeedback(`Event created! ${creatingEventForLeague ? 'Status: Draft' : `Code: ${eventCode}`}`);
           
-          setTimeout(() => {
+          setTimeout(async () => {
             if (creatingEventForLeague) {
+              // Reload league data to get updated events array
+              const leagueSnapshot = await database.ref(`leagues/${creatingEventForLeague.leagueId}`).once('value');
+              const updatedLeague = leagueSnapshot.val();
+              if (updatedLeague) {
+                setCurrentLeague({ 
+                  id: creatingEventForLeague.leagueId, 
+                  ...updatedLeague, 
+                  userRole: currentLeague.userRole 
+                });
+              }
               // Go back to league dashboard
               setCreatingEventForLeague(null);
               setView('league-dashboard');
@@ -911,6 +921,11 @@
 
           if (!newLeague.name) {
             setFeedback('Please enter a league name');
+            return;
+          }
+
+          if (!userProfile) {
+            setFeedback('User profile not loaded. Please try again.');
             return;
           }
 
