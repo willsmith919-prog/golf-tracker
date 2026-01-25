@@ -12,6 +12,7 @@
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   
   <style>
     body { margin: 0; padding: 0; overflow-x: hidden; }
@@ -39,6 +40,8 @@
       firebase.initializeApp(firebaseConfig);
     }
     const database = firebase.database();
+    const auth = firebase.auth();
+
 
     // Generate or retrieve device ID
     const getDeviceId = () => {
@@ -81,7 +84,10 @@
     const RotateCcw = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>);
 
     function LiveLinks() {
-      const [view, setView] = useState('home');
+      const [view, setView] = useState('login'); // Start at login
+      const [currentUser, setCurrentUser] = useState(null);
+      const [userProfile, setUserProfile] = useState(null);
+      const [authLoading, setAuthLoading] = useState(true);
       const [courses, setCourses] = useState([]);
       const [newEvent, setNewEvent] = useState({
         name: '',
@@ -100,10 +106,47 @@
       const [expandedTeams, setExpandedTeams] = useState([]);
       const [editingHole, setEditingHole] = useState(null);
       const [playerScores, setPlayerScores] = useState(null);
-      const [viewingTeamScorecard, setViewingTeamScorecard] = useState(null); // For viewing other teams' scorecards
+      const [viewingTeamScorecard, setViewingTeamScorecard] = useState(null);
+      const [loginEmail, setLoginEmail] = useState('');
+      const [loginPassword, setLoginPassword] = useState('');
+      const [signupEmail, setSignupEmail] = useState('');
+      const [signupPassword, setSignupPassword] = useState('');
+      const [signupDisplayName, setSignupDisplayName] = useState('');
+      const [signupHandicap, setSignupHandicap] = useState('');
+      const [authError, setAuthError] = useState('');
+      const [authLoading2, setAuthLoading2] = useState(false);
       const eventListenerRef = useRef(null);
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
+
+      // Auth state listener
+      useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+          setCurrentUser(user);
+          
+          if (user) {
+            // Fetch user profile from database
+            try {
+              const profileSnapshot = await database.ref(`users/${user.uid}`).once('value');
+              const profile = profileSnapshot.val();
+              setUserProfile(profile);
+              
+              if (view === 'login' || view === 'signup') {
+                setView('home');
+              }
+            } catch (error) {
+              console.error('Error fetching user profile:', error);
+            }
+          } else {
+            setUserProfile(null);
+            setView('login');
+          }
+          
+          setAuthLoading(false);
+        });
+
+        return () => unsubscribe();
+      }, []);
 
       // Format helpers
       const formatNames = {
@@ -498,17 +541,267 @@
         }
       };
 
+      // Auth loading screen
+      if (authLoading) {
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 flex items-center justify-center">
+            <div className="text-white text-2xl">Loading...</div>
+          </div>
+        );
+      }
+
+      // LOGIN VIEW
+      if (view === 'login') {
+        const handleLogin = async (e) => {
+          e.preventDefault();
+          setAuthError('');
+          setAuthLoading2(true);
+
+          try {
+            await auth.signInWithEmailAndPassword(loginEmail, loginPassword);
+            // Auth state listener will handle navigation
+          } catch (err) {
+            console.error('Login error:', err);
+            if (err.code === 'auth/user-not-found') {
+              setAuthError('No account found with this email');
+            } else if (err.code === 'auth/wrong-password') {
+              setAuthError('Incorrect password');
+            } else if (err.code === 'auth/invalid-email') {
+              setAuthError('Invalid email address');
+            } else {
+              setAuthError('Login failed. Please try again.');
+            }
+          }
+
+          setAuthLoading2(false);
+        };
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+            <div className="max-w-md w-full">
+              <div className="text-center mb-8">
+                <h1 className="text-5xl font-bold text-white mb-2" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
+                <p className="text-blue-200">Golf League Management</p>
+              </div>
+
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Login</h2>
+
+                {authError && (
+                  <div className="bg-red-50 border-2 border-red-200 text-red-800 p-3 rounded-lg mb-4 text-sm">
+                    {authError}
+                  </div>
+                )}
+
+                <form onSubmit={handleLogin} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={loginEmail}
+                      onChange={(e) => setLoginEmail(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="your@email.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                    <input
+                      type="password"
+                      value={loginPassword}
+                      onChange={(e) => setLoginPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="••••••••"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={authLoading2}
+                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {authLoading2 ? 'Logging in...' : 'Login'}
+                  </button>
+                </form>
+
+                <div className="mt-6 text-center">
+                  <button
+                    onClick={() => {
+                      setAuthError('');
+                      setView('signup');
+                    }}
+                    className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
+                  >
+                    Don't have an account? Sign up
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // SIGNUP VIEW
+      if (view === 'signup') {
+        const handleSignup = async (e) => {
+          e.preventDefault();
+          setAuthError('');
+          setAuthLoading2(true);
+
+          try {
+            // Create auth account
+            const userCredential = await auth.createUserWithEmailAndPassword(signupEmail, signupPassword);
+            const user = userCredential.user;
+
+            // Create user profile in database
+            await database.ref(`users/${user.uid}`).set({
+              email: signupEmail,
+              displayName: signupDisplayName,
+              handicap: signupHandicap ? parseFloat(signupHandicap) : null,
+              createdAt: Date.now()
+            });
+
+            // Auth state listener will handle navigation
+          } catch (err) {
+            console.error('Signup error:', err);
+            if (err.code === 'auth/email-already-in-use') {
+              setAuthError('This email is already registered');
+            } else if (err.code === 'auth/invalid-email') {
+              setAuthError('Invalid email address');
+            } else if (err.code === 'auth/weak-password') {
+              setAuthError('Password must be at least 6 characters');
+            } else {
+              setAuthError('Signup failed. Please try again.');
+            }
+          }
+
+          setAuthLoading2(false);
+        };
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+            <div className="max-w-md w-full">
+              <div className="text-center mb-8">
+                <h1 className="text-5xl font-bold text-white mb-2" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
+                <p className="text-blue-200">Golf League Management</p>
+              </div>
+
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Sign Up</h2>
+
+                {authError && (
+                  <div className="bg-red-50 border-2 border-red-200 text-red-800 p-3 rounded-lg mb-4 text-sm">
+                    {authError}
+                  </div>
+                )}
+
+                <form onSubmit={handleSignup} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Display Name</label>
+                    <input
+                      type="text"
+                      value={signupDisplayName}
+                      onChange={(e) => setSignupDisplayName(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="How you'll appear in the league"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
+                    <input
+                      type="email"
+                      value={signupEmail}
+                      onChange={(e) => setSignupEmail(e.target.value)}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="your@email.com"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
+                    <input
+                      type="password"
+                      value={signupPassword}
+                      onChange={(e) => setSignupPassword(e.target.value)}
+                      required
+                      minLength={6}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="Min 6 characters"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Handicap Index (Optional)</label>
+                    <input
+                      type="number"
+                      step="0.1"
+                      value={signupHandicap}
+                      onChange={(e) => setSignupHandicap(e.target.value)}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="e.g. 12.4"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={authLoading2}
+                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {authLoading2 ? 'Creating account...' : 'Sign Up'}
+                  </button>
+                </form>
+
+                <div className="mt-6 text-center">
+                  <button
+                    onClick={() => {
+                      setAuthError('');
+                      setView('login');
+                    }}
+                    className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
+                  >
+                    Already have an account? Login
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       // HOME VIEW
       if (view === 'home') {
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 font-sans">
             <div className="max-w-2xl mx-auto">
-              <div className="text-center mb-12 pt-8">
+              {/* Logout button */}
+              <div className="flex justify-end mb-4">
+                <button
+                  onClick={async () => {
+                    await auth.signOut();
+                    setView('login');
+                  }}
+                  className="text-white/80 hover:text-white text-sm font-medium"
+                >
+                  Logout
+                </button>
+              </div>
+              
+              <div className="text-center mb-8 pt-4">
                 <div className="inline-block bg-white/10 backdrop-blur-sm rounded-full px-6 py-2 mb-4">
                   <span className="text-blue-200 text-sm font-medium tracking-widest uppercase">Golf Events</span>
                 </div>
                 <h1 className="text-6xl font-bold text-white mb-3" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
-                <p className="text-blue-200 text-lg">Real-time golf scoring</p>
+                <p className="text-blue-200 text-lg mb-2">Real-time golf scoring</p>
+                {userProfile && (
+                  <p className="text-white/90 text-xl font-semibold">Welcome, {userProfile.displayName}!</p>
+                )}
               </div>
 
               <div className="space-y-4">
