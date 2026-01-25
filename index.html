@@ -115,6 +115,15 @@
       const [signupHandicap, setSignupHandicap] = useState('');
       const [authError, setAuthError] = useState('');
       const [authLoading2, setAuthLoading2] = useState(false);
+      const [userLeagues, setUserLeagues] = useState([]);
+      const [currentLeague, setCurrentLeague] = useState(null);
+      const [newLeague, setNewLeague] = useState({
+        name: '',
+        description: '',
+        seasonName: '2026 Season',
+        pointSystem: { 1: 20, 2: 16, 3: 13, 4: 10, 5: 8 }
+      });
+      const [leagueCode, setLeagueCode] = useState('');
       const eventListenerRef = useRef(null);
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
@@ -131,6 +140,10 @@
               const profile = profileSnapshot.val();
               setUserProfile(profile);
               
+              // Load user's leagues
+              const leagues = await loadUserLeagues(user.uid);
+              setUserLeagues(leagues);
+              
               if (view === 'login' || view === 'signup') {
                 setView('home');
               }
@@ -139,6 +152,7 @@
             }
           } else {
             setUserProfile(null);
+            setUserLeagues([]);
             setView('login');
           }
           
@@ -172,6 +186,48 @@
         if (diff === -2) return 4; // Eagle
         if (diff <= -3) return 5; // Albatross
         return 0;
+      };
+
+      // League helper functions
+      const generateLeagueCode = async () => {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // Removed confusing letters
+        const nums = '0123456789';
+        
+        let code;
+        let exists = true;
+        
+        while (exists) {
+          const letters = Array(3).fill(0).map(() => chars[Math.floor(Math.random() * chars.length)]).join('');
+          const numbers = Array(4).fill(0).map(() => nums[Math.floor(Math.random() * nums.length)]).join('');
+          code = `${letters}-${numbers}`;
+          
+          // Check if code exists
+          const snapshot = await database.ref(`leagueCodes/${code}`).once('value');
+          exists = snapshot.exists();
+        }
+        
+        return code;
+      };
+
+      const loadUserLeagues = async (userId) => {
+        try {
+          const userSnapshot = await database.ref(`users/${userId}/leagues`).once('value');
+          const userLeagues = userSnapshot.val() || {};
+          
+          const leaguesData = [];
+          for (const leagueId of Object.keys(userLeagues)) {
+            const leagueSnapshot = await database.ref(`leagues/${leagueId}`).once('value');
+            const league = leagueSnapshot.val();
+            if (league) {
+              leaguesData.push({ id: leagueId, ...league, userRole: userLeagues[leagueId].role });
+            }
+          }
+          
+          return leaguesData;
+        } catch (error) {
+          console.error('Error loading leagues:', error);
+          return [];
+        }
       };
 
       useEffect(() => { loadCourses(); }, []);
@@ -775,13 +831,392 @@
         );
       }
 
+      // CREATE LEAGUE VIEW
+      if (view === 'create-league') {
+        const handleCreateLeague = async (e) => {
+          e.preventDefault();
+          setFeedback('');
+
+          if (!newLeague.name) {
+            setFeedback('Please enter a league name');
+            return;
+          }
+
+          try {
+            const leagueId = 'league-' + Date.now();
+            const code = await generateLeagueCode();
+
+            const leagueData = {
+              meta: {
+                name: newLeague.name,
+                code: code,
+                commissionerId: currentUser.uid,
+                description: newLeague.description,
+                createdAt: Date.now()
+              },
+              members: {
+                [currentUser.uid]: {
+                  displayName: userProfile.displayName,
+                  role: 'commissioner',
+                  handicap: userProfile.handicap || null,
+                  joinedAt: Date.now()
+                }
+              },
+              seasons: {
+                'season-2026': {
+                  name: newLeague.seasonName,
+                  status: 'active',
+                  pointSystem: newLeague.pointSystem,
+                  events: [],
+                  standings: {}
+                }
+              }
+            };
+
+            // Create league
+            await database.ref(`leagues/${leagueId}`).set(leagueData);
+
+            // Store code mapping
+            await database.ref(`leagueCodes/${code}`).set(leagueId);
+
+            // Add to user's leagues
+            await database.ref(`users/${currentUser.uid}/leagues/${leagueId}`).set({
+              role: 'commissioner',
+              joinedAt: Date.now()
+            });
+
+            // Reload leagues and navigate
+            const leagues = await loadUserLeagues(currentUser.uid);
+            setUserLeagues(leagues);
+            setCurrentLeague({ id: leagueId, ...leagueData, userRole: 'commissioner' });
+            
+            setFeedback(`League created! Code: ${code}`);
+            setTimeout(() => {
+              setView('league-dashboard');
+              setFeedback('');
+            }, 1500);
+
+          } catch (error) {
+            console.error('Error creating league:', error);
+            setFeedback('Error creating league. Please try again.');
+          }
+        };
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">← Back</button>
+
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-3xl font-bold text-gray-900 mb-6">Create League</h2>
+
+                {feedback && (
+                  <div className="bg-blue-50 border-2 border-blue-200 text-blue-800 p-3 rounded-lg mb-4 text-sm">
+                    {feedback}
+                  </div>
+                )}
+
+                <form onSubmit={handleCreateLeague} className="space-y-5">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">League Name</label>
+                    <input
+                      type="text"
+                      value={newLeague.name}
+                      onChange={(e) => setNewLeague({ ...newLeague, name: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="e.g., Hackers Golf League"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Description (Optional)</label>
+                    <textarea
+                      value={newLeague.description}
+                      onChange={(e) => setNewLeague({ ...newLeague, description: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="e.g., Friday afternoon golf league"
+                      rows="2"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Season Name</label>
+                    <input
+                      type="text"
+                      value={newLeague.seasonName}
+                      onChange={(e) => setNewLeague({ ...newLeague, seasonName: e.target.value })}
+                      required
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      placeholder="e.g., 2026 Season"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-3">Point System</label>
+                    <div className="grid grid-cols-5 gap-3">
+                      {Object.entries(newLeague.pointSystem).map(([place, points]) => (
+                        <div key={place}>
+                          <label className="block text-xs text-gray-600 mb-1">{place}{place === '1' ? 'st' : place === '2' ? 'nd' : place === '3' ? 'rd' : 'th'}</label>
+                          <input
+                            type="number"
+                            value={points}
+                            onChange={(e) => setNewLeague({
+                              ...newLeague,
+                              pointSystem: { ...newLeague.pointSystem, [place]: parseInt(e.target.value) || 0 }
+                            })}
+                            className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 text-lg"
+                  >
+                    Create League
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // JOIN LEAGUE VIEW
+      if (view === 'join-league') {
+        const handleJoinLeague = async (e) => {
+          e.preventDefault();
+          setFeedback('');
+
+          if (!leagueCode.trim()) {
+            setFeedback('Please enter a league code');
+            return;
+          }
+
+          try {
+            // Look up league by code
+            const codeSnapshot = await database.ref(`leagueCodes/${leagueCode.trim().toUpperCase()}`).once('value');
+            const leagueId = codeSnapshot.val();
+
+            if (!leagueId) {
+              setFeedback('League not found. Check your code.');
+              return;
+            }
+
+            // Get league data
+            const leagueSnapshot = await database.ref(`leagues/${leagueId}`).once('value');
+            const leagueData = leagueSnapshot.val();
+
+            if (!leagueData) {
+              setFeedback('League not found. Check your code.');
+              return;
+            }
+
+            // Check if already a member
+            if (leagueData.members && leagueData.members[currentUser.uid]) {
+              setFeedback('You are already a member of this league');
+              setTimeout(() => {
+                const league = { id: leagueId, ...leagueData, userRole: leagueData.members[currentUser.uid].role };
+                setCurrentLeague(league);
+                setView('league-dashboard');
+              }, 1500);
+              return;
+            }
+
+            // Add user to league
+            await database.ref(`leagues/${leagueId}/members/${currentUser.uid}`).set({
+              displayName: userProfile.displayName,
+              role: 'player',
+              handicap: userProfile.handicap || null,
+              joinedAt: Date.now()
+            });
+
+            // Add league to user's profile
+            await database.ref(`users/${currentUser.uid}/leagues/${leagueId}`).set({
+              role: 'player',
+              joinedAt: Date.now()
+            });
+
+            // Reload leagues and navigate
+            const leagues = await loadUserLeagues(currentUser.uid);
+            setUserLeagues(leagues);
+            const joinedLeague = leagues.find(l => l.id === leagueId);
+            setCurrentLeague(joinedLeague);
+
+            setFeedback('Successfully joined league!');
+            setTimeout(() => {
+              setView('league-dashboard');
+              setFeedback('');
+            }, 1500);
+
+          } catch (error) {
+            console.error('Error joining league:', error);
+            setFeedback('Error joining league. Please try again.');
+          }
+        };
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+            <div className="max-w-md w-full">
+              <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">← Back</button>
+
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Join League</h2>
+                <p className="text-gray-600 mb-6">Enter the code from your league commissioner</p>
+
+                {feedback && (
+                  <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
+                    feedback.includes('Error') || feedback.includes('not found')
+                      ? 'bg-red-50 border-red-200 text-red-800'
+                      : 'bg-green-50 border-green-200 text-green-800'
+                  }`}>
+                    {feedback}
+                  </div>
+                )}
+
+                <form onSubmit={handleJoinLeague}>
+                  <div className="mb-6">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">League Code</label>
+                    <input
+                      type="text"
+                      value={leagueCode}
+                      onChange={(e) => setLeagueCode(e.target.value.toUpperCase())}
+                      className="w-full px-4 py-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none uppercase text-center text-2xl font-mono tracking-widest"
+                      placeholder="ABC-1234"
+                      maxLength={8}
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 text-lg"
+                  >
+                    Join League
+                  </button>
+                </form>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // LEAGUE DASHBOARD VIEW
+      if (view === 'league-dashboard' && currentLeague) {
+        const isCommissioner = currentLeague.userRole === 'commissioner';
+        const members = Object.entries(currentLeague.members || {}).map(([uid, data]) => ({
+          uid,
+          ...data
+        }));
+        const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">← Back to Home</button>
+
+              {/* Header */}
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
+                <h1 className="text-3xl font-bold text-gray-900 mb-2">{currentLeague.meta.name}</h1>
+                {currentLeague.meta.description && (
+                  <p className="text-gray-600 mb-4">{currentLeague.meta.description}</p>
+                )}
+                
+                <div className="flex items-center gap-3">
+                  <div className="bg-blue-50 px-4 py-2 rounded-lg">
+                    <div className="text-xs text-gray-600 mb-1">League Code</div>
+                    <div className="font-mono font-bold text-blue-600 text-lg">{currentLeague.meta.code}</div>
+                  </div>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(currentLeague.meta.code);
+                      setFeedback('Code copied!');
+                      setTimeout(() => setFeedback(''), 2000);
+                    }}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold"
+                  >
+                    Copy Code
+                  </button>
+                </div>
+                {feedback && <div className="mt-2 text-sm text-green-600">{feedback}</div>}
+              </div>
+
+              {/* Members */}
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Members ({members.length})</h2>
+                <div className="space-y-3">
+                  {members.map(member => (
+                    <div key={member.uid} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                      <div>
+                        <div className="font-semibold text-gray-900 flex items-center gap-2">
+                          {member.displayName}
+                          {member.role === 'commissioner' && (
+                            <span className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded-full font-semibold">
+                              COMMISSIONER
+                            </span>
+                          )}
+                        </div>
+                        {member.handicap !== null && (
+                          <div className="text-sm text-gray-600">Handicap: {member.handicap}</div>
+                        )}
+                      </div>
+                      {isCommissioner && member.role !== 'commissioner' && (
+                        <button className="text-red-600 hover:text-red-700 text-sm font-semibold">
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Standings */}
+              {activeSeason && (
+                <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
+                  <h2 className="text-xl font-bold text-gray-900 mb-4">{activeSeason.name} Standings</h2>
+                  {Object.keys(activeSeason.standings || {}).length === 0 ? (
+                    <p className="text-gray-600 text-center py-8">No standings yet. Create an event to get started!</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {/* Standings will be populated after events */}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Events */}
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
+                <h2 className="text-xl font-bold text-gray-900 mb-4">Events</h2>
+                {activeSeason && activeSeason.events && activeSeason.events.length === 0 && (
+                  <p className="text-gray-600 text-center py-4 mb-4">No events yet</p>
+                )}
+                <button
+                  onClick={() => setView('create-event')}
+                  className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700"
+                >
+                  Create Event
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
       // HOME VIEW
       if (view === 'home') {
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 font-sans">
             <div className="max-w-2xl mx-auto">
-              {/* Logout button */}
-              <div className="flex justify-end mb-4">
+              {/* Header */}
+              <div className="flex justify-between items-center mb-8">
+                <div>
+                  <h1 className="text-3xl font-bold text-white" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
+                  {userProfile && (
+                    <p className="text-white/80">Welcome, {userProfile.displayName}</p>
+                  )}
+                </div>
                 <button
                   onClick={async () => {
                     await auth.signOut();
@@ -792,54 +1227,99 @@
                   Logout
                 </button>
               </div>
-              
-              <div className="text-center mb-8 pt-4">
-                <div className="inline-block bg-white/10 backdrop-blur-sm rounded-full px-6 py-2 mb-4">
-                  <span className="text-blue-200 text-sm font-medium tracking-widest uppercase">Golf Events</span>
+
+              {/* My Leagues Section */}
+              {userLeagues.length > 0 && (
+                <div className="mb-6">
+                  <h2 className="text-white text-lg font-semibold mb-3">MY LEAGUES</h2>
+                  <div className="space-y-3">
+                    {userLeagues.map(league => (
+                      <button
+                        key={league.id}
+                        onClick={() => {
+                          setCurrentLeague(league);
+                          setView('league-dashboard');
+                        }}
+                        className="w-full bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all text-left"
+                      >
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <div className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                              {league.meta.name}
+                              {league.userRole === 'commissioner' && (
+                                <span className="text-yellow-500">⭐</span>
+                              )}
+                            </div>
+                            <div className="text-sm text-gray-600">
+                              {league.userRole === 'commissioner' ? 'Commissioner' : 'Player'} · {Object.keys(league.seasons || {}).length} season{Object.keys(league.seasons || {}).length !== 1 ? 's' : ''}
+                            </div>
+                          </div>
+                          <div className="text-gray-400">›</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <h1 className="text-6xl font-bold text-white mb-3" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
-                <p className="text-blue-200 text-lg mb-2">Real-time golf scoring</p>
-                {userProfile && (
-                  <p className="text-white/90 text-xl font-semibold">Welcome, {userProfile.displayName}!</p>
-                )}
+              )}
+
+              {/* League Actions */}
+              <div className="mb-6">
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setView('create-league')}
+                    className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
+                  >
+                    <div className="text-center">
+                      <div className="text-3xl mb-2">🏆</div>
+                      <div className="font-bold text-gray-900">Create League</div>
+                    </div>
+                  </button>
+                  <button
+                    onClick={() => setView('join-league')}
+                    className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
+                  >
+                    <div className="text-center">
+                      <div className="text-3xl mb-2">🤝</div>
+                      <div className="font-bold text-gray-900">Join League</div>
+                    </div>
+                  </button>
+                </div>
               </div>
 
-              <div className="space-y-4">
-                <button onClick={() => setView('create-event')} className="w-full bg-white/95 backdrop-blur-sm p-6 rounded-2xl shadow-xl hover:bg-white transition-all">
-                  <div className="flex items-center gap-4">
-                    <div className="bg-blue-600 p-3 rounded-xl"><Trophy /></div>
-                    <div className="text-left">
-                      <div className="text-xl font-bold text-gray-900">Create Event</div>
-                      <div className="text-sm text-gray-600">Host a new golf event</div>
-                    </div>
-                  </div>
-                </button>
+              {/* Quick Play Section */}
+              <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6">
+                <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Quick Play</h3>
+                <p className="text-white/70 text-sm mb-4">For one-off events without a league</p>
+                
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setView('create-event')}
+                    className="w-full bg-white/20 hover:bg-white/30 p-4 rounded-xl transition-all text-white text-left"
+                  >
+                    <div className="font-semibold">Create Event</div>
+                    <div className="text-sm text-white/80">Host a standalone golf event</div>
+                  </button>
 
-                <div className="bg-white/95 backdrop-blur-sm p-6 rounded-2xl shadow-xl">
-                  <div className="flex items-center gap-4 mb-4">
-                    <div className="bg-indigo-600 p-3 rounded-xl"><Link /></div>
-                    <div className="text-left">
-                      <div className="text-xl font-bold text-gray-900">Join Event</div>
-                      <div className="text-sm text-gray-600">Enter event code</div>
+                  <div className="bg-white/20 p-4 rounded-xl">
+                    <div className="font-semibold text-white mb-3">Join Event</div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={joinCode}
+                        onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                        onKeyPress={(e) => e.key === 'Enter' && joinEvent()}
+                        placeholder="WOLF-A3X9"
+                        className="flex-1 px-4 py-2 rounded-lg border-2 border-white/30 bg-white/10 text-white placeholder-white/50 focus:border-white/50 focus:outline-none uppercase"
+                      />
+                      <button
+                        onClick={joinEvent}
+                        className="bg-white text-blue-900 px-5 py-2 rounded-lg hover:bg-white/90 font-semibold"
+                      >
+                        Join
+                      </button>
                     </div>
+                    {feedback && <div className="mt-2 text-sm text-white/90">{feedback}</div>}
                   </div>
-                  <div className="flex gap-3">
-                    <input
-                      type="text"
-                      value={joinCode}
-                      onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                      onKeyPress={(e) => e.key === 'Enter' && joinEvent()}
-                      placeholder="WOLF-A3X9"
-                      className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-indigo-500 focus:outline-none uppercase"
-                    />
-                    <button
-                      onClick={joinEvent}
-                      className="bg-indigo-600 text-white px-6 py-3 rounded-xl hover:bg-indigo-700 font-semibold"
-                    >
-                      Join
-                    </button>
-                  </div>
-                  {feedback && <div className="mt-3 text-sm text-indigo-600">{feedback}</div>}
                 </div>
               </div>
             </div>
