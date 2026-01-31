@@ -190,12 +190,39 @@
             eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
             console.log('Loaded events:', eventsData);
             setLeagueEvents(eventsData);
+
+            // Set up real-time listeners for each event
+            activeSeason.events.forEach(eventId => {
+              database.ref(`events/${eventId}`).on('value', (snapshot) => {
+                const updatedEvent = snapshot.val();
+                if (updatedEvent) {
+                  setLeagueEvents(prev => {
+                    const updated = prev.map(e => 
+                      e.id === eventId ? { id: eventId, ...updatedEvent } : e
+                    );
+                    return updated.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
+                  });
+                }
+              });
+            });
           } catch (error) {
             console.error('Error loading league events:', error);
           }
         };
 
         loadLeagueEvents();
+
+        // Cleanup listeners when leaving dashboard
+        return () => {
+          if (view === 'league-dashboard' && currentLeague) {
+            const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
+            if (activeSeason?.events) {
+              activeSeason.events.forEach(eventId => {
+                database.ref(`events/${eventId}`).off();
+              });
+            }
+          }
+        };
       }, [view, currentLeague]);
 
       // Load event registrations when viewing event details
@@ -1575,7 +1602,42 @@
                                   >
                                     Unpublish
                                   </button>
-                                  <button className="text-sm bg-yellow-600 text-white px-3 py-1 rounded-lg hover:bg-yellow-700 font-semibold">
+                                  <button 
+                                    onClick={async () => {
+                                      // Check if all players are assigned to teams (for team events)
+                                      const registeredPlayers = Object.values(event.registrations || {}).filter(r => r.status === 'registered');
+                                      const isTeamEvent = event.meta.format !== 'stableford';
+                                      
+                                      if (isTeamEvent) {
+                                        const assignedPlayerIds = new Set();
+                                        Object.values(event.teams || {}).forEach(team => {
+                                          (team.playerIds || []).forEach(id => assignedPlayerIds.add(id));
+                                        });
+                                        
+                                        const unassignedCount = registeredPlayers.length - assignedPlayerIds.size;
+                                        if (unassignedCount > 0) {
+                                          setFeedback(`${unassignedCount} player${unassignedCount !== 1 ? 's' : ''} not assigned to teams`);
+                                          setTimeout(() => setFeedback(''), 3000);
+                                          return;
+                                        }
+                                      }
+                                      
+                                      if (!confirm('Lock this event? Players will no longer be able to register or withdraw.')) return;
+                                      await database.ref(`events/${event.id}/meta/status`).set('locked');
+                                      // Reload events
+                                      const eventsData = [];
+                                      for (const eventId of activeSeason.events) {
+                                        const snapshot = await database.ref(`events/${eventId}`).once('value');
+                                        const e = snapshot.val();
+                                        if (e) eventsData.push({ id: eventId, ...e });
+                                      }
+                                      eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
+                                      setLeagueEvents(eventsData);
+                                      setFeedback('Event locked');
+                                      setTimeout(() => setFeedback(''), 2000);
+                                    }}
+                                    className="text-sm bg-yellow-600 text-white px-3 py-1 rounded-lg hover:bg-yellow-700 font-semibold"
+                                  >
                                     Lock
                                   </button>
                                   <button
@@ -1607,6 +1669,7 @@
                             </div>
                           )}
                           
+                          {/* View Details button for everyone (commissioner can register too) */}
                           {!isCommissioner && (
                             <button
                               onClick={() => {
@@ -1616,6 +1679,19 @@
                               className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 font-semibold"
                             >
                               View Details
+                            </button>
+                          )}
+                          
+                          {/* Add View Details for commissioners too */}
+                          {isCommissioner && status !== 'draft' && (
+                            <button
+                              onClick={() => {
+                                setEditingEvent(event);
+                                setView('event-details');
+                              }}
+                              className="text-sm bg-gray-600 text-white px-3 py-1 rounded-lg hover:bg-gray-700 font-semibold mt-2"
+                            >
+                              View/Register
                             </button>
                           )}
                         </div>
