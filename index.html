@@ -147,8 +147,8 @@
             teams: Object.values(editingEvent.teams || {}).map((team, idx) => ({
               id: `team${idx + 1}`,
               name: team.name,
-              player1: team.players[0] || '',
-              player2: team.players[1] || ''
+              player1: (team.players && team.players[0]) || '',
+              player2: (team.players && team.players[1]) || ''
             }))
           });
         } else {
