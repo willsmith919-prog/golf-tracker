@@ -225,10 +225,10 @@
         };
       }, [view, currentLeague]);
 
-      // Load event registrations when viewing event details
+      // Load event registrations when viewing event details or editing
       useEffect(() => {
         const loadRegistrations = async () => {
-          if (view === 'event-details' && editingEvent) {
+          if ((view === 'event-details' || view === 'edit-event') && editingEvent) {
             const regsSnapshot = await database.ref(`events/${editingEvent.id}/registrations`).once('value');
             setEventRegistrations(regsSnapshot.val() || {});
           } else {
@@ -601,6 +601,122 @@
         } catch (error) {
           console.error('Error removing player:', error);
           setFeedback('Error removing player');
+        }
+      };
+
+      const assignPlayerToTeam = async (eventId, teamKey, userId, userName) => {
+        try {
+          const teamRef = database.ref(`events/${eventId}/teams/${teamKey}`);
+          const teamSnapshot = await teamRef.once('value');
+          const team = teamSnapshot.val() || { name: '', players: [], playerIds: [], scores: {}, currentHole: 1 };
+          
+          // Add player
+          const updatedPlayerIds = [...(team.playerIds || []), userId];
+          const updatedPlayers = [...(team.players || []), userName];
+          
+          // Auto-generate team name if empty or if it's the first two players
+          let teamName = team.name;
+          if (updatedPlayers.length <= 2) {
+            teamName = updatedPlayers.join(' & ');
+          }
+          
+          await teamRef.update({
+            playerIds: updatedPlayerIds,
+            players: updatedPlayers,
+            name: teamName
+          });
+          
+          setFeedback('Player assigned to team');
+          setTimeout(() => setFeedback(''), 2000);
+          
+          // Reload editing event
+          const eventSnapshot = await database.ref(`events/${eventId}`).once('value');
+          const updatedEvent = eventSnapshot.val();
+          if (updatedEvent) {
+            setEditingEvent({ id: eventId, ...updatedEvent });
+          }
+        } catch (error) {
+          console.error('Error assigning player:', error);
+          setFeedback('Error assigning player');
+        }
+      };
+
+      const removePlayerFromTeam = async (eventId, teamKey, userId) => {
+        try {
+          const teamRef = database.ref(`events/${eventId}/teams/${teamKey}`);
+          const teamSnapshot = await teamRef.once('value');
+          const team = teamSnapshot.val();
+          
+          if (team) {
+            const updatedPlayerIds = (team.playerIds || []).filter(id => id !== userId);
+            const updatedPlayers = team.players.filter((_, idx) => team.playerIds[idx] !== userId);
+            
+            // Update team name if players changed
+            let teamName = team.name;
+            if (updatedPlayers.length <= 2 && updatedPlayers.length > 0) {
+              teamName = updatedPlayers.join(' & ');
+            }
+            
+            if (updatedPlayerIds.length === 0) {
+              // Remove empty team
+              await teamRef.remove();
+            } else {
+              await teamRef.update({
+                playerIds: updatedPlayerIds,
+                players: updatedPlayers,
+                name: teamName
+              });
+            }
+          }
+          
+          setFeedback('Player removed from team');
+          setTimeout(() => setFeedback(''), 2000);
+          
+          // Reload editing event
+          const eventSnapshot = await database.ref(`events/${eventId}`).once('value');
+          const updatedEvent = eventSnapshot.val();
+          if (updatedEvent) {
+            setEditingEvent({ id: eventId, ...updatedEvent });
+          }
+        } catch (error) {
+          console.error('Error removing player from team:', error);
+          setFeedback('Error removing player from team');
+        }
+      };
+
+      const createNewTeam = async (eventId) => {
+        try {
+          const eventRef = database.ref(`events/${eventId}/teams`);
+          const teamsSnapshot = await eventRef.once('value');
+          const teams = teamsSnapshot.val() || {};
+          
+          // Find next team number
+          let teamNum = 1;
+          while (teams[`team${teamNum}`]) {
+            teamNum++;
+          }
+          
+          const newTeamKey = `team${teamNum}`;
+          await eventRef.child(newTeamKey).set({
+            name: `Team ${teamNum}`,
+            players: [],
+            playerIds: [],
+            scores: {},
+            currentHole: 1
+          });
+          
+          setFeedback('Team created');
+          setTimeout(() => setFeedback(''), 2000);
+          
+          // Reload editing event
+          const eventSnapshot = await database.ref(`events/${eventId}`).once('value');
+          const updatedEvent = eventSnapshot.val();
+          if (updatedEvent) {
+            setEditingEvent({ id: eventId, ...updatedEvent });
+          }
+        } catch (error) {
+          console.error('Error creating team:', error);
+          setFeedback('Error creating team');
         }
       };
 
@@ -3039,6 +3155,190 @@
                     </div>
                   </div>
 
+                  {/* REGISTRATION MANAGEMENT */}
+                  {editingEvent.meta.leagueId && (
+                    <div className="border-t-2 border-gray-200 pt-6 mt-6">
+                      <h3 className="text-lg font-bold text-gray-900 mb-4">Registered Players</h3>
+                      
+                      {(() => {
+                        const registeredPlayers = Object.entries(eventRegistrations || {})
+                          .filter(([_, reg]) => reg.status === 'registered')
+                          .map(([uid, reg]) => ({ uid, ...reg }));
+                        
+                        const leagueMembers = Object.entries(currentLeague?.members || {})
+                          .map(([uid, data]) => ({ uid, ...data }))
+                          .filter(m => !registeredPlayers.find(p => p.uid === m.uid));
+                        
+                        return (
+                          <>
+                            {registeredPlayers.length > 0 ? (
+                              <div className="space-y-2 mb-4">
+                                {registeredPlayers.map(player => (
+                                  <div key={player.uid} className="flex items-center justify-between bg-gray-50 p-3 rounded-xl">
+                                    <div>
+                                      <span className="font-semibold">{player.displayName}</span>
+                                      {player.handicap != null && <span className="text-gray-600 text-sm ml-2">({player.handicap})</span>}
+                                      {player.addedBy === 'commissioner' && (
+                                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded ml-2">Added by you</span>
+                                      )}
+                                    </div>
+                                    <button
+                                      onClick={() => removePlayerFromEvent(editingEvent.id, player.uid)}
+                                      className="text-red-600 hover:text-red-700 text-sm font-semibold"
+                                    >
+                                      Remove
+                                    </button>
+                                  </div>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-gray-500 text-sm mb-4">No players registered yet</p>
+                            )}
+                            
+                            {leagueMembers.length > 0 && (
+                              <div className="bg-blue-50 p-4 rounded-xl">
+                                <label className="block text-sm font-semibold text-gray-700 mb-2">Add League Member</label>
+                                <select
+                                  onChange={(e) => {
+                                    if (e.target.value) {
+                                      const member = leagueMembers.find(m => m.uid === e.target.value);
+                                      if (member) {
+                                        addPlayerToEvent(editingEvent.id, member.uid, member.displayName, member.handicap);
+                                        e.target.value = '';
+                                      }
+                                    }
+                                  }}
+                                  className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
+                                >
+                                  <option value="">Select a player...</option>
+                                  {leagueMembers.map(member => (
+                                    <option key={member.uid} value={member.uid}>
+                                      {member.displayName} {member.handicap != null ? `(${member.handicap})` : ''}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* TEAM ASSIGNMENT (for team events only) */}
+                  {editingEvent.meta.leagueId && editForm.format !== 'stableford' && (
+                    <div className="border-t-2 border-gray-200 pt-6 mt-6">
+                      <h3 className="text-lg font-bold text-gray-900 mb-4">Team Assignment</h3>
+                      
+                      {(() => {
+                        const registeredPlayers = Object.entries(eventRegistrations || {})
+                          .filter(([_, reg]) => reg.status === 'registered')
+                          .map(([uid, reg]) => ({ uid, ...reg }));
+                        
+                        // Find players assigned to teams
+                        const assignedPlayerIds = new Set();
+                        Object.values(editingEvent.teams || {}).forEach(team => {
+                          (team.playerIds || []).forEach(id => assignedPlayerIds.add(id));
+                        });
+                        
+                        const unassignedPlayers = registeredPlayers.filter(p => !assignedPlayerIds.has(p.uid));
+                        
+                        return (
+                          <>
+                            {/* Unassigned Players Pool */}
+                            {unassignedPlayers.length > 0 && (
+                              <div className="mb-6">
+                                <div className="text-sm font-semibold text-gray-700 mb-2">
+                                  Unassigned Players ({unassignedPlayers.length})
+                                </div>
+                                <div className="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-xl">
+                                  <div className="space-y-2">
+                                    {unassignedPlayers.map(player => (
+                                      <div key={player.uid} className="text-sm">
+                                        <span className="font-semibold">{player.displayName}</span>
+                                        {player.handicap != null && <span className="text-gray-600 ml-2">({player.handicap})</span>}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {/* Teams */}
+                            <div className="mb-4">
+                              <div className="text-sm font-semibold text-gray-700 mb-2">
+                                Teams ({Object.keys(editingEvent.teams || {}).length})
+                              </div>
+                              
+                              {Object.keys(editingEvent.teams || {}).length > 0 ? (
+                                <div className="space-y-3">
+                                  {Object.entries(editingEvent.teams || {}).map(([teamKey, team]) => (
+                                    <div key={teamKey} className="bg-gray-50 border-2 border-gray-200 p-4 rounded-xl">
+                                      <div className="font-semibold text-gray-900 mb-2">{team.name}</div>
+                                      
+                                      {/* Team members */}
+                                      {(team.playerIds || []).length > 0 ? (
+                                        <div className="space-y-1 mb-3">
+                                          {team.playerIds.map((playerId, idx) => (
+                                            <div key={playerId} className="flex items-center justify-between text-sm">
+                                              <span>{team.players[idx]}</span>
+                                              <button
+                                                onClick={() => removePlayerFromTeam(editingEvent.id, teamKey, playerId)}
+                                                className="text-red-600 hover:text-red-700 text-xs font-semibold"
+                                              >
+                                                Remove
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div className="text-sm text-gray-500 mb-3">(empty team)</div>
+                                      )}
+                                      
+                                      {/* Add player to team */}
+                                      {unassignedPlayers.length > 0 && (team.playerIds || []).length < 2 && (
+                                        <select
+                                          onChange={(e) => {
+                                            if (e.target.value) {
+                                              const player = unassignedPlayers.find(p => p.uid === e.target.value);
+                                              if (player) {
+                                                assignPlayerToTeam(editingEvent.id, teamKey, player.uid, player.displayName);
+                                              }
+                                              e.target.value = '';
+                                            }
+                                          }}
+                                          className="w-full px-3 py-2 text-sm rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                                        >
+                                          <option value="">+ Add Player</option>
+                                          {unassignedPlayers.map(player => (
+                                            <option key={player.uid} value={player.uid}>
+                                              {player.displayName} {player.handicap != null ? `(${player.handicap})` : ''}
+                                            </option>
+                                          ))}
+                                        </select>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-gray-500 text-sm">No teams yet</p>
+                              )}
+                              
+                              <button
+                                onClick={() => createNewTeam(editingEvent.id)}
+                                className="w-full mt-3 bg-gray-600 text-white py-2 rounded-lg hover:bg-gray-700 font-semibold text-sm"
+                              >
+                                + Add Team
+                              </button>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  )}
+
+                  {/* OLD MANUAL TEAMS SECTION (for standalone events or stableford) */}
+                  {!editingEvent.meta.leagueId && (
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-3">
                       {editForm.format === 'stableford' ? 'Players' : 'Teams'} ({editForm.teams.length})
@@ -3142,6 +3442,7 @@
                       </div>
                     )}
                   </div>
+                  )}
 
                   <button onClick={saveEventEdits} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700">
                     Save Changes
