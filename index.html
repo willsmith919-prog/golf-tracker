@@ -1343,7 +1343,9 @@
               {/* Events */}
               <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
                 <h2 className="text-xl font-bold text-gray-900 mb-4">
-                  Events ({leagueEvents.filter(e => e.meta.status !== 'draft').length})
+                  Events ({isCommissioner 
+                    ? leagueEvents.length 
+                    : leagueEvents.filter(e => e.meta.status !== 'draft').length})
                 </h2>
                 
                 {leagueEvents.length > 0 ? (
