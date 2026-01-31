@@ -1637,9 +1637,31 @@
                                 </>
                               )}
                               {status === 'locked' && (
-                                <button className="text-sm bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 font-semibold">
-                                  Start Event
-                                </button>
+                                <>
+                                  <button
+                                    onClick={() => {
+                                      setEditingEvent(event);
+                                      setView('edit-event');
+                                    }}
+                                    className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 font-semibold"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm('Unlock this event? Players will be able to register and withdraw again.')) return;
+                                      await database.ref(`events/${event.id}/meta/status`).set('open');
+                                      setFeedback('Event unlocked');
+                                      setTimeout(() => setFeedback(''), 2000);
+                                    }}
+                                    className="text-sm bg-orange-600 text-white px-3 py-1 rounded-lg hover:bg-orange-700 font-semibold"
+                                  >
+                                    Unlock
+                                  </button>
+                                  <button className="text-sm bg-green-600 text-white px-3 py-1 rounded-lg hover:bg-green-700 font-semibold">
+                                    Start Event
+                                  </button>
+                                </>
                               )}
                               {status === 'active' && (
                                 <button className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 font-semibold">
@@ -3179,6 +3201,15 @@
                   >
                     Register for this Event
                   </button>
+                )}
+
+                {/* Locked event - not registered */}
+                {status === 'locked' && !isRegistered && (
+                  <div className="bg-yellow-50 border-2 border-yellow-200 p-4 rounded-xl mb-6">
+                    <div className="text-yellow-800 text-sm">
+                      Registration is closed for this event.
+                    </div>
+                  </div>
                 )}
 
                 {isRegistered && (
