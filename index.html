@@ -197,6 +197,20 @@
 
         loadLeagueEvents();
       }, [view, currentLeague]);
+
+      // Load event registrations when viewing event details
+      useEffect(() => {
+        const loadRegistrations = async () => {
+          if (view === 'event-details' && editingEvent) {
+            const regsSnapshot = await database.ref(`events/${editingEvent.id}/registrations`).once('value');
+            setEventRegistrations(regsSnapshot.val() || {});
+          } else {
+            setEventRegistrations({});
+          }
+        };
+        loadRegistrations();
+      }, [view, editingEvent]);
+
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
 
@@ -3060,15 +3074,6 @@
       if (view === 'event-details' && editingEvent) {
         const teamCount = Object.keys(editingEvent.teams || {}).length;
         const status = editingEvent.meta.status || 'draft';
-
-        // Load registrations when viewing event details
-        React.useEffect(() => {
-          const loadRegistrations = async () => {
-            const regsSnapshot = await database.ref(`events/${editingEvent.id}/registrations`).once('value');
-            setEventRegistrations(regsSnapshot.val() || {});
-          };
-          loadRegistrations();
-        }, [editingEvent.id]);
 
         const registeredPlayers = Object.entries(eventRegistrations || {})
           .filter(([_, reg]) => reg.status === 'registered')
