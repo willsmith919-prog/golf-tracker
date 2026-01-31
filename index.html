@@ -1604,35 +1604,20 @@
                                   </button>
                                   <button 
                                     onClick={async () => {
-                                      // Check if all players are assigned to teams (for team events)
-                                      const registeredPlayers = Object.values(event.registrations || {}).filter(r => r.status === 'registered');
-                                      const isTeamEvent = event.meta.format !== 'stableford';
+                                      console.log('Lock button clicked');
                                       
-                                      if (isTeamEvent) {
-                                        const assignedPlayerIds = new Set();
-                                        Object.values(event.teams || {}).forEach(team => {
-                                          (team.playerIds || []).forEach(id => assignedPlayerIds.add(id));
-                                        });
-                                        
-                                        const unassignedCount = registeredPlayers.length - assignedPlayerIds.size;
-                                        if (unassignedCount > 0) {
-                                          setFeedback(`${unassignedCount} player${unassignedCount !== 1 ? 's' : ''} not assigned to teams`);
-                                          setTimeout(() => setFeedback(''), 3000);
-                                          return;
-                                        }
+                                      // TODO: Add team validation once team assignment is implemented
+                                      // For now, just allow locking
+                                      
+                                      if (!confirm('Lock this event? Players will no longer be able to register or withdraw.')) {
+                                        console.log('Lock cancelled by user');
+                                        return;
                                       }
                                       
-                                      if (!confirm('Lock this event? Players will no longer be able to register or withdraw.')) return;
+                                      console.log('Setting event status to locked:', event.id);
                                       await database.ref(`events/${event.id}/meta/status`).set('locked');
-                                      // Reload events
-                                      const eventsData = [];
-                                      for (const eventId of activeSeason.events) {
-                                        const snapshot = await database.ref(`events/${eventId}`).once('value');
-                                        const e = snapshot.val();
-                                        if (e) eventsData.push({ id: eventId, ...e });
-                                      }
-                                      eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
-                                      setLeagueEvents(eventsData);
+                                      console.log('Status updated');
+                                      
                                       setFeedback('Event locked');
                                       setTimeout(() => setFeedback(''), 2000);
                                     }}
