@@ -129,6 +129,9 @@
       const [editingEvent, setEditingEvent] = useState(null);
       const [editForm, setEditForm] = useState(null);
       const [leagueEvents, setLeagueEvents] = useState([]); // Events for current league
+      const [eventRegistrations, setEventRegistrations] = useState({}); // registrations for current event
+      const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
+      const [assigningToTeam, setAssigningToTeam] = useState(null); // which team we're assigning to
       const eventListenerRef = useRef(null);
 
       // Populate edit form when editingEvent changes
@@ -477,6 +480,86 @@
           console.error('Error creating event:', error);
           setFeedback('Error creating event. Please try again.');
           setTimeout(() => setFeedback(''), 3000);
+        }
+      };
+
+      // REGISTRATION HANDLERS
+      const registerForEvent = async (eventId) => {
+        if (!currentUser || !userProfile) return;
+        
+        try {
+          await database.ref(`events/${eventId}/registrations/${currentUser.uid}`).set({
+            displayName: userProfile.displayName,
+            handicap: userProfile.handicap || null,
+            registeredAt: Date.now(),
+            status: 'registered'
+          });
+          
+          setFeedback(`You're registered for this event!`);
+          setTimeout(() => setFeedback(''), 2000);
+          
+          // Reload event registrations
+          const regsSnapshot = await database.ref(`events/${eventId}/registrations`).once('value');
+          setEventRegistrations(regsSnapshot.val() || {});
+        } catch (error) {
+          console.error('Error registering:', error);
+          setFeedback('Error registering for event');
+        }
+      };
+
+      const withdrawFromEvent = async (eventId) => {
+        if (!currentUser) return;
+        
+        try {
+          await database.ref(`events/${eventId}/registrations/${currentUser.uid}/status`).set('withdrawn');
+          
+          setFeedback(`You've withdrawn from this event`);
+          setTimeout(() => setFeedback(''), 2000);
+          
+          // Reload event registrations
+          const regsSnapshot = await database.ref(`events/${eventId}/registrations`).once('value');
+          setEventRegistrations(regsSnapshot.val() || {});
+        } catch (error) {
+          console.error('Error withdrawing:', error);
+          setFeedback('Error withdrawing from event');
+        }
+      };
+
+      const addPlayerToEvent = async (eventId, userId, userDisplayName, userHandicap) => {
+        try {
+          await database.ref(`events/${eventId}/registrations/${userId}`).set({
+            displayName: userDisplayName,
+            handicap: userHandicap || null,
+            registeredAt: Date.now(),
+            status: 'registered',
+            addedBy: 'commissioner'
+          });
+          
+          setFeedback('Player added');
+          setTimeout(() => setFeedback(''), 2000);
+          
+          // Reload event registrations
+          const regsSnapshot = await database.ref(`events/${eventId}/registrations`).once('value');
+          setEventRegistrations(regsSnapshot.val() || {});
+        } catch (error) {
+          console.error('Error adding player:', error);
+          setFeedback('Error adding player');
+        }
+      };
+
+      const removePlayerFromEvent = async (eventId, userId) => {
+        try {
+          await database.ref(`events/${eventId}/registrations/${userId}/status`).set('withdrawn');
+          
+          setFeedback('Player removed');
+          setTimeout(() => setFeedback(''), 2000);
+          
+          // Reload event registrations
+          const regsSnapshot = await database.ref(`events/${eventId}/registrations`).once('value');
+          setEventRegistrations(regsSnapshot.val() || {});
+        } catch (error) {
+          console.error('Error removing player:', error);
+          setFeedback('Error removing player');
         }
       };
 
@@ -1352,6 +1435,7 @@
                   <div className="space-y-3 mb-4">
                     {leagueEvents.map(event => {
                       const teamCount = Object.keys(event.teams || {}).length;
+                      const registrationCount = Object.values(event.registrations || {}).filter(r => r.status === 'registered').length;
                       const status = event.meta.status || 'draft';
                       const statusColors = {
                         draft: 'bg-gray-100 text-gray-700',
@@ -1391,7 +1475,9 @@
                               {statusLabels[status]}
                             </span>
                           </div>
-                          <div className="text-xs text-gray-500 mb-3">{teamCount} team{teamCount !== 1 ? 's' : ''}</div>
+                          <div className="text-xs text-gray-500 mb-3">
+                            {registrationCount} registered · {teamCount} team{teamCount !== 1 ? 's' : ''}
+                          </div>
                           
                           {/* Actions based on status and role */}
                           {isCommissioner && (
@@ -2975,10 +3061,38 @@
         const teamCount = Object.keys(editingEvent.teams || {}).length;
         const status = editingEvent.meta.status || 'draft';
 
+        // Load registrations when viewing event details
+        React.useEffect(() => {
+          const loadRegistrations = async () => {
+            const regsSnapshot = await database.ref(`events/${editingEvent.id}/registrations`).once('value');
+            setEventRegistrations(regsSnapshot.val() || {});
+          };
+          loadRegistrations();
+        }, [editingEvent.id]);
+
+        const registeredPlayers = Object.entries(eventRegistrations || {})
+          .filter(([_, reg]) => reg.status === 'registered')
+          .map(([uid, reg]) => ({ uid, ...reg }));
+
+        const userRegistration = currentUser ? eventRegistrations[currentUser.uid] : null;
+        const isRegistered = userRegistration?.status === 'registered';
+        const canRegister = status === 'open';
+
+        // Find user's team if assigned
+        let userTeam = null;
+        if (isRegistered) {
+          for (const [teamKey, team] of Object.entries(editingEvent.teams || {})) {
+            if (team.playerIds && team.playerIds.includes(currentUser.uid)) {
+              userTeam = team;
+              break;
+            }
+          }
+        }
+
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
             <div className="max-w-2xl mx-auto">
-              <button onClick={() => { setEditingEvent(null); setView('league-dashboard'); }} className="text-white mb-6 hover:text-blue-200">← Back</button>
+              <button onClick={() => { setEditingEvent(null); setEventRegistrations({}); setView('league-dashboard'); }} className="text-white mb-6 hover:text-blue-200">← Back</button>
               
               <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
                 <h2 className="text-3xl font-bold text-gray-900 mb-2">{editingEvent.meta.name}</h2>
@@ -2986,6 +3100,49 @@
                   {new Date(editingEvent.meta.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
                   {editingEvent.meta.time && ` at ${editingEvent.meta.time}`}
                 </div>
+
+                {feedback && (
+                  <div className="bg-blue-50 border-2 border-blue-200 text-blue-800 p-3 rounded-lg mb-4">{feedback}</div>
+                )}
+
+                {/* Registration Status/Actions */}
+                {canRegister && !isRegistered && (
+                  <button
+                    onClick={() => registerForEvent(editingEvent.id)}
+                    className="w-full bg-green-600 text-white py-3 rounded-xl font-semibold hover:bg-green-700 mb-6"
+                  >
+                    Register for this Event
+                  </button>
+                )}
+
+                {isRegistered && (
+                  <div className="mb-6">
+                    <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl mb-3">
+                      <div className="flex items-center text-green-800">
+                        <span className="text-lg mr-2">✓</span>
+                        <span className="font-semibold">You're Registered</span>
+                      </div>
+                      {userTeam && (
+                        <div className="text-sm text-green-700 mt-2">
+                          Team: {userTeam.name}
+                        </div>
+                      )}
+                      {!userTeam && (status === 'locked' || status === 'active') && (
+                        <div className="text-sm text-green-700 mt-2">
+                          Teams not yet announced
+                        </div>
+                      )}
+                    </div>
+                    {canRegister && (
+                      <button
+                        onClick={() => withdrawFromEvent(editingEvent.id)}
+                        className="w-full bg-red-600 text-white py-2 rounded-xl font-semibold hover:bg-red-700"
+                      >
+                        Withdraw
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div className="bg-gray-50 p-4 rounded-xl">
@@ -3003,6 +3160,41 @@
                     <div className="text-sm text-gray-600 mb-1">Status</div>
                     <div className="font-semibold text-gray-900 capitalize">{status}</div>
                   </div>
+
+                  {/* Registered Players */}
+                  {registeredPlayers.length > 0 && (
+                    <div className="bg-gray-50 p-4 rounded-xl">
+                      <div className="text-sm text-gray-600 mb-2">Registered ({registeredPlayers.length})</div>
+                      <div className="space-y-1">
+                        {registeredPlayers.map((player) => {
+                          // Find player's team
+                          let playerTeam = null;
+                          for (const team of Object.values(editingEvent.teams || {})) {
+                            if (team.playerIds && team.playerIds.includes(player.uid)) {
+                              playerTeam = team;
+                              break;
+                            }
+                          }
+                          
+                          return (
+                            <div key={player.uid} className="text-sm flex items-center justify-between">
+                              <div>
+                                <span className="mr-1">✓</span>
+                                <span className="font-semibold">{player.displayName}</span>
+                                {player.handicap != null && <span className="text-gray-600"> ({player.handicap})</span>}
+                              </div>
+                              {playerTeam && (
+                                <span className="text-xs text-gray-500">Team: {playerTeam.name}</span>
+                              )}
+                              {!playerTeam && (status === 'locked' || status === 'active') && (
+                                <span className="text-xs text-gray-500">Unassigned</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {teamCount > 0 && (
                     <div className="bg-gray-50 p-4 rounded-xl">
