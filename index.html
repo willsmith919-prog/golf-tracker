@@ -1342,7 +1342,9 @@
 
               {/* Events */}
               <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
-                <h2 className="text-xl font-bold text-gray-900 mb-4">Events ({leagueEvents.length})</h2>
+                <h2 className="text-xl font-bold text-gray-900 mb-4">
+                  Events ({leagueEvents.filter(e => e.meta.status !== 'draft').length})
+                </h2>
                 
                 {leagueEvents.length > 0 ? (
                   <div className="space-y-3 mb-4">
@@ -1451,10 +1453,36 @@
                                   >
                                     Edit
                                   </button>
+                                  <button
+                                    onClick={async () => {
+                                      if (!confirm('Unpublish this event? Players will no longer see it.')) return;
+                                      await database.ref(`events/${event.id}/meta/status`).set('draft');
+                                      // Reload events
+                                      const eventsData = [];
+                                      for (const eventId of activeSeason.events) {
+                                        const snapshot = await database.ref(`events/${eventId}`).once('value');
+                                        const e = snapshot.val();
+                                        if (e) eventsData.push({ id: eventId, ...e });
+                                      }
+                                      eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
+                                      setLeagueEvents(eventsData);
+                                      setFeedback('Event unpublished');
+                                      setTimeout(() => setFeedback(''), 2000);
+                                    }}
+                                    className="text-sm bg-orange-600 text-white px-3 py-1 rounded-lg hover:bg-orange-700 font-semibold"
+                                  >
+                                    Unpublish
+                                  </button>
                                   <button className="text-sm bg-yellow-600 text-white px-3 py-1 rounded-lg hover:bg-yellow-700 font-semibold">
                                     Lock
                                   </button>
-                                  <button className="text-sm bg-red-600 text-white px-3 py-1 rounded-lg hover:bg-red-700 font-semibold">
+                                  <button
+                                    onClick={() => {
+                                      setFeedback('Unpublish this event before deleting');
+                                      setTimeout(() => setFeedback(''), 3000);
+                                    }}
+                                    className="text-sm bg-gray-400 text-white px-3 py-1 rounded-lg cursor-not-allowed font-semibold"
+                                  >
                                     Delete
                                   </button>
                                 </>
@@ -2732,7 +2760,12 @@
             // Update teams
             const newTeams = {};
             editForm.teams.forEach((team, index) => {
-              const scores = editingEvent.teams[`team${index + 1}`]?.scores || {};
+              // Try to get existing scores, or create new empty scores
+              // Handle case where editingEvent.teams might be undefined or empty
+              const existingTeam = (editingEvent.teams || {})[`team${index + 1}`];
+              const scores = existingTeam?.scores || {};
+              
+              // Ensure all holes have a value
               for (let i = 0; i < 18; i++) {
                 if (!(i in scores)) scores[i] = -1;
               }
@@ -2741,7 +2774,12 @@
                 name: team.name,
                 players: editForm.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
                 scores: scores,
-                currentHole: editForm.startingHole
+                currentHole: existingTeam?.currentHole || editForm.startingHole,
+                // Preserve other team data if it exists
+                ...(existingTeam?.playerUsed && { playerUsed: existingTeam.playerUsed }),
+                ...(existingTeam?.player1Scores && { player1Scores: existingTeam.player1Scores }),
+                ...(existingTeam?.player2Scores && { player2Scores: existingTeam.player2Scores }),
+                ...(existingTeam?.driveUsed && { driveUsed: existingTeam.driveUsed })
               };
             });
 
@@ -2854,7 +2892,7 @@
                               value={newTeam.name}
                               onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
                               placeholder="Player name"
-                              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                              className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
                             />
                             <button
                               onClick={() => {
@@ -2869,7 +2907,7 @@
                                   setNewTeam({ name: '', player1: '', player2: '' });
                                 }
                               }}
-                              className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700"
+                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
                             >
                               Add Player
                             </button>
@@ -2881,22 +2919,24 @@
                               value={newTeam.name}
                               onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
                               placeholder="Team name"
-                              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                              className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
                             />
-                            <input
-                              type="text"
-                              value={newTeam.player1}
-                              onChange={(e) => setNewTeam({ ...newTeam, player1: e.target.value })}
-                              placeholder="Player 1 name"
-                              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                            />
-                            <input
-                              type="text"
-                              value={newTeam.player2}
-                              onChange={(e) => setNewTeam({ ...newTeam, player2: e.target.value })}
-                              placeholder="Player 2 name"
-                              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                            />
+                            <div className="grid grid-cols-2 gap-3">
+                              <input
+                                type="text"
+                                value={newTeam.player1}
+                                onChange={(e) => setNewTeam({ ...newTeam, player1: e.target.value })}
+                                placeholder="Player 1"
+                                className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
+                              />
+                              <input
+                                type="text"
+                                value={newTeam.player2}
+                                onChange={(e) => setNewTeam({ ...newTeam, player2: e.target.value })}
+                                placeholder="Player 2"
+                                className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
+                              />
+                            </div>
                             <button
                               onClick={() => {
                                 if (newTeam.name.trim() && newTeam.player1.trim() && newTeam.player2.trim()) {
@@ -2908,7 +2948,7 @@
                                   setNewTeam({ name: '', player1: '', player2: '' });
                                 }
                               }}
-                              className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700"
+                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
                             >
                               Add Team
                             </button>
