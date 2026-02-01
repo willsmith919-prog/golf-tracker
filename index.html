@@ -121,6 +121,7 @@
         startingHole: 1,
         teams: []
       });
+      const [selectedBaseCourse, setSelectedBaseCourse] = useState('');
       const [newTeam, setNewTeam] = useState({ name: '', player1: '', player2: '' });
       
       // Current event/team state
@@ -2055,18 +2056,44 @@
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Course</label>
                     <select
-                      value={newEvent.courseId}
-                      onChange={(e) => setNewEvent({ ...newEvent, courseId: e.target.value })}
+                      value={selectedBaseCourse}
+                      onChange={(e) => {
+                        setSelectedBaseCourse(e.target.value);
+                        setNewEvent({ ...newEvent, courseId: '' }); // Reset tee selection
+                      }}
                       className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
                     >
-                      <option value="">Select a course & tee</option>
-                      {courses.map(course => (
+                      <option value="">Select a course</option>
+                      {globalCourses.map(course => (
                         <option key={course.id} value={course.id}>
-                          {course.name} - {course.teeName}
+                          {course.name} {course.location && `- ${course.location}`}
                         </option>
                       ))}
                     </select>
                   </div>
+
+                  {selectedBaseCourse && (
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Tee</label>
+                      <select
+                        value={newEvent.courseId}
+                        onChange={(e) => setNewEvent({ ...newEvent, courseId: e.target.value })}
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      >
+                        <option value="">Select a tee</option>
+                        {courses
+                          .filter(c => c.courseId === selectedBaseCourse)
+                          .map(course => {
+                            const totalYards = course.yardages?.reduce((sum, y) => sum + (parseInt(y) || 0), 0) || 0;
+                            return (
+                              <option key={course.id} value={course.id}>
+                                {course.teeName} - Rating: {course.rating} / Slope: {course.slope} / {totalYards} yards
+                              </option>
+                            );
+                          })}
+                      </select>
+                    </div>
+                  )}
 
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
@@ -2304,15 +2331,52 @@
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">Course</label>
                     <select
-                      value={editForm.courseId}
-                      onChange={(e) => setEditForm({ ...editForm, courseId: e.target.value })}
+                      value={(() => {
+                        // Extract base course ID from the combined courseId
+                        const selectedCourse = courses.find(c => c.id === editForm.courseId);
+                        return selectedCourse?.courseId || '';
+                      })()}
+                      onChange={(e) => {
+                        // When course changes, reset the tee selection
+                        setEditForm({ ...editForm, courseId: '' });
+                      }}
                       className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
                     >
-                      {courses.map(course => (
-                        <option key={course.id} value={course.id}>{course.name}</option>
+                      <option value="">Select a course</option>
+                      {globalCourses.map(course => (
+                        <option key={course.id} value={course.id}>
+                          {course.name} {course.location && `- ${course.location}`}
+                        </option>
                       ))}
                     </select>
                   </div>
+
+                  {(() => {
+                    const selectedCourse = courses.find(c => c.id === editForm.courseId);
+                    const baseCourseId = selectedCourse?.courseId;
+                    return baseCourseId ? (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Tee</label>
+                        <select
+                          value={editForm.courseId}
+                          onChange={(e) => setEditForm({ ...editForm, courseId: e.target.value })}
+                          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                        >
+                          <option value="">Select a tee</option>
+                          {courses
+                            .filter(c => c.courseId === baseCourseId)
+                            .map(course => {
+                              const totalYards = course.yardages?.reduce((sum, y) => sum + (parseInt(y) || 0), 0) || 0;
+                              return (
+                                <option key={course.id} value={course.id}>
+                                  {course.teeName} - Rating: {course.rating} / Slope: {course.slope} / {totalYards} yards
+                                </option>
+                              );
+                            })}
+                        </select>
+                      </div>
+                    ) : null;
+                  })()}
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
