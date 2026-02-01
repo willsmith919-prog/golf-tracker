@@ -3797,6 +3797,8 @@
 
         const addTee = () => {
           const newTeeId = `tee-${courseForm.tees.length + 1}`;
+          // Copy pars from the first tee (since par is shared)
+          const existingPars = courseForm.tees[0]?.pars || Array(18).fill('');
           setCourseForm({
             ...courseForm,
             tees: [...courseForm.tees, {
@@ -3804,7 +3806,7 @@
               name: '',
               rating: '',
               slope: '',
-              pars: Array(18).fill(''),
+              pars: [...existingPars], // Copy existing pars
               yardages: Array(18).fill('')
             }]
           });
@@ -3958,16 +3960,6 @@
                 <h2 className="text-3xl font-bold text-gray-900 mb-6">
                   {editingCourse ? 'Edit Course' : 'Add Course'}
                 </h2>
-
-                {feedback && (
-                  <div className={`mb-4 p-3 rounded-lg text-sm ${
-                    feedback.includes('Error') || feedback.includes('required') || feedback.includes('must')
-                      ? 'bg-red-50 border-2 border-red-200 text-red-800'
-                      : 'bg-green-50 border-2 border-green-200 text-green-800'
-                  }`}>
-                    {feedback}
-                  </div>
-                )}
 
                 {/* Basic Info */}
                 <div className="mb-6">
@@ -4250,6 +4242,17 @@
                     </div>
                   ))}
                 </div>
+
+                {/* Feedback message right above Save button */}
+                {feedback && (
+                  <div className={`mb-4 p-4 rounded-xl text-center font-semibold ${
+                    feedback.includes('Error') || feedback.includes('required') || feedback.includes('must') || feedback.includes('missing')
+                      ? 'bg-red-50 border-2 border-red-500 text-red-800'
+                      : 'bg-green-50 border-2 border-green-500 text-green-800'
+                  }`}>
+                    {feedback}
+                  </div>
+                )}
 
                 <button
                   onClick={saveCourse}
