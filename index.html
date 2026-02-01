@@ -42,7 +42,6 @@
     const database = firebase.database();
     const auth = firebase.auth();
 
-
     // Generate or retrieve device ID
     const getDeviceId = () => {
       let deviceId = localStorage.getItem('deviceId');
@@ -59,10 +58,8 @@
       const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
       const code = `${coursePrefix}-${randomPart}`;
       
-      // Check if code exists
       const snapshot = await database.ref('eventCodes').child(code).once('value');
       if (snapshot.exists()) {
-        // Collision - regenerate
         return generateEventCode(courseId);
       }
       
@@ -82,13 +79,17 @@
     const ChevronDown = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="6 9 12 15 18 9"></polyline></svg>);
     const ChevronUp = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="18 15 12 9 6 15"></polyline></svg>);
     const RotateCcw = () => (<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="1 4 1 10 7 10"></polyline><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path></svg>);
+    const Edit = () => (<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path></svg>);
 
     function LiveLinks() {
-      const [view, setView] = useState('login'); // Start at login
+      // State declarations
+      const [view, setView] = useState('login');
       const [currentUser, setCurrentUser] = useState(null);
       const [userProfile, setUserProfile] = useState(null);
       const [authLoading, setAuthLoading] = useState(true);
       const [courses, setCourses] = useState([]);
+      
+      // Event creation state
       const [newEvent, setNewEvent] = useState({
         name: '',
         courseId: '',
@@ -99,15 +100,21 @@
         teams: []
       });
       const [newTeam, setNewTeam] = useState({ name: '', player1: '', player2: '' });
+      
+      // Current event/team state
       const [joinCode, setJoinCode] = useState('');
       const [currentEvent, setCurrentEvent] = useState(null);
       const [selectedTeam, setSelectedTeam] = useState(null);
+      
+      // UI state
       const [feedback, setFeedback] = useState('');
       const [scoreConfirmation, setScoreConfirmation] = useState(null);
       const [expandedTeams, setExpandedTeams] = useState([]);
       const [editingHole, setEditingHole] = useState(null);
       const [playerScores, setPlayerScores] = useState(null);
       const [viewingTeamScorecard, setViewingTeamScorecard] = useState(null);
+      
+      // Auth state
       const [loginEmail, setLoginEmail] = useState('');
       const [loginPassword, setLoginPassword] = useState('');
       const [signupEmail, setSignupEmail] = useState('');
@@ -116,6 +123,8 @@
       const [signupHandicap, setSignupHandicap] = useState('');
       const [authError, setAuthError] = useState('');
       const [authLoading2, setAuthLoading2] = useState(false);
+      
+      // League state
       const [userLeagues, setUserLeagues] = useState([]);
       const [currentLeague, setCurrentLeague] = useState(null);
       const [newLeague, setNewLeague] = useState({
@@ -125,155 +134,18 @@
         pointSystem: { 1: 20, 2: 16, 3: 13, 4: 10, 5: 8 }
       });
       const [leagueCode, setLeagueCode] = useState('');
-      const [creatingEventForLeague, setCreatingEventForLeague] = useState(null); // {leagueId, seasonId}
+      const [creatingEventForLeague, setCreatingEventForLeague] = useState(null);
       const [editingEvent, setEditingEvent] = useState(null);
       const [editForm, setEditForm] = useState(null);
-      const [leagueEvents, setLeagueEvents] = useState([]); // Events for current league
-      const [eventRegistrations, setEventRegistrations] = useState({}); // registrations for current event
-      const [showAddPlayerModal, setShowAddPlayerModal] = useState(false);
-      const [assigningToTeam, setAssigningToTeam] = useState(null); // which team we're assigning to
+      const [leagueEvents, setLeagueEvents] = useState([]);
+      const [eventRegistrations, setEventRegistrations] = useState({});
+      const [editingTeamName, setEditingTeamName] = useState(null);
+      const [tempTeamName, setTempTeamName] = useState('');
+      
+      // Refs
       const eventListenerRef = useRef(null);
-
-      // Populate edit form when editingEvent changes
-      useEffect(() => {
-        if (editingEvent && view === 'edit-event') {
-          setEditForm({
-            name: editingEvent.meta.name,
-            courseId: editingEvent.meta.courseId,
-            date: editingEvent.meta.date,
-            time: editingEvent.meta.time || '',
-            format: editingEvent.meta.format,
-            startingHole: Object.values(editingEvent.teams || {})[0]?.currentHole || 1,
-            teams: Object.values(editingEvent.teams || {}).map((team, idx) => ({
-              id: `team${idx + 1}`,
-              name: team.name,
-              player1: (team.players && team.players[0]) || '',
-              player2: (team.players && team.players[1]) || ''
-            }))
-          });
-        } else {
-          setEditForm(null);
-        }
-      }, [editingEvent, view]);
-
-      // Load league events when viewing dashboard
-      useEffect(() => {
-        const loadLeagueEvents = async () => {
-          console.log('loadLeagueEvents triggered:', { view, currentLeague: currentLeague?.id });
-          
-          if (view !== 'league-dashboard' || !currentLeague) {
-            setLeagueEvents([]);
-            return;
-          }
-
-          const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
-          console.log('Active season:', activeSeason);
-          
-          if (!activeSeason || !activeSeason.events) {
-            console.log('No active season or events array');
-            setLeagueEvents([]);
-            return;
-          }
-
-          console.log('Loading events:', activeSeason.events);
-
-          try {
-            const eventsData = [];
-            for (const eventId of activeSeason.events) {
-              const snapshot = await database.ref(`events/${eventId}`).once('value');
-              const event = snapshot.val();
-              if (event) {
-                eventsData.push({ id: eventId, ...event });
-              }
-            }
-            // Sort by date (soonest first)
-            eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
-            console.log('Loaded events:', eventsData);
-            setLeagueEvents(eventsData);
-
-            // Set up real-time listeners for each event
-            activeSeason.events.forEach(eventId => {
-              database.ref(`events/${eventId}`).on('value', (snapshot) => {
-                const updatedEvent = snapshot.val();
-                if (updatedEvent) {
-                  setLeagueEvents(prev => {
-                    const updated = prev.map(e => 
-                      e.id === eventId ? { id: eventId, ...updatedEvent } : e
-                    );
-                    return updated.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
-                  });
-                }
-              });
-            });
-          } catch (error) {
-            console.error('Error loading league events:', error);
-          }
-        };
-
-        loadLeagueEvents();
-
-        // Cleanup listeners when leaving dashboard
-        return () => {
-          if (view === 'league-dashboard' && currentLeague) {
-            const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
-            if (activeSeason?.events) {
-              activeSeason.events.forEach(eventId => {
-                database.ref(`events/${eventId}`).off();
-              });
-            }
-          }
-        };
-      }, [view, currentLeague]);
-
-      // Load event registrations when viewing event details or editing
-      useEffect(() => {
-        const loadRegistrations = async () => {
-          if ((view === 'event-details' || view === 'edit-event') && editingEvent) {
-            const regsSnapshot = await database.ref(`events/${editingEvent.id}/registrations`).once('value');
-            setEventRegistrations(regsSnapshot.val() || {});
-          } else {
-            setEventRegistrations({});
-          }
-        };
-        loadRegistrations();
-      }, [view, editingEvent]);
-
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
-
-      // Auth state listener
-      useEffect(() => {
-        const unsubscribe = auth.onAuthStateChanged(async (user) => {
-          setCurrentUser(user);
-          
-          if (user) {
-            // Fetch user profile from database
-            try {
-              const profileSnapshot = await database.ref(`users/${user.uid}`).once('value');
-              const profile = profileSnapshot.val();
-              setUserProfile(profile);
-              
-              // Load user's leagues
-              const leagues = await loadUserLeagues(user.uid);
-              setUserLeagues(leagues);
-              
-              if (view === 'login' || view === 'signup') {
-                setView('home');
-              }
-            } catch (error) {
-              console.error('Error fetching user profile:', error);
-            }
-          } else {
-            setUserProfile(null);
-            setUserLeagues([]);
-            setView('login');
-          }
-          
-          setAuthLoading(false);
-        });
-
-        return () => unsubscribe();
-      }, []);
 
       // Format helpers
       const formatNames = {
@@ -292,18 +164,18 @@
 
       const calculateStablefordPoints = (score, par) => {
         const diff = score - par;
-        if (diff >= 2) return 0; // Double bogey or worse
-        if (diff === 1) return 1; // Bogey
-        if (diff === 0) return 2; // Par
-        if (diff === -1) return 3; // Birdie
-        if (diff === -2) return 4; // Eagle
-        if (diff <= -3) return 5; // Albatross
+        if (diff >= 2) return 0;
+        if (diff === 1) return 1;
+        if (diff === 0) return 2;
+        if (diff === -1) return 3;
+        if (diff === -2) return 4;
+        if (diff <= -3) return 5;
         return 0;
       };
 
       // League helper functions
       const generateLeagueCode = async () => {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // Removed confusing letters
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
         const nums = '0123456789';
         
         let code;
@@ -314,7 +186,6 @@
           const numbers = Array(4).fill(0).map(() => nums[Math.floor(Math.random() * nums.length)]).join('');
           code = `${letters}-${numbers}`;
           
-          // Check if code exists
           const snapshot = await database.ref(`leagueCodes/${code}`).once('value');
           exists = snapshot.exists();
         }
@@ -343,6 +214,7 @@
         }
       };
 
+      // Initialize courses and cleanup
       useEffect(() => { loadCourses(); }, []);
 
       useEffect(() => {
@@ -375,6 +247,146 @@
           console.error('Error loading courses:', error);
         }
       };
+
+      // Populate edit form when editingEvent changes
+      useEffect(() => {
+        if (editingEvent && view === 'edit-event') {
+          setEditForm({
+            name: editingEvent.meta.name,
+            courseId: editingEvent.meta.courseId,
+            date: editingEvent.meta.date,
+            time: editingEvent.meta.time || '',
+            format: editingEvent.meta.format,
+            startingHole: Object.values(editingEvent.teams || {})[0]?.currentHole || 1,
+            teams: Object.entries(editingEvent.teams || {}).map(([teamKey, team]) => ({
+              key: teamKey,
+              name: team.name,
+              playerIds: team.playerIds || [],
+              players: team.players || []
+            }))
+          });
+        } else {
+          setEditForm(null);
+        }
+      }, [editingEvent, view]);
+
+      // Load league events when viewing dashboard
+      useEffect(() => {
+        const loadLeagueEvents = async () => {
+          if (view !== 'league-dashboard' || !currentLeague) {
+            setLeagueEvents([]);
+            return;
+          }
+
+          const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
+          
+          if (!activeSeason || !activeSeason.events) {
+            setLeagueEvents([]);
+            return;
+          }
+
+          try {
+            const eventsData = [];
+            for (const eventId of activeSeason.events) {
+              const snapshot = await database.ref(`events/${eventId}`).once('value');
+              const event = snapshot.val();
+              if (event) {
+                eventsData.push({ id: eventId, ...event });
+              }
+            }
+            eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
+            setLeagueEvents(eventsData);
+
+            // Set up real-time listeners
+            activeSeason.events.forEach(eventId => {
+              database.ref(`events/${eventId}`).on('value', (snapshot) => {
+                const updatedEvent = snapshot.val();
+                if (updatedEvent) {
+                  setLeagueEvents(prev => {
+                    const updated = prev.map(e => 
+                      e.id === eventId ? { id: eventId, ...updatedEvent } : e
+                    );
+                    return updated.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
+                  });
+                }
+              });
+            });
+          } catch (error) {
+            console.error('Error loading league events:', error);
+          }
+        };
+
+        loadLeagueEvents();
+
+        return () => {
+          if (view === 'league-dashboard' && currentLeague) {
+            const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
+            if (activeSeason?.events) {
+              activeSeason.events.forEach(eventId => {
+                database.ref(`events/${eventId}`).off();
+              });
+            }
+          }
+        };
+      }, [view, currentLeague]);
+
+      // Load event registrations when viewing event details or editing
+      useEffect(() => {
+        const loadRegistrations = async () => {
+          if ((view === 'event-details' || view === 'edit-event') && editingEvent) {
+            // Set up real-time listener for registrations
+            const regsRef = database.ref(`events/${editingEvent.id}/registrations`);
+            regsRef.on('value', (snapshot) => {
+              setEventRegistrations(snapshot.val() || {});
+            });
+
+            return () => {
+              regsRef.off();
+            };
+          } else {
+            setEventRegistrations({});
+          }
+        };
+        
+        const cleanup = loadRegistrations();
+        return () => {
+          if (cleanup && typeof cleanup.then === 'function') {
+            cleanup.then(fn => fn && fn());
+          }
+        };
+      }, [view, editingEvent]);
+
+      // Auth state listener
+      useEffect(() => {
+        const unsubscribe = auth.onAuthStateChanged(async (user) => {
+          setCurrentUser(user);
+          
+          if (user) {
+            try {
+              const profileSnapshot = await database.ref(`users/${user.uid}`).once('value');
+              const profile = profileSnapshot.val();
+              setUserProfile(profile);
+              
+              const leagues = await loadUserLeagues(user.uid);
+              setUserLeagues(leagues);
+              
+              if (view === 'login' || view === 'signup') {
+                setView('home');
+              }
+            } catch (error) {
+              console.error('Error fetching user profile:', error);
+            }
+          } else {
+            setUserProfile(null);
+            setUserLeagues([]);
+            setView('login');
+          }
+          
+          setAuthLoading(false);
+        });
+
+        return () => unsubscribe();
+      }, []);
 
       const addTeam = () => {
         if (newEvent.format === 'stableford') {
@@ -410,7 +422,6 @@
       };
 
       const createEvent = async () => {
-        // Allow 0 teams for league events
         const minPlayers = creatingEventForLeague ? 0 : (newEvent.format === 'stableford' ? 1 : 2);
         
         if (!newEvent.name || !newEvent.courseId || newEvent.teams.length < minPlayers) {
@@ -442,9 +453,11 @@
               createdAt: Date.now(),
               eventCode: eventCode
             },
-            teams: {}
+            teams: {},
+            registrations: {}
           };
 
+          // Initialize teams with proper structure
           newEvent.teams.forEach((team, index) => {
             const scores = {};
             for (let i = 0; i < 18; i++) {
@@ -454,29 +467,24 @@
             eventData.teams[`team${index + 1}`] = {
               name: team.name,
               players: newEvent.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
+              playerIds: [], // Empty for manually created teams
               scores: scores,
               currentHole: newEvent.startingHole
             };
           });
 
-          // Write to Firebase
           await database.ref(`events/${eventId}`).set(eventData);
-          
-          // Store code mapping
           await database.ref(`eventCodes/${eventCode}`).set(eventId);
           
-          // If this is a league event, add to league's season
           if (creatingEventForLeague) {
             const { leagueId, seasonId } = creatingEventForLeague;
             const eventsRef = database.ref(`leagues/${leagueId}/seasons/${seasonId}/events`);
             const eventsSnapshot = await eventsRef.once('value');
             const events = eventsSnapshot.val() || [];
             
-            // Ensure it's an array
             const eventsArray = Array.isArray(events) ? events : [];
             eventsArray.push(eventId);
             
-            console.log('Adding event to league:', { leagueId, seasonId, eventId, eventsArray });
             await eventsRef.set(eventsArray);
           }
           
@@ -484,10 +492,8 @@
           
           setTimeout(async () => {
             if (creatingEventForLeague) {
-              // Reload league data to get updated events array
               const leagueSnapshot = await database.ref(`leagues/${creatingEventForLeague.leagueId}`).once('value');
               const updatedLeague = leagueSnapshot.val();
-              console.log('Reloaded league after event creation:', updatedLeague);
               
               if (updatedLeague) {
                 setCurrentLeague({ 
@@ -496,16 +502,13 @@
                   userRole: currentLeague.userRole 
                 });
               }
-              // Go back to league dashboard
               setCreatingEventForLeague(null);
               setView('league-dashboard');
             } else {
-              // Go to event lobby for standalone events
               setCurrentEvent({ id: eventId, ...eventData });
               setView('event-lobby');
             }
             setFeedback('');
-            // Reset form
             setNewEvent({
               name: '',
               courseId: '',
@@ -538,10 +541,6 @@
           
           setFeedback(`You're registered for this event!`);
           setTimeout(() => setFeedback(''), 2000);
-          
-          // Reload event registrations
-          const regsSnapshot = await database.ref(`events/${eventId}/registrations`).once('value');
-          setEventRegistrations(regsSnapshot.val() || {});
         } catch (error) {
           console.error('Error registering:', error);
           setFeedback('Error registering for event');
@@ -556,10 +555,6 @@
           
           setFeedback(`You've withdrawn from this event`);
           setTimeout(() => setFeedback(''), 2000);
-          
-          // Reload event registrations
-          const regsSnapshot = await database.ref(`events/${eventId}/registrations`).once('value');
-          setEventRegistrations(regsSnapshot.val() || {});
         } catch (error) {
           console.error('Error withdrawing:', error);
           setFeedback('Error withdrawing from event');
@@ -578,10 +573,6 @@
           
           setFeedback('Player added');
           setTimeout(() => setFeedback(''), 2000);
-          
-          // Reload event registrations
-          const regsSnapshot = await database.ref(`events/${eventId}/registrations`).once('value');
-          setEventRegistrations(regsSnapshot.val() || {});
         } catch (error) {
           console.error('Error adding player:', error);
           setFeedback('Error adding player');
@@ -594,10 +585,6 @@
           
           setFeedback('Player removed');
           setTimeout(() => setFeedback(''), 2000);
-          
-          // Reload event registrations
-          const regsSnapshot = await database.ref(`events/${eventId}/registrations`).once('value');
-          setEventRegistrations(regsSnapshot.val() || {});
         } catch (error) {
           console.error('Error removing player:', error);
           setFeedback('Error removing player');
@@ -610,11 +597,9 @@
           const teamSnapshot = await teamRef.once('value');
           const team = teamSnapshot.val() || { name: '', players: [], playerIds: [], scores: {}, currentHole: 1 };
           
-          // Add player
           const updatedPlayerIds = [...(team.playerIds || []), userId];
           const updatedPlayers = [...(team.players || []), userName];
           
-          // Auto-generate team name if empty or if it's the first two players
           let teamName = team.name;
           if (updatedPlayers.length <= 2) {
             teamName = updatedPlayers.join(' & ');
@@ -629,7 +614,6 @@
           setFeedback('Player assigned to team');
           setTimeout(() => setFeedback(''), 2000);
           
-          // Reload editing event
           const eventSnapshot = await database.ref(`events/${eventId}`).once('value');
           const updatedEvent = eventSnapshot.val();
           if (updatedEvent) {
@@ -651,14 +635,12 @@
             const updatedPlayerIds = (team.playerIds || []).filter(id => id !== userId);
             const updatedPlayers = team.players.filter((_, idx) => team.playerIds[idx] !== userId);
             
-            // Update team name if players changed
             let teamName = team.name;
             if (updatedPlayers.length <= 2 && updatedPlayers.length > 0) {
               teamName = updatedPlayers.join(' & ');
             }
             
             if (updatedPlayerIds.length === 0) {
-              // Remove empty team
               await teamRef.remove();
             } else {
               await teamRef.update({
@@ -672,7 +654,6 @@
           setFeedback('Player removed from team');
           setTimeout(() => setFeedback(''), 2000);
           
-          // Reload editing event
           const eventSnapshot = await database.ref(`events/${eventId}`).once('value');
           const updatedEvent = eventSnapshot.val();
           if (updatedEvent) {
@@ -690,7 +671,6 @@
           const teamsSnapshot = await eventRef.once('value');
           const teams = teamsSnapshot.val() || {};
           
-          // Find next team number
           let teamNum = 1;
           while (teams[`team${teamNum}`]) {
             teamNum++;
@@ -708,7 +688,6 @@
           setFeedback('Team created');
           setTimeout(() => setFeedback(''), 2000);
           
-          // Reload editing event
           const eventSnapshot = await database.ref(`events/${eventId}`).once('value');
           const updatedEvent = eventSnapshot.val();
           if (updatedEvent) {
@@ -720,6 +699,24 @@
         }
       };
 
+      const updateTeamName = async (eventId, teamKey, newName) => {
+        try {
+          await database.ref(`events/${eventId}/teams/${teamKey}/name`).set(newName);
+          
+          const eventSnapshot = await database.ref(`events/${eventId}`).once('value');
+          const updatedEvent = eventSnapshot.val();
+          if (updatedEvent) {
+            setEditingEvent({ id: eventId, ...updatedEvent });
+          }
+          
+          setEditingTeamName(null);
+          setTempTeamName('');
+        } catch (error) {
+          console.error('Error updating team name:', error);
+          setFeedback('Error updating team name');
+        }
+      };
+
       const joinEvent = async () => {
         if (!joinCode.trim()) {
           setFeedback('Please enter an event code');
@@ -728,11 +725,9 @@
         }
 
         try {
-          // Check if it's a short code
           let eventId = joinCode.trim();
           
           if (!eventId.startsWith('event-')) {
-            // It's a short code - look up the real ID
             const codeSnapshot = await database.ref(`eventCodes/${eventId}`).once('value');
             const realId = codeSnapshot.val();
             
@@ -781,7 +776,6 @@
             }
           });
 
-          // Then set up continuous listening
           eventRef.on('value', (snapshot) => {
             const eventData = snapshot.val();
             if (eventData) {
@@ -792,42 +786,19 @@
       };
 
       const selectTeam = async (teamId) => {
-        console.log('=== SELECT TEAM DEBUG ===');
-        console.log('Team ID:', teamId);
-        console.log('Current Event before sync:', currentEvent);
-        
         setSelectedTeam(teamId);
-        // Wait for initial data load before switching to scoring view
         const eventData = await startRealtimeSync(currentEvent.id);
-        
-        console.log('Event Data after sync:', eventData);
-        console.log('Teams in event:', eventData?.teams);
-        console.log('Selected team data:', eventData?.teams?.[teamId]);
-        
         setView('scoring');
       };
 
       const submitScore = async (score, holeOverride = null, playerUsed = null, player1Score = null, player2Score = null, drivePlayer = null) => {
         try {
-          console.log('=== SUBMIT SCORE DEBUG ===');
-          console.log('Score:', score);
-          console.log('Player Used:', playerUsed);
-          console.log('Player 1 Score:', player1Score);
-          console.log('Player 2 Score:', player2Score);
-          console.log('Drive Player:', drivePlayer);
-          console.log('Current Event:', currentEvent);
-          console.log('Selected Team:', selectedTeam);
-          console.log('Current Event Teams:', currentEvent?.teams);
-          
-          // Safety checks
           if (!currentEvent || !currentEvent.teams || !selectedTeam) {
             console.error('Missing event or team data');
             return;
           }
 
           const team = currentEvent.teams[selectedTeam];
-          console.log('Team object:', team);
-          console.log('Team scores:', team?.scores);
           
           if (!team || !team.scores) {
             console.error('Team or scores array not found');
@@ -837,14 +808,11 @@
           const holeNum = holeOverride !== null ? holeOverride : team.currentHole;
           const holeIndex = holeNum - 1;
           
-          // Store previous values for undo
           const previousScore = team.scores[holeIndex];
           const previousHole = team.currentHole;
           
-          // Update score
           await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/scores/${holeIndex}`).set(score);
           
-          // Store player attribution and individual scores if provided (for bestball/shamble)
           if (playerUsed) {
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/playerUsed/${holeIndex}`).set(playerUsed);
           }
@@ -852,17 +820,14 @@
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/player1Scores/${holeIndex}`).set(player1Score);
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/player2Scores/${holeIndex}`).set(player2Score);
           }
-          // Store drive player for shamble
           if (drivePlayer) {
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/driveUsed/${holeIndex}`).set(drivePlayer);
           }
           
-          // Update current hole if not on 18 and not editing
           if (holeOverride === null && team.currentHole < 18) {
             await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/currentHole`).set(team.currentHole + 1);
           }
 
-          // Show confirmation with undo option
           let confirmMessage = `${score} recorded on hole ${holeNum}`;
           if (playerUsed && player1Score !== null && player2Score !== null) {
             confirmMessage = `${team.players[0]}: ${player1Score}, ${team.players[1]}: ${player2Score} → Used ${playerUsed}'s ${score}`;
@@ -876,7 +841,6 @@
             undoData: { holeIndex, previousScore, previousHole, score }
           });
 
-          // Auto-hide after 5 seconds
           if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
           undoTimerRef.current = setTimeout(() => {
             setScoreConfirmation(null);
@@ -895,10 +859,7 @@
         const { holeIndex, previousScore, previousHole } = scoreConfirmation.undoData;
         
         try {
-          // Revert score
           await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/scores/${holeIndex}`).set(previousScore);
-          
-          // Revert current hole
           await database.ref(`events/${currentEvent.id}/teams/${selectedTeam}/currentHole`).set(previousHole);
           
           setScoreConfirmation({ message: 'Score removed', undoData: null });
@@ -935,7 +896,6 @@
         const format = currentEvent?.meta?.format || 'scramble';
         
         if (format === 'stableford') {
-          // Calculate Stableford points
           let totalPoints = 0;
           scoresArray.forEach((score, i) => {
             if (score !== null && score !== -1 && score > 0 && pars[i]) {
@@ -944,7 +904,6 @@
           });
           return { total: totalPoints, holesCompleted, toPar: 0, isStableford: true };
         } else {
-          // Stroke play formats
           const total = validScores.reduce((sum, s) => sum + s, 0);
           let parTotal = 0;
           scoresArray.forEach((score, i) => {
@@ -955,6 +914,39 @@
           const toPar = total - parTotal;
           return { total, holesCompleted, toPar, isStableford: false };
         }
+      };
+
+      const validateEventLock = (event) => {
+        const format = event.meta.format;
+        const teams = Object.values(event.teams || {});
+        const registrations = Object.values(event.registrations || {}).filter(r => r.status === 'registered');
+        
+        // For team events
+        if (format !== 'stableford') {
+          // Check minimum teams
+          if (teams.length < 2) {
+            return { valid: false, message: 'Need at least 2 teams to lock event' };
+          }
+          
+          // Check for unassigned players
+          const assignedPlayerIds = new Set();
+          teams.forEach(team => {
+            (team.playerIds || []).forEach(id => assignedPlayerIds.add(id));
+          });
+          
+          const unassignedPlayers = registrations.filter(reg => !assignedPlayerIds.has(reg.uid || Object.keys(event.registrations).find(k => event.registrations[k] === reg)));
+          
+          if (unassignedPlayers.length > 0) {
+            return { valid: false, message: `${unassignedPlayers.length} player(s) not assigned to teams` };
+          }
+        } else {
+          // For individual events
+          if (registrations.length < 2) {
+            return { valid: false, message: 'Need at least 2 players to lock event' };
+          }
+        }
+        
+        return { valid: true };
       };
 
       // Auth loading screen
@@ -975,7 +967,6 @@
 
           try {
             await auth.signInWithEmailAndPassword(loginEmail, loginPassword);
-            // Auth state listener will handle navigation
           } catch (err) {
             console.error('Login error:', err);
             if (err.code === 'auth/user-not-found') {
@@ -1069,11 +1060,9 @@
           setAuthLoading2(true);
 
           try {
-            // Create auth account
             const userCredential = await auth.createUserWithEmailAndPassword(signupEmail, signupPassword);
             const user = userCredential.user;
 
-            // Create user profile in database
             await database.ref(`users/${user.uid}`).set({
               email: signupEmail,
               displayName: signupDisplayName,
@@ -1081,7 +1070,6 @@
               createdAt: Date.now()
             });
 
-            // Auth state listener will handle navigation
           } catch (err) {
             console.error('Signup error:', err);
             if (err.code === 'auth/email-already-in-use') {
@@ -1238,19 +1226,13 @@
               }
             };
 
-            // Create league
             await database.ref(`leagues/${leagueId}`).set(leagueData);
-
-            // Store code mapping
             await database.ref(`leagueCodes/${code}`).set(leagueId);
-
-            // Add to user's leagues
             await database.ref(`users/${currentUser.uid}/leagues/${leagueId}`).set({
               role: 'commissioner',
               joinedAt: Date.now()
             });
 
-            // Reload leagues and navigate
             const leagues = await loadUserLeagues(currentUser.uid);
             setUserLeagues(leagues);
             setCurrentLeague({ id: leagueId, ...leagueData, userRole: 'commissioner' });
@@ -1362,7 +1344,6 @@
           }
 
           try {
-            // Look up league by code
             const codeSnapshot = await database.ref(`leagueCodes/${leagueCode.trim().toUpperCase()}`).once('value');
             const leagueId = codeSnapshot.val();
 
@@ -1371,7 +1352,6 @@
               return;
             }
 
-            // Get league data
             const leagueSnapshot = await database.ref(`leagues/${leagueId}`).once('value');
             const leagueData = leagueSnapshot.val();
 
@@ -1380,7 +1360,6 @@
               return;
             }
 
-            // Check if already a member
             if (leagueData.members && leagueData.members[currentUser.uid]) {
               setFeedback('You are already a member of this league');
               setTimeout(() => {
@@ -1391,7 +1370,6 @@
               return;
             }
 
-            // Add user to league
             await database.ref(`leagues/${leagueId}/members/${currentUser.uid}`).set({
               displayName: userProfile.displayName,
               role: 'player',
@@ -1399,13 +1377,11 @@
               joinedAt: Date.now()
             });
 
-            // Add league to user's profile
             await database.ref(`users/${currentUser.uid}/leagues/${leagueId}`).set({
               role: 'player',
               joinedAt: Date.now()
             });
 
-            // Reload leagues and navigate
             const leagues = await loadUserLeagues(currentUser.uid);
             setUserLeagues(leagues);
             const joinedLeague = leagues.find(l => l.id === leagueId);
@@ -1483,13 +1459,9 @@
           }
 
           try {
-            // Remove from league members
             await database.ref(`leagues/${currentLeague.id}/members/${memberUid}`).remove();
-            
-            // Remove league from user's profile
             await database.ref(`users/${memberUid}/leagues/${currentLeague.id}`).remove();
 
-            // Reload league data
             const leagueSnapshot = await database.ref(`leagues/${currentLeague.id}`).once('value');
             const updatedLeague = leagueSnapshot.val();
             setCurrentLeague({ id: currentLeague.id, ...updatedLeague, userRole: currentLeague.userRole });
@@ -1500,6 +1472,30 @@
             console.error('Error removing member:', error);
             setFeedback('Error removing member');
             setTimeout(() => setFeedback(''), 3000);
+          }
+        };
+
+        const handleLockEvent = async (event) => {
+          const validation = validateEventLock(event);
+          
+          if (!validation.valid) {
+            setFeedback(validation.message);
+            setTimeout(() => setFeedback(''), 4000);
+            return;
+          }
+          
+          if (!confirm('Lock this event? Players will no longer be able to register or withdraw.')) {
+            return;
+          }
+          
+          try {
+            await database.ref(`events/${event.id}/meta/status`).set('locked');
+            setFeedback('Event locked');
+            setTimeout(() => setFeedback(''), 2000);
+          } catch (error) {
+            console.error('Error locking event:', error);
+            setFeedback('Error locking event');
+            setTimeout(() => setFeedback(''), 2000);
           }
         };
 
@@ -1609,7 +1605,6 @@
                         complete: 'Complete'
                       };
                       
-                      // Filter events for players (only show open+)
                       if (!isCommissioner && status === 'draft') {
                         return null;
                       }
@@ -1636,9 +1631,8 @@
                             {registrationCount} registered · {teamCount} team{teamCount !== 1 ? 's' : ''}
                           </div>
                           
-                          {/* Actions based on status and role */}
                           {isCommissioner && (
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap">
                               {status === 'draft' && (
                                 <>
                                   <button
@@ -1654,15 +1648,6 @@
                                     onClick={async () => {
                                       if (!confirm('Publish this event? Players will be able to see it.')) return;
                                       await database.ref(`events/${event.id}/meta/status`).set('open');
-                                      // Reload events
-                                      const eventsData = [];
-                                      for (const eventId of activeSeason.events) {
-                                        const snapshot = await database.ref(`events/${eventId}`).once('value');
-                                        const e = snapshot.val();
-                                        if (e) eventsData.push({ id: eventId, ...e });
-                                      }
-                                      eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
-                                      setLeagueEvents(eventsData);
                                       setFeedback('Event published!');
                                       setTimeout(() => setFeedback(''), 2000);
                                     }}
@@ -1702,15 +1687,6 @@
                                     onClick={async () => {
                                       if (!confirm('Unpublish this event? Players will no longer see it.')) return;
                                       await database.ref(`events/${event.id}/meta/status`).set('draft');
-                                      // Reload events
-                                      const eventsData = [];
-                                      for (const eventId of activeSeason.events) {
-                                        const snapshot = await database.ref(`events/${eventId}`).once('value');
-                                        const e = snapshot.val();
-                                        if (e) eventsData.push({ id: eventId, ...e });
-                                      }
-                                      eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
-                                      setLeagueEvents(eventsData);
                                       setFeedback('Event unpublished');
                                       setTimeout(() => setFeedback(''), 2000);
                                     }}
@@ -1719,36 +1695,10 @@
                                     Unpublish
                                   </button>
                                   <button 
-                                    onClick={async () => {
-                                      console.log('Lock button clicked');
-                                      
-                                      // TODO: Add team validation once team assignment is implemented
-                                      // For now, just allow locking
-                                      
-                                      if (!confirm('Lock this event? Players will no longer be able to register or withdraw.')) {
-                                        console.log('Lock cancelled by user');
-                                        return;
-                                      }
-                                      
-                                      console.log('Setting event status to locked:', event.id);
-                                      await database.ref(`events/${event.id}/meta/status`).set('locked');
-                                      console.log('Status updated');
-                                      
-                                      setFeedback('Event locked');
-                                      setTimeout(() => setFeedback(''), 2000);
-                                    }}
+                                    onClick={() => handleLockEvent(event)}
                                     className="text-sm bg-yellow-600 text-white px-3 py-1 rounded-lg hover:bg-yellow-700 font-semibold"
                                   >
                                     Lock
-                                  </button>
-                                  <button
-                                    onClick={() => {
-                                      setFeedback('Unpublish this event before deleting');
-                                      setTimeout(() => setFeedback(''), 3000);
-                                    }}
-                                    className="text-sm bg-gray-400 text-white px-3 py-1 rounded-lg cursor-not-allowed font-semibold"
-                                  >
-                                    Delete
                                   </button>
                                 </>
                               )}
@@ -1779,20 +1729,14 @@
                                   </button>
                                 </>
                               )}
-                              {status === 'active' && (
+                              {(status === 'active' || status === 'complete') && (
                                 <button className="text-sm bg-blue-600 text-white px-3 py-1 rounded-lg hover:bg-blue-700 font-semibold">
                                   View Leaderboard
-                                </button>
-                              )}
-                              {status === 'complete' && (
-                                <button className="text-sm bg-purple-600 text-white px-3 py-1 rounded-lg hover:bg-purple-700 font-semibold">
-                                  View Results
                                 </button>
                               )}
                             </div>
                           )}
                           
-                          {/* View Details button for everyone (commissioner can register too) */}
                           {!isCommissioner && (
                             <button
                               onClick={() => {
@@ -1805,7 +1749,6 @@
                             </button>
                           )}
                           
-                          {/* Add View Details for commissioners too */}
                           {isCommissioner && status !== 'draft' && (
                             <button
                               onClick={() => {
@@ -1853,7 +1796,6 @@
         return (
           <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 font-sans">
             <div className="max-w-2xl mx-auto">
-              {/* Header */}
               <div className="flex justify-between items-center mb-8">
                 <div>
                   <h1 className="text-3xl font-bold text-white" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
@@ -1872,7 +1814,6 @@
                 </button>
               </div>
 
-              {/* My Leagues Section */}
               {userLeagues.length > 0 && (
                 <div className="mb-6">
                   <h2 className="text-white text-lg font-semibold mb-3">MY LEAGUES</h2>
@@ -1906,7 +1847,6 @@
                 </div>
               )}
 
-              {/* League Actions */}
               <div className="mb-6">
                 <div className="grid grid-cols-2 gap-3">
                   <button
@@ -1930,7 +1870,6 @@
                 </div>
               </div>
 
-              {/* Quick Play Section */}
               <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6">
                 <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Quick Play</h3>
                 <p className="text-white/70 text-sm mb-4">For one-off events without a league</p>
@@ -2189,865 +2128,13 @@
         );
       }
 
-      // EVENT LOBBY VIEW
-      if (view === 'event-lobby' && currentEvent) {
-        const teams = Object.entries(currentEvent.teams || {});
-        
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-            <div className="max-w-2xl mx-auto">
-              <button onClick={() => { setView('home'); setCurrentEvent(null); }} className="text-white mb-6 hover:text-blue-200">← Leave Event</button>
-              
-              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-                <div className="text-center mb-8">
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">{currentEvent.meta.name}</h2>
-                  <p className="text-gray-600 mb-2">{currentEvent.meta.courseName} - {currentEvent.meta.date}</p>
-                  <p className="text-sm text-gray-500 mb-4">{formatNames[currentEvent.meta.format || 'scramble']}</p>
-                  <div className="inline-block bg-blue-50 px-4 py-2 rounded-lg">
-                    <div className="text-xs text-gray-600 mb-1">Event Code</div>
-                    <div className="font-mono font-bold text-blue-600 text-xl">{currentEvent.meta.eventCode}</div>
-                  </div>
-                </div>
-
-                <div className="mb-6">
-                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Teams</h3>
-                  <div className="space-y-3">
-                    {teams.map(([teamId, team]) => (
-                      <div key={teamId} className="bg-gray-50 p-4 rounded-xl">
-                        <div className="font-semibold text-gray-900 mb-1">{team.name}</div>
-                        <div className="text-sm text-gray-600">{team.players.join(' & ')}</div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <button
-                  onClick={() => setView('team-selection')}
-                  className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
-                >
-                  Select Team & Start Scoring
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      // TEAM SELECTION VIEW
-      if (view === 'team-selection' && currentEvent) {
-        const teams = Object.entries(currentEvent.teams || {});
-        const isStableford = currentEvent.meta.format === 'stableford';
-        
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-            <div className="max-w-2xl mx-auto">
-              <button onClick={() => setView('event-lobby')} className="text-white mb-6 hover:text-blue-200">← Back</button>
-              
-              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-                <h2 className="text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>
-                  {isStableford ? 'Select Your Player' : 'Select Your Team'}
-                </h2>
-                <p className="text-gray-600 mb-8">
-                  {isStableford ? 'Choose which player you\'re scoring for' : 'Choose which team you\'re scoring for'}
-                </p>
-                
-                <div className="space-y-3">
-                  {teams.map(([teamId, team]) => (
-                    <button
-                      key={teamId}
-                      onClick={() => selectTeam(teamId)}
-                      className="w-full bg-gray-50 hover:bg-blue-50 p-6 rounded-xl transition-all text-left border-2 border-transparent hover:border-blue-500"
-                    >
-                      <div className="font-bold text-xl text-gray-900 mb-2">{team.name}</div>
-                      <div className="text-gray-600">{team.players.join(' & ')}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      // SCORING VIEW
-      if (view === 'scoring' && currentEvent && selectedTeam) {
-        // Safety check - make sure team exists
-        if (!currentEvent.teams || !currentEvent.teams[selectedTeam]) {
-          return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
-              <div className="bg-white/95 p-8 rounded-2xl text-center">
-                <p className="text-gray-900 mb-4">Loading team data...</p>
-                <button onClick={() => setView('team-selection')} className="text-blue-600">Go Back</button>
-              </div>
-            </div>
-          );
-        }
-
-        const team = currentEvent.teams[selectedTeam];
-        const currentHoleNum = team.currentHole;
-        const coursePars = currentEvent?.meta?.coursePars || [];
-        const currentPar = coursePars[currentHoleNum - 1] || 4;
-        const stats = calculateTeamStats(team);
-        const isStableford = currentEvent.meta.format === 'stableford';
-        
-        // Check if round is complete (18 holes played)
-        const roundComplete = stats.holesCompleted >= 18;
-        
-        // If round complete, show completion screen
-        if (roundComplete) {
-          return (
-            <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
-              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
-                <div className="text-6xl mb-4">🏆</div>
-                <h2 className="text-3xl font-bold text-gray-900 mb-2">Round Complete!</h2>
-                <p className="text-gray-600 mb-4">{team.name}</p>
-                <div className="bg-gray-50 p-4 rounded-xl mb-6">
-                  <div className="text-sm text-gray-600 mb-1">{isStableford ? 'Total Points' : 'Final Score'}</div>
-                  <div className="text-4xl font-bold text-blue-600 mb-1">{stats.total}</div>
-                  {!isStableford && (
-                    <div className={`text-lg font-semibold ${stats.toPar > 0 ? 'text-red-600' : stats.toPar < 0 ? 'text-green-600' : 'text-gray-900'}`}>
-                      {stats.toPar > 0 ? '+' : ''}{stats.toPar}
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-3">
-                  <button
-                    onClick={() => setView('leaderboard')}
-                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
-                  >
-                    View Leaderboard
-                  </button>
-                  <button
-                    onClick={() => setView('scorecard')}
-                    className="w-full bg-gray-600 text-white py-3 rounded-xl font-semibold hover:bg-gray-700"
-                  >
-                    View Scorecard
-                  </button>
-                  <button
-                    onClick={() => setView('team-selection')}
-                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
-                  >
-                    Back to Team Selection
-                  </button>
-                </div>
-              </div>
-            </div>
-          );
-        }
-        
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex flex-col">
-            <button onClick={() => setView('team-selection')} className="text-white mb-4 hover:text-blue-200">← Back</button>
-            
-            {/* Header */}
-            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-6">
-              <div className="text-center mb-4">
-                <h2 className="text-2xl font-bold text-gray-900">{currentEvent.meta.name}</h2>
-                <div className="text-lg text-gray-600">{team.name}</div>
-                <div className="text-sm text-gray-500">{formatNames[currentEvent.meta.format || 'scramble']}</div>
-              </div>
-              
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <div className="text-sm text-gray-600">Hole</div>
-                  <div className="text-3xl font-bold text-blue-600">{currentHoleNum}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600">Par</div>
-                  <div className="text-3xl font-bold text-gray-900">{currentPar}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-gray-600">{isStableford ? 'Points' : 'Score'}</div>
-                  <div className={`text-3xl font-bold ${
-                    isStableford ? 'text-blue-600' :
-                    stats.toPar > 0 ? 'text-red-600' : 
-                    stats.toPar < 0 ? 'text-green-600' : 
-                    'text-gray-900'
-                  }`}>
-                    {isStableford ? stats.total : (stats.toPar > 0 ? '+' : '') + stats.toPar}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Score Buttons */}
-            <div className="flex-1 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6">
-              <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">Enter Score</h3>
-              
-              {/* Show two-player entry for bestball/shamble */}
-              {(currentEvent.meta.format === 'bestball' || currentEvent.meta.format === 'shamble') ? (
-                <div className="space-y-4 mb-6">
-                  {/* Player 1 Score */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">{team.players[0]}'s Score</label>
-                    <div className="grid grid-cols-5 gap-2">
-                      {[1,2,3,4,5,6,7,8,9,10].map(score => (
-                        <button
-                          key={score}
-                          onClick={() => {
-                            const actualScore = score === 10 ? 10 : score;
-                            setPlayerScores({ ...playerScores, player1Score: actualScore });
-                          }}
-                          className={`py-4 rounded-lg font-bold text-lg transition-all ${
-                            playerScores?.player1Score === (score === 10 ? 10 : score)
-                              ? 'bg-blue-600 text-white'
-                              : score === currentPar
-                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                              : score < currentPar
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {score === 10 ? '10+' : score}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Player 2 Score */}
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">{team.players[1]}'s Score</label>
-                    <div className="grid grid-cols-5 gap-2">
-                      {[1,2,3,4,5,6,7,8,9,10].map(score => (
-                        <button
-                          key={score}
-                          onClick={() => {
-                            const actualScore = score === 10 ? 10 : score;
-                            setPlayerScores({ ...playerScores, player2Score: actualScore });
-                          }}
-                          className={`py-4 rounded-lg font-bold text-lg transition-all ${
-                            playerScores?.player2Score === (score === 10 ? 10 : score)
-                              ? 'bg-blue-600 text-white'
-                              : score === currentPar
-                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
-                              : score < currentPar
-                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                          }`}
-                        >
-                          {score === 10 ? '10+' : score}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  
-                  {/* Submit Button */}
-                  {playerScores?.player1Score && playerScores?.player2Score && (
-                    <>
-                      {currentEvent.meta.format === 'shamble' && !playerScores.driveSelected ? (
-                        <div className="bg-purple-50 p-4 rounded-xl">
-                          <h4 className="text-sm font-semibold text-gray-700 mb-3 text-center">Whose drive was used?</h4>
-                          <div className="grid grid-cols-2 gap-3">
-                            <button
-                              onClick={() => setPlayerScores({ ...playerScores, driveUsedPlayer: team.players[0], driveSelected: true })}
-                              className="bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 font-semibold"
-                            >
-                              {team.players[0]}'s Drive
-                            </button>
-                            <button
-                              onClick={() => setPlayerScores({ ...playerScores, driveUsedPlayer: team.players[1], driveSelected: true })}
-                              className="bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 font-semibold"
-                            >
-                              {team.players[1]}'s Drive
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <button
-                          onClick={() => {
-                            const bestScore = Math.min(playerScores.player1Score, playerScores.player2Score);
-                            const usedPlayer = playerScores.player1Score <= playerScores.player2Score 
-                              ? team.players[0] 
-                              : team.players[1];
-                            const drivePlayer = playerScores.driveUsedPlayer || null;
-                            submitScore(bestScore, null, usedPlayer, playerScores.player1Score, playerScores.player2Score, drivePlayer);
-                            setPlayerScores(null);
-                          }}
-                          className="w-full bg-emerald-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 shadow-lg"
-                        >
-                          Submit Scores (Best: {Math.min(playerScores.player1Score, playerScores.player2Score)})
-                          {playerScores.driveUsedPlayer && (
-                            <div className="text-sm opacity-90">Drive: {playerScores.driveUsedPlayer}</div>
-                          )}
-                        </button>
-                      )}
-                    </>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-5 gap-3 mb-6">
-                  {[1,2,3,4,5,6,7,8,9,10].map(score => (
-                    <button
-                      key={score}
-                      onClick={() => submitScore(score === 10 ? 10 : score)}
-                      className={`py-6 rounded-xl font-bold text-2xl transition-all ${
-                        score === currentPar
-                          ? 'bg-blue-600 text-white hover:bg-blue-700'
-                          : score < currentPar
-                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {score === 10 ? '10+' : score}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {scoreConfirmation && (
-                <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl mb-4">
-                  <div className="text-green-800 text-center mb-3">{scoreConfirmation.message}</div>
-                  {scoreConfirmation.undoData && (
-                    <button
-                      onClick={undoScore}
-                      className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 font-semibold flex items-center justify-center gap-2"
-                    >
-                      <RotateCcw />
-                      Undo
-                    </button>
-                  )}
-                </div>
-              )}
-
-              <div className="grid grid-cols-2 gap-3">
-                <button
-                  onClick={() => setView('scorecard')}
-                  className="bg-gray-600 text-white py-4 rounded-xl font-semibold hover:bg-gray-700 flex items-center justify-center gap-2"
-                >
-                  <ClipboardList />
-                  Scorecard
-                </button>
-                <button
-                  onClick={() => setView('leaderboard')}
-                  className="bg-indigo-600 text-white py-4 rounded-xl font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2"
-                >
-                  <BarChart />
-                  Leaderboard
-                </button>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      // SCORECARD VIEW
-      if (view === 'scorecard' && currentEvent && selectedTeam) {
-        const team = currentEvent.teams[selectedTeam];
-        const pars = currentEvent?.meta?.coursePars || Array(18).fill(4);
-        const format = currentEvent.meta.format;
-        const showPlayerUsed = format === 'bestball' || format === 'shamble';
-        const playerUsed = team.playerUsed || {};
-        const player1Scores = team.player1Scores || {};
-        const player2Scores = team.player2Scores || {};
-        const driveUsed = team.driveUsed || {};
-        
-        // Convert scores object to array
-        const scoresObj = team.scores || {};
-        const scoresArray = [];
-        for (let i = 0; i < 18; i++) {
-          scoresArray[i] = scoresObj[i] === -1 ? null : scoresObj[i];
-        }
-        
-        const front9Total = scoresArray.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
-        const back9Total = scoresArray.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
-        const front9Par = pars.slice(0, 9).reduce((sum, p) => sum + p, 0);
-        const back9Par = pars.slice(9, 18).reduce((sum, p) => sum + p, 0);
-        
-        // Get player initials
-        const getInitials = (name) => {
-          return name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
-        };
-
-        
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-            <div className="max-w-2xl mx-auto">
-              <button onClick={() => setView('scoring')} className="text-white mb-6 hover:text-blue-200">← Back to Scoring</button>
-              
-              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">{team.name}</h2>
-                <p className="text-gray-600 mb-6 text-center">Scorecard</p>
-                
-                {/* Front 9 */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Front 9</h3>
-                  <div className="grid grid-cols-9 gap-1 mb-2">
-                    {pars.slice(0, 9).map((par, idx) => {
-                      const playerName = showPlayerUsed ? playerUsed[idx] : null;
-                      const p1Score = player1Scores[idx];
-                      const p2Score = player2Scores[idx];
-                      const showBothScores = showPlayerUsed && p1Score && p2Score;
-                      const drive = format === 'shamble' ? driveUsed[idx] : null;
-                      
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => setEditingHole(idx + 1)}
-                          className="bg-gray-50 hover:bg-blue-50 p-2 rounded text-center cursor-pointer"
-                        >
-                          <div className="text-xs text-gray-500">#{idx + 1}</div>
-                          <div className="text-xs text-gray-400">Par {par}</div>
-                          <div className={`font-bold ${
-                            scoresArray[idx] === null ? 'text-gray-300' :
-                            scoresArray[idx] < par ? 'text-green-600' :
-                            scoresArray[idx] > par ? 'text-red-600' :
-                            'text-gray-900'
-                          }`}>
-                            {scoresArray[idx] || '-'}
-                          </div>
-                          {showBothScores && (
-                            <div className="text-xs text-gray-600 mt-1">
-                              <div className={p1Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
-                              <div className={p2Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
-                            </div>
-                          )}
-                          {drive && (
-                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="text-right text-sm font-semibold">
-                    Total: {front9Total} ({front9Total - front9Par > 0 ? '+' : ''}{front9Total - front9Par})
-                  </div>
-                </div>
-
-                {/* Back 9 */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Back 9</h3>
-                  <div className="grid grid-cols-9 gap-1 mb-2">
-                    {pars.slice(9, 18).map((par, idx) => {
-                      const holeNum = idx + 10;
-                      const holeIdx = idx + 9;
-                      const playerName = showPlayerUsed ? playerUsed[holeIdx] : null;
-                      const p1Score = player1Scores[holeIdx];
-                      const p2Score = player2Scores[holeIdx];
-                      const showBothScores = showPlayerUsed && p1Score && p2Score;
-                      const drive = format === 'shamble' ? driveUsed[holeIdx] : null;
-                      
-                      return (
-                        <button
-                          key={holeIdx}
-                          onClick={() => setEditingHole(holeNum)}
-                          className="bg-gray-50 hover:bg-blue-50 p-2 rounded text-center cursor-pointer"
-                        >
-                          <div className="text-xs text-gray-500">#{holeNum}</div>
-                          <div className="text-xs text-gray-400">Par {par}</div>
-                          <div className={`font-bold ${
-                            scoresArray[holeIdx] === null ? 'text-gray-300' :
-                            scoresArray[holeIdx] < par ? 'text-green-600' :
-                            scoresArray[holeIdx] > par ? 'text-red-600' :
-                            'text-gray-900'
-                          }`}>
-                            {scoresArray[holeIdx] || '-'}
-                          </div>
-                          {showBothScores && (
-                            <div className="text-xs text-gray-600 mt-1">
-                              <div className={p1Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
-                              <div className={p2Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
-                            </div>
-                          )}
-                          {drive && (
-                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="text-right text-sm font-semibold">
-                    Total: {back9Total} ({back9Total - back9Par > 0 ? '+' : ''}{back9Total - back9Par})
-                  </div>
-                </div>
-
-                {/* Total */}
-                <div className="bg-blue-50 p-4 rounded-xl mb-4">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-gray-900">Total Score</span>
-                    <span className="text-2xl font-bold text-blue-600">
-                      {front9Total + back9Total} ({(front9Total + back9Total) - (front9Par + back9Par) > 0 ? '+' : ''}{(front9Total + back9Total) - (front9Par + back9Par)})
-                    </span>
-                  </div>
-                </div>
-                
-                {/* Player Usage Stats for Best Ball / Shamble */}
-                {showPlayerUsed && (
-                  <div className="bg-gray-50 p-4 rounded-xl">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Player Usage</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {team.players.map(player => {
-                        const holesUsed = Object.values(playerUsed).filter(p => p === player).length;
-                        const drivesUsed = format === 'shamble' ? Object.values(driveUsed).filter(p => p === player).length : null;
-                        return (
-                          <div key={player} className="text-center">
-                            <div className="text-lg font-bold text-gray-900">{player}</div>
-                            <div className="text-sm text-gray-600">{holesUsed} hole{holesUsed !== 1 ? 's' : ''}</div>
-                            {drivesUsed !== null && (
-                              <div className="text-xs text-purple-600">{drivesUsed} drive{drivesUsed !== 1 ? 's' : ''}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Edit Score Modal */}
-            {editingHole && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
-                  <h3 className="text-xl font-bold text-gray-900 mb-2">Edit Hole {editingHole}</h3>
-                  <p className="text-gray-600 mb-4">
-                    Par {pars[editingHole - 1]} - Current: {scoresArray[editingHole - 1] || 'Not recorded'}
-                  </p>
-                  
-                  <div className="grid grid-cols-5 gap-2 mb-4">
-                    {[1,2,3,4,5,6,7,8,9,10].map(score => (
-                      <button
-                        key={score}
-                        onClick={() => {
-                          submitScore(score === 10 ? 10 : score, editingHole);
-                          setEditingHole(null);
-                        }}
-                        className="py-4 rounded-lg font-bold text-lg bg-gray-100 hover:bg-blue-100 text-gray-900"
-                      >
-                        {score === 10 ? '10+' : score}
-                      </button>
-                    ))}
-                  </div>
-                  
-                  <button
-                    onClick={() => setEditingHole(null)}
-                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        );
-      }
-
-      // LEADERBOARD VIEW
-      if (view === 'leaderboard' && currentEvent) {
-        const format = currentEvent.meta.format || 'scramble';
-        const isStableford = format === 'stableford';
-        
-        const teams = Object.entries(currentEvent.teams || {}).map(([teamId, team]) => ({
-          teamId,
-          ...team,
-          stats: calculateTeamStats(team)
-        }));
-
-        // Sort: Stableford = high to low, others = low to high
-        teams.sort((a, b) => isStableford ? b.stats.total - a.stats.total : a.stats.total - b.stats.total);
-        
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-            <div className="max-w-2xl mx-auto">
-              <button onClick={() => setView('scoring')} className="text-white mb-6 hover:text-blue-200">← Back to Scoring</button>
-              
-              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-                <div className="text-center mb-8">
-                  <div className="inline-block bg-blue-600 p-3 rounded-xl mb-4">
-                    <Trophy />
-                  </div>
-                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Leaderboard</h2>
-                  <p className="text-gray-600">{currentEvent.meta.name}</p>
-                  <p className="text-sm text-gray-500">{formatNames[format]}</p>
-                </div>
-
-                <div className="space-y-3 mb-8">
-                  {teams.map((team, index) => {
-                    const isExpanded = expandedTeams.includes(team.teamId);
-                    
-                    return (
-                      <div key={team.teamId}>
-                        <button
-                          onClick={() => toggleTeamExpansion(team.teamId)}
-                          className={`w-full p-5 rounded-xl ${
-                            index === 0
-                              ? 'bg-gradient-to-r from-yellow-400 to-yellow-500'
-                              : index === 1
-                              ? 'bg-gradient-to-r from-gray-300 to-gray-400'
-                              : index === 2
-                              ? 'bg-gradient-to-r from-orange-400 to-orange-500'
-                              : 'bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                              <div className={`text-2xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
-                                #{index + 1}
-                              </div>
-                              <div className="text-left">
-                                <div className={`font-bold text-lg ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
-                                  {team.name}
-                                </div>
-                                <div className={`text-sm ${index < 3 ? 'text-white/80' : 'text-gray-600'}`}>
-                                  Thru {team.stats.holesCompleted}
-                                </div>
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-4">
-                              <div className="text-right">
-                                <div className={`text-3xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
-                                  {team.stats.total}
-                                </div>
-                                {!isStableford && (
-                                  <div className={`text-sm font-semibold ${
-                                    team.stats.toPar > 0 
-                                      ? (index < 3 ? 'text-white/80' : 'text-red-600')
-                                      : team.stats.toPar < 0
-                                      ? (index < 3 ? 'text-white/80' : 'text-green-600')
-                                      : (index < 3 ? 'text-white/80' : 'text-gray-600')
-                                  }`}>
-                                    {team.stats.toPar > 0 ? '+' : ''}{team.stats.toPar}
-                                  </div>
-                                )}
-                                {isStableford && (
-                                  <div className={`text-sm font-semibold ${index < 3 ? 'text-white/80' : 'text-gray-600'}`}>
-                                    points
-                                  </div>
-                                )}
-                              </div>
-                              <div className={index < 3 ? 'text-white' : 'text-gray-600'}>
-                                {isExpanded ? <ChevronUp /> : <ChevronDown />}
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                        
-                        {isExpanded && (
-                          <div className="bg-white p-4 rounded-b-xl -mt-2 border-2 border-gray-200">
-                            <div className="text-xs font-semibold text-gray-600 mb-2">Hole-by-Hole</div>
-                            <div className="grid grid-cols-9 gap-1 mb-3">
-                              {Object.entries(team.scores || {}).map(([holeIdx, score]) => {
-                                const idx = parseInt(holeIdx);
-                                const coursePars = currentEvent?.meta?.coursePars || [];
-                                const par = coursePars[idx] || 4;
-                                const displayScore = score === -1 ? null : score;
-                                return (
-                                  <div key={idx} className="text-center">
-                                    <div className="text-xs text-gray-400">#{idx + 1}</div>
-                                    <div className={`font-bold text-sm ${
-                                      displayScore === null ? 'text-gray-300' :
-                                      displayScore < par ? 'text-green-600' :
-                                      displayScore > par ? 'text-red-600' :
-                                      'text-gray-900'
-                                    }`}>
-                                      {displayScore || '-'}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setViewingTeamScorecard(team.teamId);
-                              }}
-                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold text-sm"
-                            >
-                              View Full Scorecard
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Event Code */}
-                <div className="bg-gray-50 p-4 rounded-xl text-center">
-                  <div className="text-xs text-gray-600 mb-2">Share this code with other groups</div>
-                  <div className="flex items-center justify-center gap-3">
-                    <div className="font-mono font-bold text-blue-600 text-xl">{currentEvent.meta.eventCode}</div>
-                    <button
-                      onClick={copyEventCode}
-                      className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700"
-                    >
-                      <Copy />
-                    </button>
-                  </div>
-                  {feedback && <div className="text-sm text-green-600 mt-2">{feedback}</div>}
-                </div>
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      // TEAM SCORECARD VIEWER (for viewing other teams' scorecards from leaderboard)
-      if (viewingTeamScorecard && currentEvent) {
-        const team = currentEvent.teams[viewingTeamScorecard];
-        if (!team) {
-          setViewingTeamScorecard(null);
-          return null;
-        }
-        
-        const pars = currentEvent?.meta?.coursePars || Array(18).fill(4);
-        const format = currentEvent.meta.format;
-        const showPlayerUsed = format === 'bestball' || format === 'shamble';
-        const playerUsed = team.playerUsed || {};
-        const player1Scores = team.player1Scores || {};
-        const player2Scores = team.player2Scores || {};
-        const driveUsed = team.driveUsed || {};
-        
-        const scoresObj = team.scores || {};
-        const scoresArray = [];
-        for (let i = 0; i < 18; i++) {
-          scoresArray[i] = scoresObj[i] === -1 ? null : scoresObj[i];
-        }
-        
-        const front9Total = scoresArray.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
-        const back9Total = scoresArray.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
-        const front9Par = pars.slice(0, 9).reduce((sum, p) => sum + p, 0);
-        const back9Par = pars.slice(9, 18).reduce((sum, p) => sum + p, 0);
-        
-        const getInitials = (name) => {
-          return name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
-        };
-        
-        return (
-          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-            <div className="max-w-2xl mx-auto">
-              <button onClick={() => setViewingTeamScorecard(null)} className="text-white mb-6 hover:text-blue-200">← Back to Leaderboard</button>
-              
-              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-                <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">{team.name}</h2>
-                <p className="text-gray-600 mb-6 text-center">Scorecard</p>
-                
-                {/* Front 9 */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Front 9</h3>
-                  <div className="grid grid-cols-9 gap-1 mb-2">
-                    {pars.slice(0, 9).map((par, idx) => {
-                      const playerName = showPlayerUsed ? playerUsed[idx] : null;
-                      const p1Score = player1Scores[idx];
-                      const p2Score = player2Scores[idx];
-                      const showBothScores = showPlayerUsed && p1Score && p2Score;
-                      const drive = format === 'shamble' ? driveUsed[idx] : null;
-                      
-                      return (
-                        <div key={idx} className="bg-gray-50 p-2 rounded text-center">
-                          <div className="text-xs text-gray-500">#{idx + 1}</div>
-                          <div className="text-xs text-gray-400">Par {par}</div>
-                          <div className={`font-bold ${
-                            scoresArray[idx] === null ? 'text-gray-300' :
-                            scoresArray[idx] < par ? 'text-green-600' :
-                            scoresArray[idx] > par ? 'text-red-600' :
-                            'text-gray-900'
-                          }`}>
-                            {scoresArray[idx] || '-'}
-                          </div>
-                          {showBothScores && (
-                            <div className="text-xs text-gray-600 mt-1">
-                              <div className={p1Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
-                              <div className={p2Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
-                            </div>
-                          )}
-                          {drive && (
-                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="text-right text-sm font-semibold">
-                    Total: {front9Total} ({front9Total - front9Par > 0 ? '+' : ''}{front9Total - front9Par})
-                  </div>
-                </div>
-
-                {/* Back 9 */}
-                <div className="mb-6">
-                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Back 9</h3>
-                  <div className="grid grid-cols-9 gap-1 mb-2">
-                    {pars.slice(9, 18).map((par, idx) => {
-                      const holeNum = idx + 10;
-                      const holeIdx = idx + 9;
-                      const playerName = showPlayerUsed ? playerUsed[holeIdx] : null;
-                      const p1Score = player1Scores[holeIdx];
-                      const p2Score = player2Scores[holeIdx];
-                      const showBothScores = showPlayerUsed && p1Score && p2Score;
-                      const drive = format === 'shamble' ? driveUsed[holeIdx] : null;
-                      
-                      return (
-                        <div key={holeIdx} className="bg-gray-50 p-2 rounded text-center">
-                          <div className="text-xs text-gray-500">#{holeNum}</div>
-                          <div className="text-xs text-gray-400">Par {par}</div>
-                          <div className={`font-bold ${
-                            scoresArray[holeIdx] === null ? 'text-gray-300' :
-                            scoresArray[holeIdx] < par ? 'text-green-600' :
-                            scoresArray[holeIdx] > par ? 'text-red-600' :
-                            'text-gray-900'
-                          }`}>
-                            {scoresArray[holeIdx] || '-'}
-                          </div>
-                          {showBothScores && (
-                            <div className="text-xs text-gray-600 mt-1">
-                              <div className={p1Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
-                              <div className={p2Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
-                            </div>
-                          )}
-                          {drive && (
-                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <div className="text-right text-sm font-semibold">
-                    Total: {back9Total} ({back9Total - back9Par > 0 ? '+' : ''}{back9Total - back9Par})
-                  </div>
-                </div>
-
-                {/* Total */}
-                <div className="bg-blue-50 p-4 rounded-xl mb-4">
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-gray-900">Total Score</span>
-                    <span className="text-2xl font-bold text-blue-600">
-                      {front9Total + back9Total} ({(front9Total + back9Total) - (front9Par + back9Par) > 0 ? '+' : ''}{(front9Total + back9Total) - (front9Par + back9Par)})
-                    </span>
-                  </div>
-                </div>
-                
-                {/* Player Usage Stats */}
-                {showPlayerUsed && (
-                  <div className="bg-gray-50 p-4 rounded-xl">
-                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Player Usage</h3>
-                    <div className="grid grid-cols-2 gap-3">
-                      {team.players.map(player => {
-                        const holesUsed = Object.values(playerUsed).filter(p => p === player).length;
-                        const drivesUsed = format === 'shamble' ? Object.values(driveUsed).filter(p => p === player).length : null;
-                        return (
-                          <div key={player} className="text-center">
-                            <div className="text-lg font-bold text-gray-900">{player}</div>
-                            <div className="text-sm text-gray-600">{holesUsed} hole{holesUsed !== 1 ? 's' : ''}</div>
-                            {drivesUsed !== null && (
-                              <div className="text-xs text-purple-600">{drivesUsed} drive{drivesUsed !== 1 ? 's' : ''}</div>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      }
-
-      // EDIT EVENT VIEW
+      // EDIT EVENT VIEW (CONTINUED WITH BUG FIXES)
       if (view === 'edit-event' && editingEvent && editForm) {
         const saveEventEdits = async () => {
           try {
             const course = courses.find(c => c.id === editForm.courseId);
             
+            // Prepare updates object
             const updates = {
               [`events/${editingEvent.id}/meta/name`]: editForm.name,
               [`events/${editingEvent.id}/meta/courseId`]: course.id,
@@ -3058,33 +2145,12 @@
               [`events/${editingEvent.id}/meta/format`]: editForm.format
             };
 
-            // Update teams
-            const newTeams = {};
-            editForm.teams.forEach((team, index) => {
-              // Try to get existing scores, or create new empty scores
-              // Handle case where editingEvent.teams might be undefined or empty
-              const existingTeam = (editingEvent.teams || {})[`team${index + 1}`];
-              const scores = existingTeam?.scores || {};
-              
-              // Ensure all holes have a value
-              for (let i = 0; i < 18; i++) {
-                if (!(i in scores)) scores[i] = -1;
-              }
-              
-              newTeams[`team${index + 1}`] = {
-                name: team.name,
-                players: editForm.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
-                scores: scores,
-                currentHole: existingTeam?.currentHole || editForm.startingHole,
-                // Preserve other team data if it exists
-                ...(existingTeam?.playerUsed && { playerUsed: existingTeam.playerUsed }),
-                ...(existingTeam?.player1Scores && { player1Scores: existingTeam.player1Scores }),
-                ...(existingTeam?.player2Scores && { player2Scores: existingTeam.player2Scores }),
-                ...(existingTeam?.driveUsed && { driveUsed: existingTeam.driveUsed })
-              };
-            });
-
-            updates[`events/${editingEvent.id}/teams`] = newTeams;
+            // Save teams with their current data preserved
+            const currentTeamsSnapshot = await database.ref(`events/${editingEvent.id}/teams`).once('value');
+            const currentTeams = currentTeamsSnapshot.val() || {};
+            
+            // Keep all current team data
+            updates[`events/${editingEvent.id}/teams`] = currentTeams;
 
             await database.ref().update(updates);
             
@@ -3108,7 +2174,17 @@
               <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
                 <h2 className="text-3xl font-bold text-gray-900 mb-6">Edit Event</h2>
 
-                {feedback && <div className="bg-blue-50 border-2 border-blue-200 text-blue-800 p-3 rounded-lg mb-4">{feedback}</div>}
+                {feedback && (
+                  <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
+                    feedback.includes('Error') || feedback.includes('not found')
+                      ? 'bg-red-50 border-red-200 text-red-800'
+                      : feedback.includes('Player') || feedback.includes('Team')
+                      ? 'bg-green-50 border-green-200 text-green-800'
+                      : 'bg-blue-50 border-blue-200 text-blue-800'
+                  }`}>
+                    {feedback}
+                  </div>
+                )}
 
                 <div className="space-y-4">
                   <div>
@@ -3235,7 +2311,6 @@
                           .filter(([_, reg]) => reg.status === 'registered')
                           .map(([uid, reg]) => ({ uid, ...reg }));
                         
-                        // Find players assigned to teams
                         const assignedPlayerIds = new Set();
                         Object.values(editingEvent.teams || {}).forEach(team => {
                           (team.playerIds || []).forEach(id => assignedPlayerIds.add(id));
@@ -3245,7 +2320,6 @@
                         
                         return (
                           <>
-                            {/* Unassigned Players Pool */}
                             {unassignedPlayers.length > 0 && (
                               <div className="mb-6">
                                 <div className="text-sm font-semibold text-gray-700 mb-2">
@@ -3264,7 +2338,6 @@
                               </div>
                             )}
                             
-                            {/* Teams */}
                             <div className="mb-4">
                               <div className="text-sm font-semibold text-gray-700 mb-2">
                                 Teams ({Object.keys(editingEvent.teams || {}).length})
@@ -3274,7 +2347,58 @@
                                 <div className="space-y-3">
                                   {Object.entries(editingEvent.teams || {}).map(([teamKey, team]) => (
                                     <div key={teamKey} className="bg-gray-50 border-2 border-gray-200 p-4 rounded-xl">
-                                      <div className="font-semibold text-gray-900 mb-2">{team.name}</div>
+                                      {/* Team Name - Editable */}
+                                      <div className="mb-3">
+                                        {editingTeamName === teamKey ? (
+                                          <div className="flex gap-2">
+                                            <input
+                                              type="text"
+                                              value={tempTeamName}
+                                              onChange={(e) => setTempTeamName(e.target.value)}
+                                              className="flex-1 px-3 py-2 rounded-lg border-2 border-blue-500 focus:outline-none font-semibold"
+                                              autoFocus
+                                              onKeyPress={(e) => {
+                                                if (e.key === 'Enter' && tempTeamName.trim()) {
+                                                  updateTeamName(editingEvent.id, teamKey, tempTeamName.trim());
+                                                }
+                                              }}
+                                            />
+                                            <button
+                                              onClick={() => {
+                                                if (tempTeamName.trim()) {
+                                                  updateTeamName(editingEvent.id, teamKey, tempTeamName.trim());
+                                                }
+                                              }}
+                                              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 font-semibold text-sm"
+                                            >
+                                              Save
+                                            </button>
+                                            <button
+                                              onClick={() => {
+                                                setEditingTeamName(null);
+                                                setTempTeamName('');
+                                              }}
+                                              className="bg-gray-400 text-white px-4 py-2 rounded-lg hover:bg-gray-500 font-semibold text-sm"
+                                            >
+                                              Cancel
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="flex items-center gap-2">
+                                            <span className="font-semibold text-gray-900 flex-1">{team.name}</span>
+                                            <button
+                                              onClick={() => {
+                                                setEditingTeamName(teamKey);
+                                                setTempTeamName(team.name);
+                                              }}
+                                              className="text-blue-600 hover:text-blue-700 p-1"
+                                              title="Edit team name"
+                                            >
+                                              <Edit />
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
                                       
                                       {/* Team members */}
                                       {(team.playerIds || []).length > 0 ? (
@@ -3337,113 +2461,6 @@
                     </div>
                   )}
 
-                  {/* OLD MANUAL TEAMS SECTION (for standalone events or stableford) */}
-                  {!editingEvent.meta.leagueId && (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-3">
-                      {editForm.format === 'stableford' ? 'Players' : 'Teams'} ({editForm.teams.length})
-                    </label>
-                    
-                    {editForm.teams.length > 0 && (
-                      <div className="space-y-2 mb-4">
-                        {editForm.teams.map((team, idx) => (
-                          <div key={idx} className="bg-gray-50 p-4 rounded-xl flex items-center justify-between">
-                            <div>
-                              <div className="font-semibold text-gray-900">{team.name}</div>
-                              {editForm.format !== 'stableford' && (
-                                <div className="text-sm text-gray-600">{team.player1} & {team.player2}</div>
-                              )}
-                            </div>
-                            <button 
-                              onClick={() => {
-                                const newTeams = editForm.teams.filter((_, i) => i !== idx);
-                                setEditForm({ ...editForm, teams: newTeams });
-                              }}
-                              className="text-red-600 hover:text-red-700 p-2"
-                            >
-                              <Trash />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {editForm.teams.length < (editForm.format === 'stableford' ? 20 : 6) && (
-                      <div className="bg-blue-50 p-4 rounded-xl space-y-3">
-                        {editForm.format === 'stableford' ? (
-                          <>
-                            <input
-                              type="text"
-                              value={newTeam.name}
-                              onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
-                              placeholder="Player name"
-                              className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                            />
-                            <button
-                              onClick={() => {
-                                if (newTeam.name.trim()) {
-                                  const newTeams = [...editForm.teams, { 
-                                    id: `team${editForm.teams.length + 1}`, 
-                                    name: newTeam.name, 
-                                    player1: newTeam.name,
-                                    player2: ''
-                                  }];
-                                  setEditForm({ ...editForm, teams: newTeams });
-                                  setNewTeam({ name: '', player1: '', player2: '' });
-                                }
-                              }}
-                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
-                            >
-                              Add Player
-                            </button>
-                          </>
-                        ) : (
-                          <>
-                            <input
-                              type="text"
-                              value={newTeam.name}
-                              onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
-                              placeholder="Team name"
-                              className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                            />
-                            <div className="grid grid-cols-2 gap-3">
-                              <input
-                                type="text"
-                                value={newTeam.player1}
-                                onChange={(e) => setNewTeam({ ...newTeam, player1: e.target.value })}
-                                placeholder="Player 1"
-                                className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                              />
-                              <input
-                                type="text"
-                                value={newTeam.player2}
-                                onChange={(e) => setNewTeam({ ...newTeam, player2: e.target.value })}
-                                placeholder="Player 2"
-                                className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                              />
-                            </div>
-                            <button
-                              onClick={() => {
-                                if (newTeam.name.trim() && newTeam.player1.trim() && newTeam.player2.trim()) {
-                                  const newTeams = [...editForm.teams, { 
-                                    id: `team${editForm.teams.length + 1}`, 
-                                    ...newTeam 
-                                  }];
-                                  setEditForm({ ...editForm, teams: newTeams });
-                                  setNewTeam({ name: '', player1: '', player2: '' });
-                                }
-                              }}
-                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
-                            >
-                              Add Team
-                            </button>
-                          </>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                  )}
-
                   <button onClick={saveEventEdits} className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700">
                     Save Changes
                   </button>
@@ -3454,7 +2471,7 @@
         );
       }
 
-      // EVENT DETAILS VIEW (for players)
+      // EVENT DETAILS VIEW (for players viewing locked/open events)
       if (view === 'event-details' && editingEvent) {
         const teamCount = Object.keys(editingEvent.teams || {}).length;
         const status = editingEvent.meta.status || 'draft';
@@ -3469,10 +2486,12 @@
 
         // Find user's team if assigned
         let userTeam = null;
-        if (isRegistered) {
+        let userTeamKey = null;
+        if (isRegistered && currentUser) {
           for (const [teamKey, team] of Object.entries(editingEvent.teams || {})) {
             if (team.playerIds && team.playerIds.includes(currentUser.uid)) {
               userTeam = team;
+              userTeamKey = teamKey;
               break;
             }
           }
@@ -3491,7 +2510,13 @@
                 </div>
 
                 {feedback && (
-                  <div className="bg-blue-50 border-2 border-blue-200 text-blue-800 p-3 rounded-lg mb-4">{feedback}</div>
+                  <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
+                    feedback.includes('Error') || feedback.includes('not found')
+                      ? 'bg-red-50 border-red-200 text-red-800'
+                      : 'bg-green-50 border-green-200 text-green-800'
+                  }`}>
+                    {feedback}
+                  </div>
                 )}
 
                 {/* Registration Status/Actions */}
@@ -3513,6 +2538,7 @@
                   </div>
                 )}
 
+                {/* User's registration and team status */}
                 {isRegistered && (
                   <div className="mb-6">
                     <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl mb-3">
@@ -3521,13 +2547,26 @@
                         <span className="font-semibold">You're Registered</span>
                       </div>
                       {userTeam && (
-                        <div className="text-sm text-green-700 mt-2">
-                          Team: {userTeam.name}
+                        <div className="mt-3 p-3 bg-blue-50 border-2 border-blue-300 rounded-lg">
+                          <div className="text-sm text-blue-700 font-semibold mb-2">Your Team</div>
+                          <div className="font-bold text-blue-900 text-lg">{userTeam.name}</div>
+                          <div className="text-sm text-blue-700 mt-1">
+                            {userTeam.players.map((player, idx) => (
+                              <div key={idx} className={currentUser && userTeam.playerIds[idx] === currentUser.uid ? 'font-bold' : ''}>
+                                {currentUser && userTeam.playerIds[idx] === currentUser.uid ? '→ ' : ''}{player}
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       )}
                       {!userTeam && (status === 'locked' || status === 'active') && (
                         <div className="text-sm text-green-700 mt-2">
                           Teams not yet announced
+                        </div>
+                      )}
+                      {!userTeam && status === 'open' && (
+                        <div className="text-sm text-green-700 mt-2">
+                          Not yet assigned to a team
                         </div>
                       )}
                     </div>
@@ -3565,24 +2604,31 @@
                       <div className="text-sm text-gray-600 mb-2">Registered ({registeredPlayers.length})</div>
                       <div className="space-y-1">
                         {registeredPlayers.map((player) => {
-                          // Find player's team
                           let playerTeam = null;
-                          for (const team of Object.values(editingEvent.teams || {})) {
+                          let playerTeamKey = null;
+                          for (const [teamKey, team] of Object.entries(editingEvent.teams || {})) {
                             if (team.playerIds && team.playerIds.includes(player.uid)) {
                               playerTeam = team;
+                              playerTeamKey = teamKey;
                               break;
                             }
                           }
                           
+                          const isCurrentUser = currentUser && player.uid === currentUser.uid;
+                          
                           return (
-                            <div key={player.uid} className="text-sm flex items-center justify-between">
+                            <div key={player.uid} className={`text-sm flex items-center justify-between p-2 rounded ${isCurrentUser ? 'bg-blue-100 border border-blue-300' : ''}`}>
                               <div>
                                 <span className="mr-1">✓</span>
-                                <span className="font-semibold">{player.displayName}</span>
+                                <span className={`font-semibold ${isCurrentUser ? 'text-blue-900' : ''}`}>
+                                  {player.displayName} {isCurrentUser && '(You)'}
+                                </span>
                                 {player.handicap != null && <span className="text-gray-600"> ({player.handicap})</span>}
                               </div>
                               {playerTeam && (
-                                <span className="text-xs text-gray-500">Team: {playerTeam.name}</span>
+                                <span className={`text-xs ${isCurrentUser ? 'text-blue-700 font-semibold' : 'text-gray-500'}`}>
+                                  Team: {playerTeam.name}
+                                </span>
                               )}
                               {!playerTeam && (status === 'locked' || status === 'active') && (
                                 <span className="text-xs text-gray-500">Unassigned</span>
@@ -3594,20 +2640,862 @@
                     </div>
                   )}
 
-                  {teamCount > 0 && (
+                  {/* Teams view for locked/active events */}
+                  {teamCount > 0 && (status === 'locked' || status === 'active') && (
                     <div className="bg-gray-50 p-4 rounded-xl">
                       <div className="text-sm text-gray-600 mb-2">Teams ({teamCount})</div>
                       <div className="space-y-2">
-                        {Object.values(editingEvent.teams).map((team, idx) => (
-                          <div key={idx} className="text-sm">
-                            <span className="font-semibold">{team.name}</span>
-                            <span className="text-gray-600"> - {team.players.join(' & ')}</span>
-                          </div>
-                        ))}
+                        {Object.entries(editingEvent.teams).map(([teamKey, team], idx) => {
+                          const isUserTeam = userTeamKey === teamKey;
+                          return (
+                            <div key={idx} className={`text-sm p-3 rounded-lg ${isUserTeam ? 'bg-blue-100 border-2 border-blue-400' : 'bg-white'}`}>
+                              <span className={`font-semibold ${isUserTeam ? 'text-blue-900' : ''}`}>
+                                {team.name} {isUserTeam && '(Your Team)'}
+                              </span>
+                              <div className={`text-xs mt-1 ${isUserTeam ? 'text-blue-700' : 'text-gray-600'}`}>
+                                {team.players.map((player, pidx) => (
+                                  <div key={pidx} className={currentUser && team.playerIds && team.playerIds[pidx] === currentUser.uid ? 'font-bold' : ''}>
+                                    {currentUser && team.playerIds && team.playerIds[pidx] === currentUser.uid ? '→ ' : ''}{player}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
                 </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // EVENT LOBBY VIEW
+      if (view === 'event-lobby' && currentEvent) {
+        const teams = Object.entries(currentEvent.teams || {});
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => { setView('home'); setCurrentEvent(null); }} className="text-white mb-6 hover:text-blue-200">← Leave Event</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <div className="text-center mb-8">
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">{currentEvent.meta.name}</h2>
+                  <p className="text-gray-600 mb-2">{currentEvent.meta.courseName} - {currentEvent.meta.date}</p>
+                  <p className="text-sm text-gray-500 mb-4">{formatNames[currentEvent.meta.format || 'scramble']}</p>
+                  <div className="inline-block bg-blue-50 px-4 py-2 rounded-lg">
+                    <div className="text-xs text-gray-600 mb-1">Event Code</div>
+                    <div className="font-mono font-bold text-blue-600 text-xl">{currentEvent.meta.eventCode}</div>
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-lg font-semibold text-gray-900 mb-3">Teams</h3>
+                  <div className="space-y-3">
+                    {teams.map(([teamId, team]) => (
+                      <div key={teamId} className="bg-gray-50 p-4 rounded-xl">
+                        <div className="font-semibold text-gray-900 mb-1">{team.name}</div>
+                        <div className="text-sm text-gray-600">{team.players.join(' & ')}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setView('team-selection')}
+                  className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
+                >
+                  Select Team & Start Scoring
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // TEAM SELECTION VIEW
+      if (view === 'team-selection' && currentEvent) {
+        const teams = Object.entries(currentEvent.teams || {});
+        const isStableford = currentEvent.meta.format === 'stableford';
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('event-lobby')} className="text-white mb-6 hover:text-blue-200">← Back</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-3xl font-bold text-gray-900 mb-2" style={{ fontFamily: 'Georgia, serif' }}>
+                  {isStableford ? 'Select Your Player' : 'Select Your Team'}
+                </h2>
+                <p className="text-gray-600 mb-8">
+                  {isStableford ? 'Choose which player you\'re scoring for' : 'Choose which team you\'re scoring for'}
+                </p>
+                
+                <div className="space-y-3">
+                  {teams.map(([teamId, team]) => (
+                    <button
+                      key={teamId}
+                      onClick={() => selectTeam(teamId)}
+                      className="w-full bg-gray-50 hover:bg-blue-50 p-6 rounded-xl transition-all text-left border-2 border-transparent hover:border-blue-500"
+                    >
+                      <div className="font-bold text-xl text-gray-900 mb-2">{team.name}</div>
+                      <div className="text-gray-600">{team.players.join(' & ')}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // SCORING VIEW
+      if (view === 'scoring' && currentEvent && selectedTeam) {
+        if (!currentEvent.teams || !currentEvent.teams[selectedTeam]) {
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+              <div className="bg-white/95 p-8 rounded-2xl text-center">
+                <p className="text-gray-900 mb-4">Loading team data...</p>
+                <button onClick={() => setView('team-selection')} className="text-blue-600">Go Back</button>
+              </div>
+            </div>
+          );
+        }
+
+        const team = currentEvent.teams[selectedTeam];
+        const currentHoleNum = team.currentHole;
+        const coursePars = currentEvent?.meta?.coursePars || [];
+        const currentPar = coursePars[currentHoleNum - 1] || 4;
+        const stats = calculateTeamStats(team);
+        const isStableford = currentEvent.meta.format === 'stableford';
+        
+        const roundComplete = stats.holesCompleted >= 18;
+        
+        if (roundComplete) {
+          return (
+            <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8 max-w-md w-full text-center">
+                <div className="text-6xl mb-4">🏆</div>
+                <h2 className="text-3xl font-bold text-gray-900 mb-2">Round Complete!</h2>
+                <p className="text-gray-600 mb-4">{team.name}</p>
+                <div className="bg-gray-50 p-4 rounded-xl mb-6">
+                  <div className="text-sm text-gray-600 mb-1">{isStableford ? 'Total Points' : 'Final Score'}</div>
+                  <div className="text-4xl font-bold text-blue-600 mb-1">{stats.total}</div>
+                  {!isStableford && (
+                    <div className={`text-lg font-semibold ${stats.toPar > 0 ? 'text-red-600' : stats.toPar < 0 ? 'text-green-600' : 'text-gray-900'}`}>
+                      {stats.toPar > 0 ? '+' : ''}{stats.toPar}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-3">
+                  <button
+                    onClick={() => setView('leaderboard')}
+                    className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
+                  >
+                    View Leaderboard
+                  </button>
+                  <button
+                    onClick={() => setView('scorecard')}
+                    className="w-full bg-gray-600 text-white py-3 rounded-xl font-semibold hover:bg-gray-700"
+                  >
+                    View Scorecard
+                  </button>
+                  <button
+                    onClick={() => setView('team-selection')}
+                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
+                  >
+                    Back to Team Selection
+                  </button>
+                </div>
+              </div>
+            </div>
+          );
+        }
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex flex-col">
+            <button onClick={() => setView('team-selection')} className="text-white mb-4 hover:text-blue-200">← Back</button>
+            
+            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-6">
+              <div className="text-center mb-4">
+                <h2 className="text-2xl font-bold text-gray-900">{currentEvent.meta.name}</h2>
+                <div className="text-lg text-gray-600">{team.name}</div>
+                <div className="text-sm text-gray-500">{formatNames[currentEvent.meta.format || 'scramble']}</div>
+              </div>
+              
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-sm text-gray-600">Hole</div>
+                  <div className="text-3xl font-bold text-blue-600">{currentHoleNum}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Par</div>
+                  <div className="text-3xl font-bold text-gray-900">{currentPar}</div>
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">{isStableford ? 'Points' : 'Score'}</div>
+                  <div className={`text-3xl font-bold ${
+                    isStableford ? 'text-blue-600' :
+                    stats.toPar > 0 ? 'text-red-600' : 
+                    stats.toPar < 0 ? 'text-green-600' : 
+                    'text-gray-900'
+                  }`}>
+                    {isStableford ? stats.total : (stats.toPar > 0 ? '+' : '') + stats.toPar}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6">
+              <h3 className="text-xl font-semibold text-gray-900 mb-4 text-center">Enter Score</h3>
+              
+              {(currentEvent.meta.format === 'bestball' || currentEvent.meta.format === 'shamble') ? (
+                <div className="space-y-4 mb-6">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{team.players[0]}'s Score</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                        <button
+                          key={score}
+                          onClick={() => {
+                            const actualScore = score === 10 ? 10 : score;
+                            setPlayerScores({ ...playerScores, player1Score: actualScore });
+                          }}
+                          className={`py-4 rounded-lg font-bold text-lg transition-all ${
+                            playerScores?.player1Score === (score === 10 ? 10 : score)
+                              ? 'bg-blue-600 text-white'
+                              : score === currentPar
+                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                              : score < currentPar
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {score === 10 ? '10+' : score}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{team.players[1]}'s Score</label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                        <button
+                          key={score}
+                          onClick={() => {
+                            const actualScore = score === 10 ? 10 : score;
+                            setPlayerScores({ ...playerScores, player2Score: actualScore });
+                          }}
+                          className={`py-4 rounded-lg font-bold text-lg transition-all ${
+                            playerScores?.player2Score === (score === 10 ? 10 : score)
+                              ? 'bg-blue-600 text-white'
+                              : score === currentPar
+                              ? 'bg-blue-100 text-blue-700 hover:bg-blue-200'
+                              : score < currentPar
+                              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                              : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                          }`}
+                        >
+                          {score === 10 ? '10+' : score}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  
+                  {playerScores?.player1Score && playerScores?.player2Score && (
+                    <>
+                      {currentEvent.meta.format === 'shamble' && !playerScores.driveSelected ? (
+                        <div className="bg-purple-50 p-4 rounded-xl">
+                          <h4 className="text-sm font-semibold text-gray-700 mb-3 text-center">Whose drive was used?</h4>
+                          <div className="grid grid-cols-2 gap-3">
+                            <button
+                              onClick={() => setPlayerScores({ ...playerScores, driveUsedPlayer: team.players[0], driveSelected: true })}
+                              className="bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 font-semibold"
+                            >
+                              {team.players[0]}'s Drive
+                            </button>
+                            <button
+                              onClick={() => setPlayerScores({ ...playerScores, driveUsedPlayer: team.players[1], driveSelected: true })}
+                              className="bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 font-semibold"
+                            >
+                              {team.players[1]}'s Drive
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            const bestScore = Math.min(playerScores.player1Score, playerScores.player2Score);
+                            const usedPlayer = playerScores.player1Score <= playerScores.player2Score 
+                              ? team.players[0] 
+                              : team.players[1];
+                            const drivePlayer = playerScores.driveUsedPlayer || null;
+                            submitScore(bestScore, null, usedPlayer, playerScores.player1Score, playerScores.player2Score, drivePlayer);
+                            setPlayerScores(null);
+                          }}
+                          className="w-full bg-emerald-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-emerald-700 shadow-lg"
+                        >
+                          Submit Scores (Best: {Math.min(playerScores.player1Score, playerScores.player2Score)})
+                          {playerScores.driveUsedPlayer && (
+                            <div className="text-sm opacity-90">Drive: {playerScores.driveUsedPlayer}</div>
+                          )}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-5 gap-3 mb-6">
+                  {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                    <button
+                      key={score}
+                      onClick={() => submitScore(score === 10 ? 10 : score)}
+                      className={`py-6 rounded-xl font-bold text-2xl transition-all ${
+                        score === currentPar
+                          ? 'bg-blue-600 text-white hover:bg-blue-700'
+                          : score < currentPar
+                          ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {score === 10 ? '10+' : score}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {scoreConfirmation && (
+                <div className="bg-green-50 border-2 border-green-200 p-4 rounded-xl mb-4">
+                  <div className="text-green-800 text-center mb-3">{scoreConfirmation.message}</div>
+                  {scoreConfirmation.undoData && (
+                    <button
+                      onClick={undoScore}
+                      className="w-full bg-orange-500 text-white py-2 rounded-lg hover:bg-orange-600 font-semibold flex items-center justify-center gap-2"
+                    >
+                      <RotateCcw />
+                      Undo
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  onClick={() => setView('scorecard')}
+                  className="bg-gray-600 text-white py-4 rounded-xl font-semibold hover:bg-gray-700 flex items-center justify-center gap-2"
+                >
+                  <ClipboardList />
+                  Scorecard
+                </button>
+                <button
+                  onClick={() => setView('leaderboard')}
+                  className="bg-indigo-600 text-white py-4 rounded-xl font-semibold hover:bg-indigo-700 flex items-center justify-center gap-2"
+                >
+                  <BarChart />
+                  Leaderboard
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // SCORECARD VIEW
+      if (view === 'scorecard' && currentEvent && selectedTeam) {
+        const team = currentEvent.teams[selectedTeam];
+        const pars = currentEvent?.meta?.coursePars || Array(18).fill(4);
+        const format = currentEvent.meta.format;
+        const showPlayerUsed = format === 'bestball' || format === 'shamble';
+        const playerUsed = team.playerUsed || {};
+        const player1Scores = team.player1Scores || {};
+        const player2Scores = team.player2Scores || {};
+        const driveUsed = team.driveUsed || {};
+        
+        const scoresObj = team.scores || {};
+        const scoresArray = [];
+        for (let i = 0; i < 18; i++) {
+          scoresArray[i] = scoresObj[i] === -1 ? null : scoresObj[i];
+        }
+        
+        const front9Total = scoresArray.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
+        const back9Total = scoresArray.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
+        const front9Par = pars.slice(0, 9).reduce((sum, p) => sum + p, 0);
+        const back9Par = pars.slice(9, 18).reduce((sum, p) => sum + p, 0);
+        
+        const getInitials = (name) => {
+          return name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
+        };
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('scoring')} className="text-white mb-6 hover:text-blue-200">← Back to Scoring</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">{team.name}</h2>
+                <p className="text-gray-600 mb-6 text-center">Scorecard</p>
+                
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Front 9</h3>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {pars.slice(0, 9).map((par, idx) => {
+                      const playerName = showPlayerUsed ? playerUsed[idx] : null;
+                      const p1Score = player1Scores[idx];
+                      const p2Score = player2Scores[idx];
+                      const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      const drive = format === 'shamble' ? driveUsed[idx] : null;
+                      
+                      return (
+                        <button
+                          key={idx}
+                          onClick={() => setEditingHole(idx + 1)}
+                          className="bg-gray-50 hover:bg-blue-50 p-2 rounded text-center cursor-pointer"
+                        >
+                          <div className="text-xs text-gray-500">#{idx + 1}</div>
+                          <div className="text-xs text-gray-400">Par {par}</div>
+                          <div className={`font-bold ${
+                            scoresArray[idx] === null ? 'text-gray-300' :
+                            scoresArray[idx] < par ? 'text-green-600' :
+                            scoresArray[idx] > par ? 'text-red-600' :
+                            'text-gray-900'
+                          }`}>
+                            {scoresArray[idx] || '-'}
+                          </div>
+                          {showBothScores && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <div className={p1Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
+                              <div className={p2Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
+                            </div>
+                          )}
+                          {drive && (
+                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right text-sm font-semibold">
+                    Total: {front9Total} ({front9Total - front9Par > 0 ? '+' : ''}{front9Total - front9Par})
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Back 9</h3>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {pars.slice(9, 18).map((par, idx) => {
+                      const holeNum = idx + 10;
+                      const holeIdx = idx + 9;
+                      const playerName = showPlayerUsed ? playerUsed[holeIdx] : null;
+                      const p1Score = player1Scores[holeIdx];
+                      const p2Score = player2Scores[holeIdx];
+                      const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      const drive = format === 'shamble' ? driveUsed[holeIdx] : null;
+                      
+                      return (
+                        <button
+                          key={holeIdx}
+                          onClick={() => setEditingHole(holeNum)}
+                          className="bg-gray-50 hover:bg-blue-50 p-2 rounded text-center cursor-pointer"
+                        >
+                          <div className="text-xs text-gray-500">#{holeNum}</div>
+                          <div className="text-xs text-gray-400">Par {par}</div>
+                          <div className={`font-bold ${
+                            scoresArray[holeIdx] === null ? 'text-gray-300' :
+                            scoresArray[holeIdx] < par ? 'text-green-600' :
+                            scoresArray[holeIdx] > par ? 'text-red-600' :
+                            'text-gray-900'
+                          }`}>
+                            {scoresArray[holeIdx] || '-'}
+                          </div>
+                          {showBothScores && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <div className={p1Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
+                              <div className={p2Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
+                            </div>
+                          )}
+                          {drive && (
+                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right text-sm font-semibold">
+                    Total: {back9Total} ({back9Total - back9Par > 0 ? '+' : ''}{back9Total - back9Par})
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded-xl mb-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-gray-900">Total Score</span>
+                    <span className="text-2xl font-bold text-blue-600">
+                      {front9Total + back9Total} ({(front9Total + back9Total) - (front9Par + back9Par) > 0 ? '+' : ''}{(front9Total + back9Total) - (front9Par + back9Par)})
+                    </span>
+                  </div>
+                </div>
+                
+                {showPlayerUsed && (
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Player Usage</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {team.players.map(player => {
+                        const holesUsed = Object.values(playerUsed).filter(p => p === player).length;
+                        const drivesUsed = format === 'shamble' ? Object.values(driveUsed).filter(p => p === player).length : null;
+                        return (
+                          <div key={player} className="text-center">
+                            <div className="text-lg font-bold text-gray-900">{player}</div>
+                            <div className="text-sm text-gray-600">{holesUsed} hole{holesUsed !== 1 ? 's' : ''}</div>
+                            {drivesUsed !== null && (
+                              <div className="text-xs text-purple-600">{drivesUsed} drive{drivesUsed !== 1 ? 's' : ''}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {editingHole && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+                <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">Edit Hole {editingHole}</h3>
+                  <p className="text-gray-600 mb-4">
+                    Par {pars[editingHole - 1]} - Current: {scoresArray[editingHole - 1] || 'Not recorded'}
+                  </p>
+                  
+                  <div className="grid grid-cols-5 gap-2 mb-4">
+                    {[1,2,3,4,5,6,7,8,9,10].map(score => (
+                      <button
+                        key={score}
+                        onClick={() => {
+                          submitScore(score === 10 ? 10 : score, editingHole);
+                          setEditingHole(null);
+                        }}
+                        className="py-4 rounded-lg font-bold text-lg bg-gray-100 hover:bg-blue-100 text-gray-900"
+                      >
+                        {score === 10 ? '10+' : score}
+                      </button>
+                    ))}
+                  </div>
+                  
+                  <button
+                    onClick={() => setEditingHole(null)}
+                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold hover:bg-gray-300"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      // LEADERBOARD VIEW
+      if (view === 'leaderboard' && currentEvent) {
+        const format = currentEvent.meta.format || 'scramble';
+        const isStableford = format === 'stableford';
+        
+        const teams = Object.entries(currentEvent.teams || {}).map(([teamId, team]) => ({
+          teamId,
+          ...team,
+          stats: calculateTeamStats(team)
+        }));
+
+        teams.sort((a, b) => isStableford ? b.stats.total - a.stats.total : a.stats.total - b.stats.total);
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setView('scoring')} className="text-white mb-6 hover:text-blue-200">← Back to Scoring</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <div className="text-center mb-8">
+                  <div className="inline-block bg-blue-600 p-3 rounded-xl mb-4">
+                    <Trophy />
+                  </div>
+                  <h2 className="text-3xl font-bold text-gray-900 mb-2">Leaderboard</h2>
+                  <p className="text-gray-600">{currentEvent.meta.name}</p>
+                  <p className="text-sm text-gray-500">{formatNames[format]}</p>
+                </div>
+
+                <div className="space-y-3 mb-8">
+                  {teams.map((team, index) => {
+                    const isExpanded = expandedTeams.includes(team.teamId);
+                    
+                    return (
+                      <div key={team.teamId}>
+                        <button
+                          onClick={() => toggleTeamExpansion(team.teamId)}
+                          className={`w-full p-5 rounded-xl ${
+                            index === 0
+                              ? 'bg-gradient-to-r from-yellow-400 to-yellow-500'
+                              : index === 1
+                              ? 'bg-gradient-to-r from-gray-300 to-gray-400'
+                              : index === 2
+                              ? 'bg-gradient-to-r from-orange-400 to-orange-500'
+                              : 'bg-gray-50'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div className={`text-2xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                                #{index + 1}
+                              </div>
+                              <div className="text-left">
+                                <div className={`font-bold text-lg ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                                  {team.name}
+                                </div>
+                                <div className={`text-sm ${index < 3 ? 'text-white/80' : 'text-gray-600'}`}>
+                                  Thru {team.stats.holesCompleted}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                              <div className="text-right">
+                                <div className={`text-3xl font-bold ${index < 3 ? 'text-white' : 'text-gray-900'}`}>
+                                  {team.stats.total}
+                                </div>
+                                {!isStableford && (
+                                  <div className={`text-sm font-semibold ${
+                                    team.stats.toPar > 0 
+                                      ? (index < 3 ? 'text-white/80' : 'text-red-600')
+                                      : team.stats.toPar < 0
+                                      ? (index < 3 ? 'text-white/80' : 'text-green-600')
+                                      : (index < 3 ? 'text-white/80' : 'text-gray-600')
+                                  }`}>
+                                    {team.stats.toPar > 0 ? '+' : ''}{team.stats.toPar}
+                                  </div>
+                                )}
+                                {isStableford && (
+                                  <div className={`text-sm font-semibold ${index < 3 ? 'text-white/80' : 'text-gray-600'}`}>
+                                    points
+                                  </div>
+                                )}
+                              </div>
+                              <div className={index < 3 ? 'text-white' : 'text-gray-600'}>
+                                {isExpanded ? <ChevronUp /> : <ChevronDown />}
+                              </div>
+                            </div>
+                          </div>
+                        </button>
+                        
+                        {isExpanded && (
+                          <div className="bg-white p-4 rounded-b-xl -mt-2 border-2 border-gray-200">
+                            <div className="text-xs font-semibold text-gray-600 mb-2">Hole-by-Hole</div>
+                            <div className="grid grid-cols-9 gap-1 mb-3">
+                              {Object.entries(team.scores || {}).map(([holeIdx, score]) => {
+                                const idx = parseInt(holeIdx);
+                                const coursePars = currentEvent?.meta?.coursePars || [];
+                                const par = coursePars[idx] || 4;
+                                const displayScore = score === -1 ? null : score;
+                                return (
+                                  <div key={idx} className="text-center">
+                                    <div className="text-xs text-gray-400">#{idx + 1}</div>
+                                    <div className={`font-bold text-sm ${
+                                      displayScore === null ? 'text-gray-300' :
+                                      displayScore < par ? 'text-green-600' :
+                                      displayScore > par ? 'text-red-600' :
+                                      'text-gray-900'
+                                    }`}>
+                                      {displayScore || '-'}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setViewingTeamScorecard(team.teamId);
+                              }}
+                              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold text-sm"
+                            >
+                              View Full Scorecard
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="bg-gray-50 p-4 rounded-xl text-center">
+                  <div className="text-xs text-gray-600 mb-2">Share this code with other groups</div>
+                  <div className="flex items-center justify-center gap-3">
+                    <div className="font-mono font-bold text-blue-600 text-xl">{currentEvent.meta.eventCode}</div>
+                    <button
+                      onClick={copyEventCode}
+                      className="bg-blue-600 text-white p-2 rounded-lg hover:bg-blue-700"
+                    >
+                      <Copy />
+                    </button>
+                  </div>
+                  {feedback && <div className="text-sm text-green-600 mt-2">{feedback}</div>}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      }
+
+      // TEAM SCORECARD VIEWER (for viewing other teams' scorecards from leaderboard)
+      if (viewingTeamScorecard && currentEvent) {
+        const team = currentEvent.teams[viewingTeamScorecard];
+        if (!team) {
+          setViewingTeamScorecard(null);
+          return null;
+        }
+        
+        const pars = currentEvent?.meta?.coursePars || Array(18).fill(4);
+        const format = currentEvent.meta.format;
+        const showPlayerUsed = format === 'bestball' || format === 'shamble';
+        const playerUsed = team.playerUsed || {};
+        const player1Scores = team.player1Scores || {};
+        const player2Scores = team.player2Scores || {};
+        const driveUsed = team.driveUsed || {};
+        
+        const scoresObj = team.scores || {};
+        const scoresArray = [];
+        for (let i = 0; i < 18; i++) {
+          scoresArray[i] = scoresObj[i] === -1 ? null : scoresObj[i];
+        }
+        
+        const front9Total = scoresArray.slice(0, 9).reduce((sum, s) => sum + (s || 0), 0);
+        const back9Total = scoresArray.slice(9, 18).reduce((sum, s) => sum + (s || 0), 0);
+        const front9Par = pars.slice(0, 9).reduce((sum, p) => sum + p, 0);
+        const back9Par = pars.slice(9, 18).reduce((sum, p) => sum + p, 0);
+        
+        const getInitials = (name) => {
+          return name?.split(' ').map(n => n[0]).join('').toUpperCase() || '?';
+        };
+        
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+            <div className="max-w-2xl mx-auto">
+              <button onClick={() => setViewingTeamScorecard(null)} className="text-white mb-6 hover:text-blue-200">← Back to Leaderboard</button>
+              
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
+                <h2 className="text-2xl font-bold text-gray-900 mb-2 text-center">{team.name}</h2>
+                <p className="text-gray-600 mb-6 text-center">Scorecard</p>
+                
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Front 9</h3>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {pars.slice(0, 9).map((par, idx) => {
+                      const playerName = showPlayerUsed ? playerUsed[idx] : null;
+                      const p1Score = player1Scores[idx];
+                      const p2Score = player2Scores[idx];
+                      const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      const drive = format === 'shamble' ? driveUsed[idx] : null;
+                      
+                      return (
+                        <div key={idx} className="bg-gray-50 p-2 rounded text-center">
+                          <div className="text-xs text-gray-500">#{idx + 1}</div>
+                          <div className="text-xs text-gray-400">Par {par}</div>
+                          <div className={`font-bold ${
+                            scoresArray[idx] === null ? 'text-gray-300' :
+                            scoresArray[idx] < par ? 'text-green-600' :
+                            scoresArray[idx] > par ? 'text-red-600' :
+                            'text-gray-900'
+                          }`}>
+                            {scoresArray[idx] || '-'}
+                          </div>
+                          {showBothScores && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <div className={p1Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
+                              <div className={p2Score === scoresArray[idx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
+                            </div>
+                          )}
+                          {drive && (
+                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right text-sm font-semibold">
+                    Total: {front9Total} ({front9Total - front9Par > 0 ? '+' : ''}{front9Total - front9Par})
+                  </div>
+                </div>
+
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-3">Back 9</h3>
+                  <div className="grid grid-cols-9 gap-1 mb-2">
+                    {pars.slice(9, 18).map((par, idx) => {
+                      const holeNum = idx + 10;
+                      const holeIdx = idx + 9;
+                      const playerName = showPlayerUsed ? playerUsed[holeIdx] : null;
+                      const p1Score = player1Scores[holeIdx];
+                      const p2Score = player2Scores[holeIdx];
+                      const showBothScores = showPlayerUsed && p1Score && p2Score;
+                      const drive = format === 'shamble' ? driveUsed[holeIdx] : null;
+                      
+                      return (
+                        <div key={holeIdx} className="bg-gray-50 p-2 rounded text-center">
+                          <div className="text-xs text-gray-500">#{holeNum}</div>
+                          <div className="text-xs text-gray-400">Par {par}</div>
+                          <div className={`font-bold ${
+                            scoresArray[holeIdx] === null ? 'text-gray-300' :
+                            scoresArray[holeIdx] < par ? 'text-green-600' :
+                            scoresArray[holeIdx] > par ? 'text-red-600' :
+                            'text-gray-900'
+                          }`}>
+                            {scoresArray[holeIdx] || '-'}
+                          </div>
+                          {showBothScores && (
+                            <div className="text-xs text-gray-600 mt-1">
+                              <div className={p1Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p1Score}</div>
+                              <div className={p2Score === scoresArray[holeIdx] ? 'font-bold text-blue-600' : ''}>{p2Score}</div>
+                            </div>
+                          )}
+                          {drive && (
+                            <div className="text-xs text-purple-600 font-semibold">D:{getInitials(drive)}</div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="text-right text-sm font-semibold">
+                    Total: {back9Total} ({back9Total - back9Par > 0 ? '+' : ''}{back9Total - back9Par})
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 p-4 rounded-xl mb-4">
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-gray-900">Total Score</span>
+                    <span className="text-2xl font-bold text-blue-600">
+                      {front9Total + back9Total} ({(front9Total + back9Total) - (front9Par + back9Par) > 0 ? '+' : ''}{(front9Total + back9Total) - (front9Par + back9Par)})
+                    </span>
+                  </div>
+                </div>
+                
+                {showPlayerUsed && (
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <h3 className="text-sm font-semibold text-gray-700 mb-2">Player Usage</h3>
+                    <div className="grid grid-cols-2 gap-3">
+                      {team.players.map(player => {
+                        const holesUsed = Object.values(playerUsed).filter(p => p === player).length;
+                        const drivesUsed = format === 'shamble' ? Object.values(driveUsed).filter(p => p === player).length : null;
+                        return (
+                          <div key={player} className="text-center">
+                            <div className="text-lg font-bold text-gray-900">{player}</div>
+                            <div className="text-sm text-gray-600">{holesUsed} hole{holesUsed !== 1 ? 's' : ''}</div>
+                            {drivesUsed !== null && (
+                              <div className="text-xs text-purple-600">{drivesUsed} drive{drivesUsed !== 1 ? 's' : ''}</div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           </div>
