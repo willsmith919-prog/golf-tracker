@@ -3841,16 +3841,21 @@
         };
 
         const saveCourse = async () => {
+          console.log('saveCourse called');
+          console.log('courseForm:', courseForm);
+          
           // Validation
           if (!courseForm.name.trim()) {
+            console.log('Validation failed: Course name is required');
             setFeedback('Course name is required');
-            setTimeout(() => setFeedback(''), 2000);
+            setTimeout(() => setFeedback(''), 3000);
             return;
           }
 
           if (courseForm.tees.length === 0) {
+            console.log('Validation failed: Must have at least 1 tee');
             setFeedback('Must have at least 1 tee');
-            setTimeout(() => setFeedback(''), 2000);
+            setTimeout(() => setFeedback(''), 3000);
             return;
           }
 
@@ -3858,14 +3863,16 @@
           for (let i = 0; i < courseForm.tees.length; i++) {
             const tee = courseForm.tees[i];
             if (!tee.name.trim()) {
+              console.log(`Validation failed: Tee ${i + 1} name is required`);
               setFeedback(`Tee ${i + 1}: Name is required`);
-              setTimeout(() => setFeedback(''), 2000);
+              setTimeout(() => setFeedback(''), 3000);
               return;
             }
             const emptyPars = tee.pars.filter(p => !p || p === '').length;
             if (emptyPars > 0) {
-              setFeedback(`${tee.name}: All 18 pars must be filled`);
-              setTimeout(() => setFeedback(''), 2000);
+              console.log(`Validation failed: ${tee.name} has ${emptyPars} empty pars`);
+              setFeedback(`${tee.name}: All 18 pars must be filled (${emptyPars} missing)`);
+              setTimeout(() => setFeedback(''), 4000);
               return;
             }
           }
@@ -3873,8 +3880,9 @@
           // Validate stroke index
           const emptySI = courseForm.strokeIndex.filter(si => !si || si === '').length;
           if (emptySI > 0) {
-            setFeedback('All 18 stroke indexes must be filled');
-            setTimeout(() => setFeedback(''), 2000);
+            console.log(`Validation failed: ${emptySI} stroke indexes are empty`);
+            setFeedback(`All 18 stroke indexes must be filled (${emptySI} missing)`);
+            setTimeout(() => setFeedback(''), 3000);
             return;
           }
           
@@ -3882,18 +3890,21 @@
           const siValues = courseForm.strokeIndex.map(si => parseInt(si));
           const siSet = new Set(siValues);
           if (siSet.size !== 18) {
+            console.log('Validation failed: Stroke indexes not unique', siValues);
             setFeedback('Stroke indexes must be unique values from 1 to 18');
-            setTimeout(() => setFeedback(''), 2000);
+            setTimeout(() => setFeedback(''), 3000);
             return;
           }
           for (let i = 1; i <= 18; i++) {
             if (!siSet.has(i)) {
+              console.log(`Validation failed: Stroke index ${i} is missing`);
               setFeedback(`Stroke index ${i} is missing. Each value from 1-18 must be used exactly once.`);
-              setTimeout(() => setFeedback(''), 2000);
+              setTimeout(() => setFeedback(''), 4000);
               return;
             }
           }
 
+          console.log('All validations passed, saving course...');
           try {
             const courseId = editingCourse?.id || `course-${Date.now()}`;
             
@@ -3917,8 +3928,10 @@
               createdAt: editingCourse?.createdAt || Date.now()
             };
 
+            console.log('Saving course data:', courseData);
             await database.ref(`courses/${courseId}`).set(courseData);
             
+            console.log('Course saved successfully');
             setFeedback('Course saved!');
             setTimeout(async () => {
               await loadCourses();
@@ -3928,7 +3941,7 @@
 
           } catch (error) {
             console.error('Error saving course:', error);
-            setFeedback('Error saving course');
+            setFeedback('Error saving course: ' + error.message);
           }
         };
 
