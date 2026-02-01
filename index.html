@@ -93,6 +93,8 @@
       const [userProfile, setUserProfile] = useState(null);
       const [authLoading, setAuthLoading] = useState(true);
       const [courses, setCourses] = useState([]);
+      const [globalCourses, setGlobalCourses] = useState([]);
+      const [managingCourses, setManagingCourses] = useState(false);
       const [editingCourse, setEditingCourse] = useState(null);
       const [courseForm, setCourseForm] = useState({
         name: '',
@@ -165,17 +167,6 @@
       const eventListenerRef = useRef(null);
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
-
-      // Course management state
-      const [managingCourses, setManagingCourses] = useState(false);
-      const [editingCourse, setEditingCourse] = useState(null);
-      const [courseForm, setCourseForm] = useState({
-        name: '',
-        location: '',
-        strokeIndex: Array(18).fill(''),
-        tees: []
-      });
-      const [globalCourses, setGlobalCourses] = useState([]);
 
       // Format helpers
       const formatNames = {
