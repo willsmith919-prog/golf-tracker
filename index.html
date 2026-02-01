@@ -3815,6 +3815,22 @@
             setTimeout(() => setFeedback(''), 2000);
             return;
           }
+          
+          // Validate stroke index values are 1-18 and unique
+          const siValues = courseForm.strokeIndex.map(si => parseInt(si));
+          const siSet = new Set(siValues);
+          if (siSet.size !== 18) {
+            setFeedback('Stroke indexes must be unique values from 1 to 18');
+            setTimeout(() => setFeedback(''), 2000);
+            return;
+          }
+          for (let i = 1; i <= 18; i++) {
+            if (!siSet.has(i)) {
+              setFeedback(`Stroke index ${i} is missing. Each value from 1-18 must be used exactly once.`);
+              setTimeout(() => setFeedback(''), 2000);
+              return;
+            }
+          }
 
           try {
             const courseId = editingCourse?.id || `course-${Date.now()}`;
@@ -3971,154 +3987,168 @@
                   </button>
                 </div>
 
-                {/* Hole Details - Front 9 */}
+                {/* Hole Details - Organized by Tee */}
                 <div className="mb-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">Front 9</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b-2 border-gray-300">
-                          <th className="p-1 text-left min-w-[60px]"></th>
-                          {[1,2,3,4,5,6,7,8,9].map(h => (
-                            <th key={h} className="p-1 text-center w-12">{h}</th>
-                          ))}
-                          <th className="p-1 text-center w-12 font-bold">OUT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-gray-200 bg-gray-50">
-                          <td className="p-1 font-semibold">SI</td>
-                          {[...Array(9)].map((_, i) => (
-                            <td key={i} className="p-1">
-                              <input
-                                type="number"
-                                min="1"
-                                max="18"
-                                value={courseForm.strokeIndex[i]}
-                                onChange={(e) => updateStrokeIndex(i, e.target.value)}
-                                className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                              />
-                            </td>
-                          ))}
-                          <td className="p-1"></td>
-                        </tr>
-                        {courseForm.tees.map((tee, teeIndex) => (
-                          <React.Fragment key={tee.id}>
-                            <tr className="border-b border-gray-100">
-                              <td className="p-1 font-semibold" colSpan="11">{tee.name || `Tee ${teeIndex + 1}`}</td>
-                            </tr>
-                            <tr className="border-b border-gray-200">
-                              <td className="p-1 pl-4 text-gray-600">Par</td>
-                              {[...Array(9)].map((_, i) => (
-                                <td key={i} className="p-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-4">Hole Details</h3>
+                  
+                  {/* Stroke Index - Shared across all tees */}
+                  <div className="mb-6 bg-gray-50 p-4 rounded-xl">
+                    <h4 className="text-sm font-bold text-gray-900 mb-3">Stroke Index (Shared)</h4>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-xs">
+                        <thead>
+                          <tr className="border-b-2 border-gray-300">
+                            <th className="p-1 text-left min-w-[60px]"></th>
+                            {[1,2,3,4,5,6,7,8,9].map(h => (
+                              <th key={h} className="p-1 text-center w-12">{h}</th>
+                            ))}
+                            <th className="p-1 text-center w-12 font-bold">OUT</th>
+                            {[10,11,12,13,14,15,16,17,18].map(h => (
+                              <th key={h} className="p-1 text-center w-12">{h}</th>
+                            ))}
+                            <th className="p-1 text-center w-12 font-bold">IN</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr className="border-b border-gray-200">
+                            <td className="p-1 font-semibold">SI</td>
+                            {[...Array(18)].map((_, i) => (
+                              <React.Fragment key={i}>
+                                <td className="p-1">
                                   <input
-                                    type="number"
-                                    min="3"
-                                    max="6"
-                                    value={tee.pars[i]}
-                                    onChange={(e) => updateTeeHole(teeIndex, i, 'pars', e.target.value)}
-                                    className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
+                                    type="text"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    value={courseForm.strokeIndex[i]}
+                                    onChange={(e) => updateStrokeIndex(i, e.target.value)}
+                                    className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   />
                                 </td>
-                              ))}
-                              <td className="p-1 text-center font-bold">{calculateTotal(tee.pars, 0, 9)}</td>
-                            </tr>
-                            <tr className="border-b border-gray-200">
-                              <td className="p-1 pl-4 text-gray-600">Yds</td>
-                              {[...Array(9)].map((_, i) => (
-                                <td key={i} className="p-1">
-                                  <input
-                                    type="number"
-                                    value={tee.yardages[i]}
-                                    onChange={(e) => updateTeeHole(teeIndex, i, 'yardages', e.target.value)}
-                                    className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                                  />
-                                </td>
-                              ))}
-                              <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 0, 9)}</td>
-                            </tr>
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
+                                {i === 8 && <td className="p-1"></td>}
+                              </React.Fragment>
+                            ))}
+                            <td className="p-1"></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
 
-                {/* Hole Details - Back 9 */}
-                <div className="mb-6">
-                  <h3 className="text-lg font-bold text-gray-900 mb-4">Back 9</h3>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b-2 border-gray-300">
-                          <th className="p-1 text-left min-w-[60px]"></th>
-                          {[10,11,12,13,14,15,16,17,18].map(h => (
-                            <th key={h} className="p-1 text-center w-12">{h}</th>
-                          ))}
-                          <th className="p-1 text-center w-12 font-bold">IN</th>
-                          <th className="p-1 text-center w-12 font-bold">TOT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-gray-200 bg-gray-50">
-                          <td className="p-1 font-semibold">SI</td>
-                          {[...Array(9)].map((_, i) => (
-                            <td key={i} className="p-1">
-                              <input
-                                type="number"
-                                min="1"
-                                max="18"
-                                value={courseForm.strokeIndex[i + 9]}
-                                onChange={(e) => updateStrokeIndex(i + 9, e.target.value)}
-                                className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                              />
-                            </td>
-                          ))}
-                          <td className="p-1"></td>
-                          <td className="p-1"></td>
-                        </tr>
-                        {courseForm.tees.map((tee, teeIndex) => (
-                          <React.Fragment key={tee.id}>
-                            <tr className="border-b border-gray-100">
-                              <td className="p-1 font-semibold" colSpan="12">{tee.name || `Tee ${teeIndex + 1}`}</td>
-                            </tr>
-                            <tr className="border-b border-gray-200">
-                              <td className="p-1 pl-4 text-gray-600">Par</td>
-                              {[...Array(9)].map((_, i) => (
-                                <td key={i} className="p-1">
-                                  <input
-                                    type="number"
-                                    min="3"
-                                    max="6"
-                                    value={tee.pars[i + 9]}
-                                    onChange={(e) => updateTeeHole(teeIndex, i + 9, 'pars', e.target.value)}
-                                    className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                                  />
-                                </td>
-                              ))}
-                              <td className="p-1 text-center font-bold">{calculateTotal(tee.pars, 9, 18)}</td>
-                              <td className="p-1 text-center font-bold">{calculateTotal(tee.pars, 0, 18)}</td>
-                            </tr>
-                            <tr className="border-b border-gray-200">
-                              <td className="p-1 pl-4 text-gray-600">Yds</td>
-                              {[...Array(9)].map((_, i) => (
-                                <td key={i} className="p-1">
-                                  <input
-                                    type="number"
-                                    value={tee.yardages[i + 9]}
-                                    onChange={(e) => updateTeeHole(teeIndex, i + 9, 'yardages', e.target.value)}
-                                    className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                                  />
-                                </td>
-                              ))}
-                              <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 9, 18)}</td>
-                              <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 0, 18)}</td>
-                            </tr>
-                          </React.Fragment>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  {/* Each Tee */}
+                  {courseForm.tees.map((tee, teeIndex) => (
+                    <div key={tee.id} className="mb-6 border-2 border-gray-200 rounded-xl p-4">
+                      <h4 className="text-md font-bold text-gray-900 mb-3">
+                        {tee.name || `Tee ${teeIndex + 1}`}
+                      </h4>
+                      
+                      {/* Front 9 */}
+                      <div className="mb-4">
+                        <h5 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h5>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b-2 border-gray-300">
+                                <th className="p-1 text-left min-w-[60px]"></th>
+                                {[1,2,3,4,5,6,7,8,9].map(h => (
+                                  <th key={h} className="p-1 text-center w-16">{h}</th>
+                                ))}
+                                <th className="p-1 text-center w-16 font-bold">OUT</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b border-gray-200">
+                                <td className="p-1 text-gray-600">Par</td>
+                                {[...Array(9)].map((_, i) => (
+                                  <td key={i} className="p-1">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      value={tee.pars[i]}
+                                      onChange={(e) => updateTeeHole(teeIndex, i, 'pars', e.target.value)}
+                                      className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                  </td>
+                                ))}
+                                <td className="p-1 text-center font-bold">{calculateTotal(tee.pars, 0, 9)}</td>
+                              </tr>
+                              <tr className="border-b border-gray-200">
+                                <td className="p-1 text-gray-600">Yds</td>
+                                {[...Array(9)].map((_, i) => (
+                                  <td key={i} className="p-1">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      value={tee.yardages[i]}
+                                      onChange={(e) => updateTeeHole(teeIndex, i, 'yardages', e.target.value)}
+                                      className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                  </td>
+                                ))}
+                                <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 0, 9)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+
+                      {/* Back 9 */}
+                      <div>
+                        <h5 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h5>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b-2 border-gray-300">
+                                <th className="p-1 text-left min-w-[60px]"></th>
+                                {[10,11,12,13,14,15,16,17,18].map(h => (
+                                  <th key={h} className="p-1 text-center w-16">{h}</th>
+                                ))}
+                                <th className="p-1 text-center w-16 font-bold">IN</th>
+                                <th className="p-1 text-center w-16 font-bold">TOT</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              <tr className="border-b border-gray-200">
+                                <td className="p-1 text-gray-600">Par</td>
+                                {[...Array(9)].map((_, i) => (
+                                  <td key={i} className="p-1">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      value={tee.pars[i + 9]}
+                                      onChange={(e) => updateTeeHole(teeIndex, i + 9, 'pars', e.target.value)}
+                                      className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                  </td>
+                                ))}
+                                <td className="p-1 text-center font-bold">{calculateTotal(tee.pars, 9, 18)}</td>
+                                <td className="p-1 text-center font-bold">{calculateTotal(tee.pars, 0, 18)}</td>
+                              </tr>
+                              <tr className="border-b border-gray-200">
+                                <td className="p-1 text-gray-600">Yds</td>
+                                {[...Array(9)].map((_, i) => (
+                                  <td key={i} className="p-1">
+                                    <input
+                                      type="text"
+                                      inputMode="numeric"
+                                      pattern="[0-9]*"
+                                      value={tee.yardages[i + 9]}
+                                      onChange={(e) => updateTeeHole(teeIndex, i + 9, 'yardages', e.target.value)}
+                                      className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    />
+                                  </td>
+                                ))}
+                                <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 9, 18)}</td>
+                                <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 0, 18)}</td>
+                              </tr>
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
 
                 <button
