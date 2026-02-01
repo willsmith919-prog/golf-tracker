@@ -109,6 +109,7 @@
           yardages: Array(18).fill('')
         }]
       });
+      const [eventValidationMessages, setEventValidationMessages] = useState({});
       
       // Event creation state
       const [newEvent, setNewEvent] = useState({
@@ -1491,9 +1492,6 @@
           ...data
         }));
         const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
-        
-        // Track validation messages per event
-        const [eventValidationMessages, setEventValidationMessages] = useState({});
 
         const handleRemoveMember = async (memberUid, memberName) => {
           if (!confirm(`Remove ${memberName} from the league?`)) {
