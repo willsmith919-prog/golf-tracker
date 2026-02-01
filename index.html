@@ -166,11 +166,6 @@
       const undoTimerRef = useRef(null);
       const deviceId = getDeviceId();
 
-      // Admin helper
-      const isAdmin = () => {
-        return currentUser?.email === 'willsmith919@gmail.com';
-      };
-
       // Course management state
       const [managingCourses, setManagingCourses] = useState(false);
       const [editingCourse, setEditingCourse] = useState(null);
