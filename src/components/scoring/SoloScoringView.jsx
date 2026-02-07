@@ -136,21 +136,31 @@ export default function SoloScoringView({
         date: updatedRound.date,
         courseName: updatedRound.courseName,
         score: stats.totalScore,
-        toPar: stats.toPar
+        toPar: stats.toPar,
+        numHoles: updatedRound.numHoles
       });
 
       setCurrentSoloRound(updatedRound);
 
-      // Auto-advance to next hole
-      setTimeout(() => {
-        if (currentHole < 18) {
+      // Check if this is the final hole
+      const endingHole = updatedRound.endingHole || 18;
+      const isLastHole = currentHole === endingHole;
+
+      if (isLastHole) {
+        // Prompt to end round
+        setTimeout(() => {
+          if (confirm('Round complete! Would you like to finish and view your scorecard?')) {
+            updatedRound.status = 'complete';
+            set(ref(database, `soloRounds/${updatedRound.id}/status`), 'complete');
+            setView('solo-scorecard');
+          }
+        }, 500);
+      } else {
+        // Auto-advance to next hole
+        setTimeout(() => {
           goToHole(currentHole + 1);
-        } else {
-          // Round complete
-          updatedRound.status = 'complete';
-          set(ref(database, `soloRounds/${updatedRound.id}/status`), 'complete');
-        }
-      }, 500);
+        }, 500);
+      }
 
     } catch (error) {
       console.error('Error saving hole data:', error);
@@ -206,7 +216,10 @@ export default function SoloScoringView({
   };
 
   const goToHole = (hole) => {
-    if (hole < 1 || hole > 18) return;
+    const startingHole = currentSoloRound.startingHole || 1;
+    const endingHole = currentSoloRound.endingHole || 18;
+    
+    if (hole < startingHole || hole > endingHole) return;
     
     const updatedRound = { ...currentSoloRound };
     updatedRound.currentHole = hole;
@@ -252,7 +265,7 @@ export default function SoloScoringView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-2 md:p-4">
       <div className="max-w-2xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
@@ -273,7 +286,7 @@ export default function SoloScoringView({
         {/* Stats Header */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
           <h2 className="text-xl font-bold text-gray-900 mb-4">{currentSoloRound.courseName}</h2>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
               <div className="text-sm text-gray-600">Score</div>
               <div className="text-3xl font-bold text-gray-900">{currentSoloRound.stats.totalScore || 0}</div>
@@ -287,18 +300,27 @@ export default function SoloScoringView({
                 {currentSoloRound.stats.toPar > 0 ? '+' : ''}{currentSoloRound.stats.toPar || 0}
               </div>
             </div>
-            {currentSoloRound.format === 'stableford' && (
-              <div className="text-center">
-                <div className="text-sm text-gray-600">Points</div>
-                <div className="text-3xl font-bold text-gray-900">{currentSoloRound.stats.stablefordPoints}</div>
+            <div className="text-center">
+              <div className="text-sm text-gray-600">
+                {currentSoloRound.format === 'stableford' ? 'Points' : 'Putts'}
               </div>
-            )}
-            {currentSoloRound.format !== 'stableford' && (
-              <div className="text-center">
-                <div className="text-sm text-gray-600">Putts</div>
-                <div className="text-3xl font-bold text-gray-900">{currentSoloRound.stats.totalPutts}</div>
+              <div className="text-3xl font-bold text-gray-900">
+                {currentSoloRound.format === 'stableford' 
+                  ? currentSoloRound.stats.stablefordPoints 
+                  : currentSoloRound.stats.totalPutts}
               </div>
-            )}
+            </div>
+            <div className="text-center">
+              <div className="text-sm text-gray-600">Fairways</div>
+              <div className="text-3xl font-bold text-gray-900">
+                {currentSoloRound.stats.fairwaysHit}/{currentSoloRound.stats.fairwaysPossible}
+              </div>
+              <div className="text-xs text-gray-500">
+                {currentSoloRound.stats.fairwaysPossible > 0 
+                  ? `${((currentSoloRound.stats.fairwaysHit / currentSoloRound.stats.fairwaysPossible) * 100).toFixed(0)}%`
+                  : '0%'}
+              </div>
+            </div>
           </div>
         </div>
 
@@ -307,7 +329,7 @@ export default function SoloScoringView({
           <div className="flex items-center justify-between mb-4">
             <button
               onClick={() => goToHole(currentHole - 1)}
-              disabled={currentHole === 1}
+              disabled={currentHole === (currentSoloRound.startingHole || 1)}
               className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed p-3 rounded-xl"
             >
               <ChevronLeftIcon />
@@ -322,7 +344,7 @@ export default function SoloScoringView({
 
             <button
               onClick={() => goToHole(currentHole + 1)}
-              disabled={currentHole === 18}
+              disabled={currentHole === (currentSoloRound.endingHole || 18)}
               className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed p-3 rounded-xl"
             >
               <ChevronRightIcon />
@@ -407,89 +429,152 @@ export default function SoloScoringView({
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Scorecard</h2>
           
-          {/* Front 9 */}
-          <div className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b-2 border-gray-300">
-                    <th className="text-left p-2">Hole</th>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                      <th key={h} className="text-center p-2 min-w-[40px]">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-gray-200">
-                    <td className="p-2 text-gray-600">Par</td>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                      <td key={h} className="text-center p-2">{currentSoloRound.coursePars[h - 1]}</td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="p-2 text-gray-600">Score</td>
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => {
-                      const hole = currentSoloRound.holes[h];
-                      const par = currentSoloRound.coursePars[h - 1];
-                      return (
-                        <td 
-                          key={h} 
-                          className={`text-center p-2 cursor-pointer hover:bg-gray-100 ${getScoreColor(hole?.score, par)}`}
-                          onClick={() => goToHole(h)}
-                        >
-                          {hole?.score || '-'}
-                          {hole?.gir && <span className="text-green-600">●</span>}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+          {/* Determine which holes to show */}
+          {(() => {
+            const startingHole = currentSoloRound.startingHole || 1;
+            const endingHole = currentSoloRound.endingHole || 18;
+            const numHoles = currentSoloRound.numHoles || 18;
 
-          {/* Back 9 */}
-          <div>
-            <h3 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b-2 border-gray-300">
-                    <th className="text-left p-2">Hole</th>
-                    {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                      <th key={h} className="text-center p-2 min-w-[40px]">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr className="border-b border-gray-200">
-                    <td className="p-2 text-gray-600">Par</td>
-                    {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                      <td key={h} className="text-center p-2">{currentSoloRound.coursePars[h - 1]}</td>
-                    ))}
-                  </tr>
-                  <tr>
-                    <td className="p-2 text-gray-600">Score</td>
-                    {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => {
-                      const hole = currentSoloRound.holes[h];
-                      const par = currentSoloRound.coursePars[h - 1];
-                      return (
-                        <td 
-                          key={h} 
-                          className={`text-center p-2 cursor-pointer hover:bg-gray-100 ${getScoreColor(hole?.score, par)}`}
-                          onClick={() => goToHole(h)}
-                        >
-                          {hole?.score || '-'}
-                          {hole?.gir && <span className="text-green-600">●</span>}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+            // For 9-hole rounds, only show the 9 being played
+            if (numHoles === 9) {
+              const holes = Array.from({ length: 9 }, (_, i) => startingHole + i);
+              const isFront9 = startingHole === 1;
+              
+              return (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">
+                    {isFront9 ? 'Front 9' : 'Back 9'}
+                  </h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b-2 border-gray-300">
+                          <th className="text-left p-2">Hole</th>
+                          {holes.map(h => (
+                            <th key={h} className="text-center p-2 min-w-[40px]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2 text-gray-600">Par</td>
+                          {holes.map(h => (
+                            <td key={h} className="text-center p-2">{currentSoloRound.coursePars[h - 1]}</td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="p-2 text-gray-600">Score</td>
+                          {holes.map(h => {
+                            const hole = currentSoloRound.holes[h];
+                            const par = currentSoloRound.coursePars[h - 1];
+                            return (
+                              <td 
+                                key={h} 
+                                className={`text-center p-2 cursor-pointer hover:bg-gray-100 ${getScoreColor(hole?.score, par)}`}
+                                onClick={() => goToHole(h)}
+                              >
+                                {hole?.score || '-'}
+                                {hole?.gir && <span className="text-green-600">●</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              );
+            }
+
+            // For 18-hole rounds, show both front and back 9
+            return (
+              <>
+                {/* Front 9 */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b-2 border-gray-300">
+                          <th className="text-left p-2">Hole</th>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
+                            <th key={h} className="text-center p-2 min-w-[40px]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2 text-gray-600">Par</td>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
+                            <td key={h} className="text-center p-2">{currentSoloRound.coursePars[h - 1]}</td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="p-2 text-gray-600">Score</td>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => {
+                            const hole = currentSoloRound.holes[h];
+                            const par = currentSoloRound.coursePars[h - 1];
+                            return (
+                              <td 
+                                key={h} 
+                                className={`text-center p-2 cursor-pointer hover:bg-gray-100 ${getScoreColor(hole?.score, par)}`}
+                                onClick={() => goToHole(h)}
+                              >
+                                {hole?.score || '-'}
+                                {hole?.gir && <span className="text-green-600">●</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Back 9 */}
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h3>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b-2 border-gray-300">
+                          <th className="text-left p-2">Hole</th>
+                          {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
+                            <th key={h} className="text-center p-2 min-w-[40px]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr className="border-b border-gray-200">
+                          <td className="p-2 text-gray-600">Par</td>
+                          {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
+                            <td key={h} className="text-center p-2">{currentSoloRound.coursePars[h - 1]}</td>
+                          ))}
+                        </tr>
+                        <tr>
+                          <td className="p-2 text-gray-600">Score</td>
+                          {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => {
+                            const hole = currentSoloRound.holes[h];
+                            const par = currentSoloRound.coursePars[h - 1];
+                            return (
+                              <td 
+                                key={h} 
+                                className={`text-center p-2 cursor-pointer hover:bg-gray-100 ${getScoreColor(hole?.score, par)}`}
+                                onClick={() => goToHole(h)}
+                              >
+                                {hole?.score || '-'}
+                                {hole?.gir && <span className="text-green-600">●</span>}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
 
           <div className="mt-4 text-sm text-gray-600 text-center">
             ● = Green in Regulation · Tap any hole to edit
