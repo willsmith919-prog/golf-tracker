@@ -7,6 +7,8 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
   const [selectedCourse, setSelectedCourse] = useState(null);
   const [selectedTee, setSelectedTee] = useState(null);
   const [format, setFormat] = useState('stroke');
+  const [numHoles, setNumHoles] = useState(18);
+  const [startingHole, setStartingHole] = useState(1);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -49,6 +51,11 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
     const roundId = `solo-${Date.now()}`;
     const selectedTeeData = selectedCourse.tees[selectedTee];
 
+    // Determine ending hole based on starting hole and number of holes
+    const endingHole = numHoles === 9 
+      ? (startingHole === 1 ? 9 : 18)
+      : 18;
+
     const newRound = {
       id: roundId,
       userId: user.uid,
@@ -58,9 +65,12 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
       teeId: selectedTee,
       teeName: selectedTeeData.name,
       format: format,
+      numHoles: numHoles,
+      startingHole: startingHole,
+      endingHole: endingHole,
       date: Date.now(),
       status: 'in_progress',
-      currentHole: 1,
+      currentHole: startingHole,
       holes: {},
       stats: {
         totalScore: 0,
@@ -148,7 +158,7 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
           </div>
 
           {/* Scoring Format */}
-          <div className="mb-8">
+          <div className="mb-6">
             <label className="block text-sm font-semibold text-gray-700 mb-3">
               Scoring Format
             </label>
@@ -177,6 +187,70 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
               </label>
             </div>
           </div>
+
+          {/* Number of Holes */}
+          <div className="mb-6">
+            <label className="block text-sm font-semibold text-gray-700 mb-3">
+              Number of Holes
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label className="flex items-center justify-center p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="numHoles"
+                  value="9"
+                  checked={numHoles === 9}
+                  onChange={(e) => setNumHoles(parseInt(e.target.value))}
+                  className="w-5 h-5 text-blue-600"
+                />
+                <span className="ml-3 text-gray-900 font-medium">9 Holes</span>
+              </label>
+              <label className="flex items-center justify-center p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                <input
+                  type="radio"
+                  name="numHoles"
+                  value="18"
+                  checked={numHoles === 18}
+                  onChange={(e) => setNumHoles(parseInt(e.target.value))}
+                  className="w-5 h-5 text-blue-600"
+                />
+                <span className="ml-3 text-gray-900 font-medium">18 Holes</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Starting Hole (only for 9 holes) */}
+          {numHoles === 9 && (
+            <div className="mb-6">
+              <label className="block text-sm font-semibold text-gray-700 mb-3">
+                Starting Hole
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="flex items-center justify-center p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="startingHole"
+                    value="1"
+                    checked={startingHole === 1}
+                    onChange={(e) => setStartingHole(parseInt(e.target.value))}
+                    className="w-5 h-5 text-blue-600"
+                  />
+                  <span className="ml-3 text-gray-900 font-medium">Front 9 (1-9)</span>
+                </label>
+                <label className="flex items-center justify-center p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
+                  <input
+                    type="radio"
+                    name="startingHole"
+                    value="10"
+                    checked={startingHole === 10}
+                    onChange={(e) => setStartingHole(parseInt(e.target.value))}
+                    className="w-5 h-5 text-blue-600"
+                  />
+                  <span className="ml-3 text-gray-900 font-medium">Back 9 (10-18)</span>
+                </label>
+              </div>
+            </div>
+          )}
 
           {/* Start Button */}
           <button

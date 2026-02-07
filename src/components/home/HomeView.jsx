@@ -193,6 +193,20 @@ export default function HomeView({
             </div>
           </div>
         </div>
+        {/* ROUND HISTORY */}
+        <div className="mb-6">
+            <h2 className="text-white text-lg font-semibold mb-3">ROUND HISTORY</h2>
+          
+          <div className="space-y-3">
+            <button
+              onClick={() => setView('rounds-history')}
+              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white p-6 rounded-xl text-left shadow-lg transition-all"
+            >
+              <div className="font-bold text-lg mb-1">My Rounds</div>
+              <div className="text-sm text-indigo-100">View all your golf rounds</div>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

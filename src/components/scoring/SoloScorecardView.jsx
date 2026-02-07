@@ -46,7 +46,7 @@ export default function SoloScorecardView({ currentSoloRound, setView }) {
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-4">
       <div className="max-w-4xl mx-auto">
         <button 
-          onClick={() => setView('past-rounds')} 
+          onClick={() => setView('rounds-history')} 
           className="text-white mb-4 hover:text-blue-200"
         >
           ← Back to Rounds

@@ -21,7 +21,7 @@ import ManageCoursesView from './components/admin/ManageCoursesView.jsx';
 import AddEditCourseView from './components/admin/AddEditCourseView.jsx';
 import SoloSetupView from './components/scoring/SoloSetupView.jsx';
 import SoloScoringView from './components/scoring/SoloScoringView.jsx';
-import PastRoundsView from './components/scoring/PastRoundsView.jsx';
+import RoundsHistoryView from './components/scoring/RoundsHistoryView.jsx';
 import SoloScorecardView from './components/scoring/SoloScorecardView.jsx';
 
 function App() {
@@ -586,9 +586,9 @@ function App() {
     );
   }
 
-  if (view === 'past-rounds') {
+  if (view === 'rounds-history') {
     return (
-      <PastRoundsView
+      <RoundsHistoryView
         user={currentUser}
         setView={setView}
         setCurrentSoloRound={setCurrentSoloRound}
