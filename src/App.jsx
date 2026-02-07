@@ -1,42 +1,36 @@
 import { useState, useEffect, useRef } from 'react';
-import React from 'react';
-import { 
-  signInWithEmailAndPassword, 
-  createUserWithEmailAndPassword,
-  onAuthStateChanged,
-  signOut 
-} from 'firebase/auth';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref, get, set, update, remove, onValue, off } from 'firebase/database';
 import { auth, database } from './firebase';
 import { getDeviceId } from './utils/helpers';
-import { 
-  TrophyIcon,
-  UsersIcon,
-  PlusIcon,
-  CalendarIcon,
-  TrashIcon,
-  LinkIcon,
-  BarChartIcon,
-  ClipboardListIcon,
-  CopyIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  RotateCcwIcon,
-  EditIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon
-} from './components/icons';
 import './App.css';
+
+// View components
+import LoginView from './components/auth/LoginView.jsx';
+import SignupView from './components/auth/SignupView.jsx';
+import HomeView from './components/home/HomeView.jsx';
+import CreateLeagueView from './components/leagues/CreateLeagueView.jsx';
+import JoinLeagueView from './components/leagues/JoinLeagueView.jsx';
+import LeagueDashboardView from './components/leagues/LeagueDashboardView.jsx';
+import CreateEventView from './components/events/CreateEventView.jsx';
+import EventLobbyView from './components/events/EventLobbyView.jsx';
+import EventDetailsView from './components/events/EventDetailsView.jsx';
+import EditEventView from './components/events/EditEventView.jsx';
+import ScoringView from './components/scoring/ScoringView.jsx';
+import ManageCoursesView from './components/admin/ManageCoursesView.jsx';
+import AddEditCourseView from './components/admin/AddEditCourseView.jsx';
+import SoloSetupView from './components/scoring/SoloSetupView.jsx';
+import SoloScoringView from './components/scoring/SoloScoringView.jsx';
+import PastRoundsView from './components/scoring/PastRoundsView.jsx';
+import SoloScorecardView from './components/scoring/SoloScorecardView.jsx';
 
 function App() {
   // ==================== HELPER FUNCTIONS ====================
   
-  // Admin check
   const isAdmin = () => {
     return currentUser && currentUser.email === 'willsmith919@gmail.com';
   };
 
-  // Generate short event code
   const generateEventCode = async (courseId) => {
     const coursePrefix = courseId.split('-')[0].toUpperCase().substring(0, 4);
     const randomPart = Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -50,7 +44,6 @@ function App() {
     return code;
   };
 
-  // Generate league code
   const generateLeagueCode = async () => {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
     const nums = '0123456789';
@@ -102,7 +95,6 @@ function App() {
   // Course state
   const [courses, setCourses] = useState([]);
   const [globalCourses, setGlobalCourses] = useState([]);
-  const [managingCourses, setManagingCourses] = useState(false);
   const [editingCourse, setEditingCourse] = useState(null);
   const [courseForm, setCourseForm] = useState({
     name: '',
@@ -117,7 +109,6 @@ function App() {
       yardages: Array(18).fill('')
     }]
   });
-  const [eventValidationMessages, setEventValidationMessages] = useState({});
   
   // Event creation state
   const [newEvent, setNewEvent] = useState({
@@ -140,10 +131,6 @@ function App() {
   // UI state
   const [feedback, setFeedback] = useState('');
   const [scoreConfirmation, setScoreConfirmation] = useState(null);
-  const [expandedTeams, setExpandedTeams] = useState([]);
-  const [editingHole, setEditingHole] = useState(null);
-  const [playerScores, setPlayerScores] = useState(null);
-  const [viewingTeamScorecard, setViewingTeamScorecard] = useState(null);
   
   // Auth state
   const [loginEmail, setLoginEmail] = useState('');
@@ -170,13 +157,14 @@ function App() {
   const [editForm, setEditForm] = useState(null);
   const [leagueEvents, setLeagueEvents] = useState([]);
   const [eventRegistrations, setEventRegistrations] = useState({});
-  const [editingTeamName, setEditingTeamName] = useState(null);
-  const [tempTeamName, setTempTeamName] = useState('');
   
   // Refs
   const eventListenerRef = useRef(null);
   const undoTimerRef = useRef(null);
   const deviceId = getDeviceId();
+
+  // Solo Scoring
+  const [currentSoloRound, setCurrentSoloRound] = useState(null);
 
   // ==================== LOAD COURSES ====================
   
@@ -191,7 +179,6 @@ function App() {
       
       setGlobalCourses(coursesArray);
       
-      // Build courses array for event creation (flattened course+tee combinations)
       const eventCourses = [];
       coursesArray.forEach(course => {
         Object.entries(course.tees || {}).forEach(([teeId, tee]) => {
@@ -202,7 +189,7 @@ function App() {
             name: course.name,
             location: course.location,
             teeName: tee.name,
-            holes: tee.pars, // backwards compat
+            holes: tee.pars,
             pars: tee.pars,
             yardages: tee.yardages,
             strokeIndex: course.strokeIndex,
@@ -220,7 +207,6 @@ function App() {
 
   // ==================== EFFECTS ====================
   
-  // Initialize courses and cleanup
   useEffect(() => { 
     loadCourses(); 
   }, []);
@@ -295,7 +281,6 @@ function App() {
         eventsData.sort((a, b) => new Date(a.meta.date) - new Date(b.meta.date));
         setLeagueEvents(eventsData);
 
-        // Set up real-time listeners
         activeSeason.events.forEach(eventId => {
           const eventRef = ref(database, `events/${eventId}`);
           onValue(eventRef, (snapshot) => {
@@ -357,2882 +342,269 @@ function App() {
     );
   }
 
-  // ==================== LOGIN VIEW ====================
-  
+  // ==================== VIEW ROUTING ====================
+
   if (view === 'login') {
-    const handleLogin = async (e) => {
-      e.preventDefault();
-      setAuthError('');
-      setAuthLoading2(true);
-
-      try {
-        await signInWithEmailAndPassword(auth, loginEmail, loginPassword);
-      } catch (err) {
-        console.error('Login error:', err);
-        if (err.code === 'auth/user-not-found') {
-          setAuthError('No account found with this email');
-        } else if (err.code === 'auth/wrong-password') {
-          setAuthError('Incorrect password');
-        } else if (err.code === 'auth/invalid-email') {
-          setAuthError('Invalid email address');
-        } else {
-          setAuthError('Login failed. Please try again.');
-        }
-      }
-
-      setAuthLoading2(false);
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
-        <div className="max-w-md w-full">
-          <div className="text-center mb-8">
-            <h1 className="text-5xl font-bold text-white mb-2" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
-            <p className="text-blue-200">Golf League Management</p>
-          </div>
-
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Login</h2>
-
-            {authError && (
-              <div className="bg-red-50 border-2 border-red-200 text-red-800 p-3 rounded-lg mb-4 text-sm">
-                {authError}
-              </div>
-            )}
-
-            <form onSubmit={handleLogin} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={loginEmail}
-                  onChange={(e) => setLoginEmail(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="your@email.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
-                <input
-                  type="password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="••••••••"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={authLoading2}
-                className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {authLoading2 ? 'Logging in...' : 'Login'}
-              </button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => {
-                  setAuthError('');
-                  setView('signup');
-                }}
-                className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
-              >
-                Don't have an account? Sign up
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <LoginView
+        loginEmail={loginEmail}
+        setLoginEmail={setLoginEmail}
+        loginPassword={loginPassword}
+        setLoginPassword={setLoginPassword}
+        authError={authError}
+        setAuthError={setAuthError}
+        authLoading2={authLoading2}
+        setAuthLoading2={setAuthLoading2}
+        setView={setView}
+      />
     );
   }
 
-  // ==================== SIGNUP VIEW ====================
-  
   if (view === 'signup') {
-    const handleSignup = async (e) => {
-      e.preventDefault();
-      setAuthError('');
-      setAuthLoading2(true);
-
-      try {
-        const userCredential = await createUserWithEmailAndPassword(auth, signupEmail, signupPassword);
-        const user = userCredential.user;
-
-        await set(ref(database, `users/${user.uid}`), {
-          email: signupEmail,
-          displayName: signupDisplayName,
-          handicap: signupHandicap ? parseFloat(signupHandicap) : null,
-          createdAt: Date.now()
-        });
-
-      } catch (err) {
-        console.error('Signup error:', err);
-        if (err.code === 'auth/email-already-in-use') {
-          setAuthError('This email is already registered');
-        } else if (err.code === 'auth/invalid-email') {
-          setAuthError('Invalid email address');
-        } else if (err.code === 'auth/weak-password') {
-          setAuthError('Password must be at least 6 characters');
-        } else {
-          setAuthError('Signup failed. Please try again.');
-        }
-      }
-
-      setAuthLoading2(false);
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
-        <div className="max-w-md w-full">
-          <div className="text-center mb-8">
-            <h1 className="text-5xl font-bold text-white mb-2" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
-            <p className="text-blue-200">Golf League Management</p>
-          </div>
-
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-            <h2 className="text-2xl font-bold text-gray-900 mb-6">Sign Up</h2>
-
-            {authError && (
-              <div className="bg-red-50 border-2 border-red-200 text-red-800 p-3 rounded-lg mb-4 text-sm">
-                {authError}
-              </div>
-            )}
-
-            <form onSubmit={handleSignup} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Display Name</label>
-                <input
-                  type="text"
-                  value={signupDisplayName}
-                  onChange={(e) => setSignupDisplayName(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="How you'll appear in the league"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Email</label>
-                <input
-                  type="email"
-                  value={signupEmail}
-                  onChange={(e) => setSignupEmail(e.target.value)}
-                  required
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="your@email.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Password</label>
-                <input
-                  type="password"
-                  value={signupPassword}
-                  onChange={(e) => setSignupPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="Min 6 characters"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Handicap Index (Optional)</label>
-                <input
-                  type="number"
-                  step="0.1"
-                  value={signupHandicap}
-                  onChange={(e) => setSignupHandicap(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="e.g. 12.4"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={authLoading2}
-                className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {authLoading2 ? 'Creating account...' : 'Sign Up'}
-              </button>
-            </form>
-
-            <div className="mt-6 text-center">
-              <button
-                onClick={() => {
-                  setAuthError('');
-                  setView('login');
-                }}
-                className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
-              >
-                Already have an account? Login
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <SignupView
+        signupEmail={signupEmail}
+        setSignupEmail={setSignupEmail}
+        signupPassword={signupPassword}
+        setSignupPassword={setSignupPassword}
+        signupDisplayName={signupDisplayName}
+        setSignupDisplayName={setSignupDisplayName}
+        signupHandicap={signupHandicap}
+        setSignupHandicap={setSignupHandicap}
+        authError={authError}
+        setAuthError={setAuthError}
+        authLoading2={authLoading2}
+        setAuthLoading2={setAuthLoading2}
+        setView={setView}
+      />
     );
   }
-  
-  // ==================== HOME VIEW ====================
-  
+
   if (view === 'home') {
-    const joinEvent = async () => {
-      if (!joinCode) {
-        setFeedback('Please enter an event code');
-        setTimeout(() => setFeedback(''), 2000);
-        return;
-      }
-
-      try {
-        const codeSnapshot = await get(ref(database, `eventCodes/${joinCode}`));
-        if (!codeSnapshot.exists()) {
-          setFeedback('Event not found. Check your code.');
-          setTimeout(() => setFeedback(''), 3000);
-          return;
-        }
-
-        const eventId = codeSnapshot.val();
-        const eventSnapshot = await get(ref(database, `events/${eventId}`));
-        
-        if (!eventSnapshot.exists()) {
-          setFeedback('Event not found.');
-          setTimeout(() => setFeedback(''), 3000);
-          return;
-        }
-
-        const event = eventSnapshot.val();
-        setCurrentEvent({ id: eventId, ...event });
-        setJoinCode('');
-        setView('event-lobby');
-        setFeedback('');
-      } catch (error) {
-        console.error('Error joining event:', error);
-        setFeedback('Error joining event. Please try again.');
-        setTimeout(() => setFeedback(''), 3000);
-      }
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 font-sans">
-        <div className="max-w-2xl mx-auto">
-          <div className="flex justify-between items-center mb-8">
-            <div>
-              <h1 className="text-3xl font-bold text-white" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
-              {userProfile && (
-                <p className="text-white/80">Welcome, {userProfile.displayName}</p>
-              )}
-            </div>
-            <button
-              onClick={async () => {
-                await signOut(auth);
-                setView('login');
-              }}
-              className="text-white/80 hover:text-white text-sm font-medium"
-            >
-              Logout
-            </button>
-          </div>
-
-          {/* ADMIN SECTION */}
-          {isAdmin() && (
-            <div className="mb-6">
-              <h2 className="text-white text-lg font-semibold mb-3">⚙️ ADMIN</h2>
-              <button
-                onClick={() => setView('manage-courses')}
-                className="w-full bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all text-left"
-              >
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="text-xl font-bold text-gray-900">Manage Courses</div>
-                    <div className="text-sm text-gray-600">Add and edit golf courses</div>
-                  </div>
-                  <div className="text-gray-400">›</div>
-                </div>
-              </button>
-            </div>
-          )}
-
-          {/* MY LEAGUES */}
-          {userLeagues.length > 0 && (
-            <div className="mb-6">
-              <h2 className="text-white text-lg font-semibold mb-3">MY LEAGUES</h2>
-              <div className="space-y-3">
-                {userLeagues.map(league => (
-                  <button
-                    key={league.id}
-                    onClick={() => {
-                      setCurrentLeague(league);
-                      setView('league-dashboard');
-                    }}
-                    className="w-full bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all text-left"
-                  >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="text-xl font-bold text-gray-900 flex items-center gap-2">
-                          {league.meta.name}
-                          {league.userRole === 'commissioner' && (
-                            <span className="text-yellow-500">⭐</span>
-                          )}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {league.userRole === 'commissioner' ? 'Commissioner' : 'Player'} · {Object.keys(league.seasons || {}).length} season{Object.keys(league.seasons || {}).length !== 1 ? 's' : ''}
-                        </div>
-                      </div>
-                      <div className="text-gray-400">›</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* CREATE / JOIN LEAGUE */}
-          <div className="mb-6">
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                onClick={() => setView('create-league')}
-                className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
-              >
-                <div className="text-center">
-                  <div className="text-3xl mb-2">🏆</div>
-                  <div className="font-bold text-gray-900">Create League</div>
-                </div>
-              </button>
-              <button
-                onClick={() => setView('join-league')}
-                className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
-              >
-                <div className="text-center">
-                  <div className="text-3xl mb-2">🤝</div>
-                  <div className="font-bold text-gray-900">Join League</div>
-                </div>
-              </button>
-            </div>
-          </div>
-
-          {/* QUICK PLAY */}
-          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6">
-            <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Quick Play</h3>
-            <p className="text-white/70 text-sm mb-4">For one-off events without a league</p>
-            
-            <div className="space-y-3">
-              <button
-                onClick={() => setView('create-event')}
-                className="w-full bg-white/20 hover:bg-white/30 p-4 rounded-xl transition-all text-white text-left"
-              >
-                <div className="font-semibold">Create Event</div>
-                <div className="text-sm text-white/80">Host a standalone golf event</div>
-              </button>
-
-              <div className="bg-white/20 p-4 rounded-xl">
-                <div className="font-semibold text-white mb-3">Join Event</div>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={joinCode}
-                    onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                    onKeyPress={(e) => e.key === 'Enter' && joinEvent()}
-                    placeholder="WOLF-A3X9"
-                    className="flex-1 px-4 py-2 rounded-lg border-2 border-white/30 bg-white/10 text-white placeholder-white/50 focus:border-white/50 focus:outline-none uppercase"
-                  />
-                  <button
-                    onClick={joinEvent}
-                    className="bg-white text-blue-900 px-5 py-2 rounded-lg hover:bg-white/90 font-semibold"
-                  >
-                    Join
-                  </button>
-                </div>
-                {feedback && <div className="mt-2 text-sm text-white/90">{feedback}</div>}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <HomeView
+        currentUser={currentUser}
+        userProfile={userProfile}
+        userLeagues={userLeagues}
+        isAdmin={isAdmin}
+        joinCode={joinCode}
+        setJoinCode={setJoinCode}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setCurrentLeague={setCurrentLeague}
+        setCurrentEvent={setCurrentEvent}
+      />
     );
   }
-// ==================== CREATE LEAGUE VIEW ====================
-  
+
   if (view === 'create-league') {
-    const handleCreateLeague = async (e) => {
-      e.preventDefault();
-      setFeedback('');
-
-      if (!newLeague.name) {
-        setFeedback('Please enter a league name');
-        return;
-      }
-
-      if (!userProfile) {
-        setFeedback('User profile not loaded. Please try again.');
-        return;
-      }
-
-      try {
-        const leagueId = 'league-' + Date.now();
-        const code = await generateLeagueCode();
-
-        const leagueData = {
-          meta: {
-            name: newLeague.name,
-            code: code,
-            commissionerId: currentUser.uid,
-            description: newLeague.description,
-            createdAt: Date.now()
-          },
-          members: {
-            [currentUser.uid]: {
-              displayName: userProfile.displayName,
-              role: 'commissioner',
-              handicap: userProfile.handicap || null,
-              joinedAt: Date.now()
-            }
-          },
-          seasons: {
-            'season-2026': {
-              name: newLeague.seasonName,
-              status: 'active',
-              pointSystem: newLeague.pointSystem,
-              events: [],
-              standings: {}
-            }
-          }
-        };
-
-        await set(ref(database, `leagues/${leagueId}`), leagueData);
-        await set(ref(database, `leagueCodes/${code}`), leagueId);
-        await set(ref(database, `users/${currentUser.uid}/leagues/${leagueId}`), {
-          role: 'commissioner',
-          joinedAt: Date.now()
-        });
-
-        const leagues = await loadUserLeagues(currentUser.uid);
-        setUserLeagues(leagues);
-        setCurrentLeague({ id: leagueId, ...leagueData, userRole: 'commissioner' });
-        
-        setFeedback(`League created! Code: ${code}`);
-        setTimeout(() => {
-          setView('league-dashboard');
-          setFeedback('');
-        }, 1500);
-
-      } catch (error) {
-        console.error('Error creating league:', error);
-        setFeedback('Error creating league. Please try again.');
-      }
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-        <div className="max-w-2xl mx-auto">
-          <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">← Back</button>
-
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6">Create League</h2>
-
-            {feedback && (
-              <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
-                feedback.includes('Error') || feedback.includes('required')
-                  ? 'bg-red-50 border-red-200 text-red-800'
-                  : 'bg-green-50 border-green-200 text-green-800'
-              }`}>
-                {feedback}
-              </div>
-            )}
-
-            <form onSubmit={handleCreateLeague} className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">League Name</label>
-                <input
-                  type="text"
-                  value={newLeague.name}
-                  onChange={(e) => setNewLeague({ ...newLeague, name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="Sunday Golf League"
-                  required
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Description (Optional)</label>
-                <textarea
-                  value={newLeague.description}
-                  onChange={(e) => setNewLeague({ ...newLeague, description: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="Weekly competitive league for golfers of all levels"
-                  rows={3}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Season Name</label>
-                <input
-                  type="text"
-                  value={newLeague.seasonName}
-                  onChange={(e) => setNewLeague({ ...newLeague, seasonName: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  placeholder="2026 Season"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Point System</label>
-                <div className="bg-gray-50 p-4 rounded-xl">
-                  <div className="grid grid-cols-5 gap-3">
-                    {[1, 2, 3, 4, 5].map(place => (
-                      <div key={place}>
-                        <label className="block text-xs text-gray-600 mb-1">{place}{place === 1 ? 'st' : place === 2 ? 'nd' : place === 3 ? 'rd' : 'th'}</label>
-                        <input
-                          type="number"
-                          value={newLeague.pointSystem[place]}
-                          onChange={(e) => setNewLeague({
-                            ...newLeague,
-                            pointSystem: { ...newLeague.pointSystem, [place]: parseInt(e.target.value) || 0 }
-                          })}
-                          className="w-full px-2 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center"
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 text-lg"
-              >
-                Create League
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
+      <CreateLeagueView
+        currentUser={currentUser}
+        userProfile={userProfile}
+        newLeague={newLeague}
+        setNewLeague={setNewLeague}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setCurrentLeague={setCurrentLeague}
+        setUserLeagues={setUserLeagues}
+        generateLeagueCode={generateLeagueCode}
+        loadUserLeagues={loadUserLeagues}
+      />
     );
   }
 
-  // ==================== JOIN LEAGUE VIEW ====================
-  
   if (view === 'join-league') {
-      const handleJoinLeague = async (e) => {
-      e.preventDefault();
-      setFeedback('');
-
-      if (!leagueCode) {
-        setFeedback('Please enter a league code');
-        return;
-      }
-
-      if (!userProfile) {
-        setFeedback('User profile not loaded. Please try logging out and back in.');
-        return;
-      }
-
-      try {
-        const codeSnapshot = await get(ref(database, `leagueCodes/${leagueCode}`));
-        const leagueId = codeSnapshot.val();
-
-        if (!leagueId) {
-          setFeedback('League not found. Check your code.');
-          return;
-        }
-
-        const leagueSnapshot = await get(ref(database, `leagues/${leagueId}`));
-        const leagueData = leagueSnapshot.val();
-
-        if (!leagueData) {
-          setFeedback('League not found. Check your code.');
-          return;
-        }
-
-        if (leagueData.members && leagueData.members[currentUser.uid]) {
-          setFeedback('You are already a member of this league');
-          setTimeout(() => {
-            const league = { id: leagueId, ...leagueData, userRole: leagueData.members[currentUser.uid].role };
-            setCurrentLeague(league);
-            setView('league-dashboard');
-          }, 1500);
-          return;
-        }
-
-        await set(ref(database, `leagues/${leagueId}/members/${currentUser.uid}`), {
-          displayName: userProfile.displayName,
-          role: 'player',
-          handicap: userProfile.handicap || null,
-          joinedAt: Date.now()
-        });
-
-        await set(ref(database, `users/${currentUser.uid}/leagues/${leagueId}`), {
-          role: 'player',
-          joinedAt: Date.now()
-        });
-
-        const leagues = await loadUserLeagues(currentUser.uid);
-        setUserLeagues(leagues);
-        const joinedLeague = leagues.find(l => l.id === leagueId);
-        setCurrentLeague(joinedLeague);
-
-        setFeedback('Successfully joined league!');
-        setTimeout(() => {
-          setView('league-dashboard');
-          setFeedback('');
-        }, 1500);
-
-      } catch (error) {
-        console.error('Error joining league:', error);
-        setFeedback('Error joining league. Please try again.');
-      }
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
-        <div className="max-w-md w-full">
-          <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">← Back</button>
-
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-2">Join League</h2>
-            <p className="text-gray-600 mb-6">Enter the code from your league commissioner</p>
-
-            {feedback && (
-              <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
-                feedback.includes('Error') || feedback.includes('not found')
-                  ? 'bg-red-50 border-red-200 text-red-800'
-                  : 'bg-green-50 border-green-200 text-green-800'
-              }`}>
-                {feedback}
-              </div>
-            )}
-
-            <form onSubmit={handleJoinLeague}>
-              <div className="mb-6">
-                <label className="block text-sm font-semibold text-gray-700 mb-2">League Code</label>
-                <input
-                  type="text"
-                  value={leagueCode}
-                  onChange={(e) => setLeagueCode(e.target.value.toUpperCase())}
-                  className="w-full px-4 py-4 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none uppercase text-center text-2xl font-mono tracking-widest"
-                  placeholder="ABC-1234"
-                  maxLength={8}
-                />
-              </div>
-
-              <button
-                type="submit"
-                className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 text-lg"
-              >
-                Join League
-              </button>
-            </form>
-          </div>
-        </div>
-      </div>
+      <JoinLeagueView
+        currentUser={currentUser}
+        userProfile={userProfile}
+        leagueCode={leagueCode}
+        setLeagueCode={setLeagueCode}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setCurrentLeague={setCurrentLeague}
+        setUserLeagues={setUserLeagues}
+        loadUserLeagues={loadUserLeagues}
+      />
     );
   }
-// ==================== LEAGUE DASHBOARD VIEW ====================
-  
+
   if (view === 'league-dashboard' && currentLeague) {
-    const isCommissioner = currentLeague.userRole === 'commissioner';
-    const members = Object.entries(currentLeague.members || {}).map(([uid, data]) => ({
-      uid,
-      ...data
-    }));
-    const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
-
-    const handleRemoveMember = async (memberUid, memberName) => {
-      if (!confirm(`Remove ${memberName} from the league?`)) {
-        return;
-      }
-
-      try {
-        await remove(ref(database, `leagues/${currentLeague.id}/members/${memberUid}`));
-        await remove(ref(database, `users/${memberUid}/leagues/${currentLeague.id}`));
-
-        const leagueSnapshot = await get(ref(database, `leagues/${currentLeague.id}`));
-        const updatedLeague = leagueSnapshot.val();
-        setCurrentLeague({ id: currentLeague.id, ...updatedLeague, userRole: currentLeague.userRole });
-
-        setFeedback(`${memberName} removed from league`);
-        setTimeout(() => setFeedback(''), 3000);
-      } catch (error) {
-        console.error('Error removing member:', error);
-        setFeedback('Error removing member');
-        setTimeout(() => setFeedback(''), 3000);
-      }
-    };
-
-    const handleDeleteEvent = async (eventId, eventName) => {
-      if (!confirm(`Delete "${eventName}"? This will remove all scores and registrations.`)) {
-        return;
-      }
-
-      try {
-        // Remove event from season
-        const seasonId = Object.keys(currentLeague.seasons || {}).find(
-          sid => currentLeague.seasons[sid].status === 'active'
-        );
-        
-        if (seasonId) {
-          const eventsArray = currentLeague.seasons[seasonId].events || [];
-          const updatedEvents = eventsArray.filter(eid => eid !== eventId);
-          await set(ref(database, `leagues/${currentLeague.id}/seasons/${seasonId}/events`), updatedEvents);
-        }
-
-        // Get event code and remove it
-        const eventSnapshot = await get(ref(database, `events/${eventId}/meta/eventCode`));
-        if (eventSnapshot.exists()) {
-          await remove(ref(database, `eventCodes/${eventSnapshot.val()}`));
-        }
-
-        // Remove the event itself
-        await remove(ref(database, `events/${eventId}`));
-
-        // Reload league data
-        const leagueSnapshot = await get(ref(database, `leagues/${currentLeague.id}`));
-        const updatedLeague = leagueSnapshot.val();
-        setCurrentLeague({ id: currentLeague.id, ...updatedLeague, userRole: currentLeague.userRole });
-
-        setFeedback('Event deleted');
-        setTimeout(() => setFeedback(''), 3000);
-      } catch (error) {
-        console.error('Error deleting event:', error);
-        setFeedback('Error deleting event');
-        setTimeout(() => setFeedback(''), 3000);
-      }
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-        <div className="max-w-2xl mx-auto">
-          <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">← Back to Home</button>
-
-          {/* Header */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{currentLeague.meta.name}</h1>
-            {currentLeague.meta.description && (
-              <p className="text-gray-600 mb-4">{currentLeague.meta.description}</p>
-            )}
-            
-            <div className="flex items-center gap-3">
-              <div className="bg-blue-50 px-4 py-2 rounded-lg">
-                <div className="text-xs text-gray-600 mb-1">League Code</div>
-                <div className="font-mono font-bold text-blue-600 text-lg">{currentLeague.meta.code}</div>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(currentLeague.meta.code);
-                  setFeedback('Code copied!');
-                  setTimeout(() => setFeedback(''), 2000);
-                }}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold"
-              >
-                Copy Code
-              </button>
-            </div>
-            {feedback && <div className="mt-2 text-sm text-green-600">{feedback}</div>}
-          </div>
-
-          {/* Members */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Members ({members.length})</h2>
-            <div className="space-y-3">
-              {members.map(member => (
-                <div key={member.uid} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                  <div>
-                    <div className="font-semibold text-gray-900 flex items-center gap-2">
-                      {member.displayName}
-                      {member.role === 'commissioner' && <span className="text-yellow-500">⭐</span>}
-                    </div>
-                    {member.handicap !== null && member.handicap !== undefined && (
-                      <div className="text-sm text-gray-600">Handicap: {member.handicap}</div>
-                    )}
-                  </div>
-                  {isCommissioner && member.uid !== currentUser.uid && (
-                    <button
-                      onClick={() => handleRemoveMember(member.uid, member.displayName)}
-                      className="text-red-600 hover:text-red-700 text-sm font-semibold"
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Events */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">Events</h2>
-              {isCommissioner && (
-                <button
-                  onClick={() => {
-                    setCreatingEventForLeague({
-                      leagueId: currentLeague.id,
-                      seasonId: Object.keys(currentLeague.seasons || {}).find(
-                        sid => currentLeague.seasons[sid].status === 'active'
-                      )
-                    });
-                    setView('create-event');
-                  }}
-                  className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold flex items-center gap-2"
-                >
-                  <PlusIcon />
-                  Create Event
-                </button>
-              )}
-            </div>
-
-            {leagueEvents.length > 0 ? (
-              <div className="space-y-3">
-                                {leagueEvents.map((event) => {
-                  // Format display helper
-                  const formatNames = {
-                    scramble: "2-Man Scramble",
-                    shamble: "2-Man Shamble",
-                    bestball: "2-Man Best Ball",
-                    stableford: "Individual Stableford"
-                  };
-                  
-                  return (
-                    <div key={event.id} className="p-4 bg-gray-50 rounded-xl">
-                      <div className="flex items-center justify-between">
-                        <div className="flex-1">
-                          <div className="font-semibold text-gray-900">{event.meta.name}</div>
-                          <div className="text-sm text-gray-600">
-                            {event.meta.courseName} · {formatNames[event.meta.format] || event.meta.format}
-                          </div>
-                          <div className="text-sm text-gray-600">
-                            {new Date(event.meta.date).toLocaleDateString()}
-                            {event.meta.time && ` · ${event.meta.time}`}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            Status: {event.meta.status === 'draft' ? '📝 Draft' : event.meta.status === 'locked' ? '🔒 Locked' : '✅ Active'}
-                            {event.meta.status === 'draft' && ' · Registration Open'}
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {event.meta.status === 'draft' && (
-                            <button
-                              onClick={() => {
-                                setEditingEvent(event);
-                                setView('event-details');
-                              }}
-                              className="text-blue-600 hover:text-blue-700 text-sm font-semibold"
-                            >
-                              View
-                            </button>
-                          )}
-                          {isCommissioner && (
-                            <button
-                              onClick={() => handleDeleteEvent(event.id, event.meta.name)}
-                              className="text-red-600 hover:text-red-700 text-sm font-semibold"
-                            >
-                              Delete
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <CalendarIcon className="mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-600 mb-4">No events yet</p>
-                {isCommissioner && (
-                  <button
-                    onClick={() => {
-                      setCreatingEventForLeague({
-                        leagueId: currentLeague.id,
-                        seasonId: Object.keys(currentLeague.seasons || {}).find(
-                          sid => currentLeague.seasons[sid].status === 'active'
-                        )
-                      });
-                      setView('create-event');
-                    }}
-                    className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 font-semibold"
-                  >
-                    Create First Event
-                  </button>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* Standings */}
-          {activeSeason && (
-            <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                {activeSeason.name || 'Season'} Standings
-              </h2>
-              
-              {activeSeason.standings && Object.keys(activeSeason.standings).length > 0 ? (
-                <div className="space-y-2">
-                  {Object.entries(activeSeason.standings)
-                    .sort(([, a], [, b]) => (b.points || 0) - (a.points || 0))
-                    .map(([uid, data], index) => {
-                      const member = members.find(m => m.uid === uid);
-                      return (
-                        <div key={uid} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div className="flex items-center gap-3">
-                            <div className="text-lg font-bold text-gray-400 w-8">#{index + 1}</div>
-                            <div className="font-semibold text-gray-900">{member?.displayName || 'Unknown'}</div>
-                          </div>
-                          <div className="text-lg font-bold text-blue-600">{data.points || 0} pts</div>
-                        </div>
-                      );
-                    })}
-                </div>
-              ) : (
-                <div className="text-center py-8">
-                  <TrophyIcon className="mx-auto mb-3 text-gray-400" />
-                  <p className="text-gray-600">No standings yet</p>
-                  <p className="text-sm text-gray-500 mt-2">Standings will appear after events are completed</p>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-      </div>
+      <LeagueDashboardView
+        currentUser={currentUser}
+        currentLeague={currentLeague}
+        setCurrentLeague={setCurrentLeague}
+        leagueEvents={leagueEvents}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setCreatingEventForLeague={setCreatingEventForLeague}
+        setEditingEvent={setEditingEvent}
+      />
     );
   }
-  // ==================== CREATE EVENT VIEW ====================
-  
+
   if (view === 'create-event') {
-    const addTeam = () => {
-      if (newEvent.format === 'stableford') {
-        if (!newTeam.name) {
-          setFeedback('Please enter player name');
-          setTimeout(() => setFeedback(''), 2000);
-          return;
-        }
-        setNewEvent({
-          ...newEvent,
-          teams: [...newEvent.teams, { name: newTeam.name, player1: newTeam.name, id: Date.now() }]
-        });
-        setNewTeam({ name: '', player1: '', player2: '' });
-      } else {
-        if (!newTeam.name || !newTeam.player1 || !newTeam.player2) {
-          setFeedback('Please fill in all team fields');
-          setTimeout(() => setFeedback(''), 2000);
-          return;
-        }
-        setNewEvent({
-          ...newEvent,
-          teams: [...newEvent.teams, { ...newTeam, id: Date.now() }]
-        });
-        setNewTeam({ name: '', player1: '', player2: '' });
-      }
-    };
-
-    const removeTeam = (teamId) => {
-      setNewEvent({
-        ...newEvent,
-        teams: newEvent.teams.filter(t => t.id !== teamId)
-      });
-    };
-
-    const createEvent = async () => {
-      const minPlayers = creatingEventForLeague ? 0 : (newEvent.format === 'stableford' ? 1 : 2);
-      
-      if (!newEvent.name || !newEvent.courseId || newEvent.teams.length < minPlayers) {
-        const teamWord = newEvent.format === 'stableford' ? 'player' : 'teams';
-        const teamMsg = minPlayers === 0 ? '' : ` and at least ${minPlayers} ${teamWord}`;
-        setFeedback(`Please add event name, course${teamMsg}`);
-        setTimeout(() => setFeedback(''), 3000);
-        return;
-      }
-
-      try {
-        const course = courses.find(c => c.id === newEvent.courseId);
-        const eventId = 'event-' + Date.now();
-        const eventCode = await generateEventCode(course.id);
-        
-        const eventData = {
-          meta: {
-            name: newEvent.name,
-            courseId: course.id,
-            courseName: course.name,
-            coursePars: course.holes,
-            format: newEvent.format,
-            date: newEvent.date,
-            time: newEvent.time || null,
-            createdBy: currentUser?.uid || deviceId,
-            status: creatingEventForLeague ? "draft" : "active",
-            leagueId: creatingEventForLeague?.leagueId || null,
-            seasonId: creatingEventForLeague?.seasonId || null,
-            createdAt: Date.now(),
-            eventCode: eventCode
-          },
-          teams: {},
-          registrations: {}
-        };
-
-        // Add teams only for non-league events
-        if (!creatingEventForLeague) {
-          newEvent.teams.forEach((team, index) => {
-            const teamKey = `team-${Date.now()}-${index}`;
-            eventData.teams[teamKey] = {
-              name: team.name,
-              players: newEvent.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
-              currentHole: newEvent.startingHole,
-              scores: {}
-            };
-          });
-        }
-
-        await set(ref(database, `events/${eventId}`), eventData);
-        await set(ref(database, `eventCodes/${eventCode}`), eventId);
-
-        // Add event to league season if creating for league
-        if (creatingEventForLeague) {
-          const seasonEventsRef = ref(database, `leagues/${creatingEventForLeague.leagueId}/seasons/${creatingEventForLeague.seasonId}/events`);
-          const eventsSnapshot = await get(seasonEventsRef);
-          const events = eventsSnapshot.val() || [];
-          events.push(eventId);
-          await set(seasonEventsRef, events);
-        }
-
-        setFeedback(`Event created! Code: ${eventCode}`);
-        
-        setTimeout(async () => {
-          // Reset form
-          setNewEvent({
-            name: '',
-            courseId: '',
-            date: new Date().toISOString().split('T')[0],
-            time: '',
-            format: 'scramble',
-            startingHole: 1,
-            teams: []
-          });
-          setSelectedBaseCourse('');
-          setNewTeam({ name: '', player1: '', player2: '' });
-          setFeedback('');
-          
-          if (creatingEventForLeague) {
-            // Reload the league to get the updated events list
-            const leagueSnapshot = await get(ref(database, `leagues/${creatingEventForLeague.leagueId}`));
-            const updatedLeague = leagueSnapshot.val();
-            setCurrentLeague({ 
-              id: creatingEventForLeague.leagueId, 
-              ...updatedLeague, 
-              userRole: currentLeague.userRole 
-            });
-            setCreatingEventForLeague(null);
-            setView('league-dashboard');
-          } else {
-            setCurrentEvent({ id: eventId, ...eventData });
-            setView('event-lobby');
-          }
-        }, 1500);
-
-      } catch (error) {
-        console.error('Error creating event:', error);
-        setFeedback('Error creating event. Please try again.');
-        setTimeout(() => setFeedback(''), 3000);
-      }
-    };
-
-    // Format helpers
-    const formatNames = {
-      scramble: "2-Man Scramble",
-      shamble: "2-Man Shamble",
-      bestball: "2-Man Best Ball",
-      stableford: "Individual Stableford"
-    };
-
-    const formatDescriptions = {
-      scramble: "Both players hit, pick the best shot, both play from there. One team score per hole.",
-      shamble: "Both players hit, pick the best drive, then each plays their own ball. Best individual score counts.",
-      bestball: "Each player plays their own ball. Lower score of the two counts for the team.",
-      stableford: "Individual scoring. Points awarded based on score vs par. Highest points wins."
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-        <div className="max-w-2xl mx-auto">
-          <button 
-            onClick={() => {
-              if (creatingEventForLeague) {
-                setCreatingEventForLeague(null);
-                setView('league-dashboard');
-              } else {
-                setView('home');
-              }
-            }} 
-            className="text-white mb-6 hover:text-blue-200"
-          >
-            ← Back
-          </button>
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6" style={{ fontFamily: 'Georgia, serif' }}>Create Event</h2>
-            {creatingEventForLeague && (
-              <div className="bg-blue-50 border-2 border-blue-200 p-3 rounded-lg mb-6">
-                <div className="text-sm text-blue-800">Creating event for <strong>{currentLeague?.meta?.name}</strong></div>
-              </div>
-            )}
-            
-            <div className="space-y-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Event Name</label>
-                <input
-                  type="text"
-                  value={newEvent.name}
-                  onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })}
-                  placeholder="March Scramble"
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Course</label>
-                <select
-                  value={selectedBaseCourse}
-                  onChange={(e) => {
-                    setSelectedBaseCourse(e.target.value);
-                    setNewEvent({ ...newEvent, courseId: '' }); // Reset tee selection
-                  }}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="">Select a course</option>
-                  {globalCourses.map(course => (
-                    <option key={course.id} value={course.id}>
-                      {course.name} {course.location && `- ${course.location}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {selectedBaseCourse && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Tee</label>
-                  <select
-                    value={newEvent.courseId}
-                    onChange={(e) => setNewEvent({ ...newEvent, courseId: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  >
-                    <option value="">Select a tee</option>
-                    {courses
-                      .filter(c => c.courseId === selectedBaseCourse)
-                      .map(course => {
-                        const totalYards = course.yardages?.reduce((sum, y) => sum + (parseInt(y) || 0), 0) || 0;
-                        return (
-                          <option key={course.id} value={course.id}>
-                            {course.teeName} - Rating: {course.rating} / Slope: {course.slope} / {totalYards} yards
-                          </option>
-                        );
-                      })}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
-                <select
-                  value={newEvent.format}
-                  onChange={(e) => setNewEvent({ ...newEvent, format: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="scramble">2-Man Scramble</option>
-                  <option value="shamble">2-Man Shamble</option>
-                  <option value="bestball">2-Man Best Ball</option>
-                  <option value="stableford">Individual Stableford</option>
-                </select>
-                <p className="text-sm text-gray-600 mt-2">{formatDescriptions[newEvent.format]}</p>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
-                  <input
-                    type="date"
-                    value={newEvent.date}
-                    onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Time</label>
-                  <input
-                    type="time"
-                    value={newEvent.time}
-                    onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              {!creatingEventForLeague && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Starting Hole</label>
-                  <select
-                    value={newEvent.startingHole}
-                    onChange={(e) => setNewEvent({ ...newEvent, startingHole: parseInt(e.target.value) })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  >
-                    {Array.from({ length: 18 }, (_, i) => i + 1).map(hole => (
-                      <option key={hole} value={hole}>Hole {hole}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {!creatingEventForLeague && (
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    {newEvent.format === 'stableford' ? 'Players' : 'Teams'}
-                  </label>
-                  
-                  {newEvent.teams.length > 0 && (
-                    <div className="space-y-2 mb-3">
-                      {newEvent.teams.map(team => (
-                        <div key={team.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                          <div>
-                            <div className="font-semibold text-gray-900">{team.name}</div>
-                            {newEvent.format !== 'stableford' && (
-                              <div className="text-sm text-gray-600">{team.player1} & {team.player2}</div>
-                            )}
-                          </div>
-                          <button
-                            onClick={() => removeTeam(team.id)}
-                            className="text-red-600 hover:text-red-700"
-                          >
-                            <TrashIcon />
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-
-                  <div className="space-y-3 p-4 bg-blue-50 rounded-xl">
-                    {newEvent.format === 'stableford' ? (
-                      <>
-                        <input
-                          type="text"
-                          value={newTeam.name}
-                          onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
-                          placeholder="Player name"
-                          className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                        />
-                        <button
-                          onClick={addTeam}
-                          className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
-                        >
-                          Add Player
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <input
-                          type="text"
-                          value={newTeam.name}
-                          onChange={(e) => setNewTeam({ ...newTeam, name: e.target.value })}
-                          placeholder="Team name"
-                          className="w-full px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                        />
-                        <div className="grid grid-cols-2 gap-3">
-                          <input
-                            type="text"
-                            value={newTeam.player1}
-                            onChange={(e) => setNewTeam({ ...newTeam, player1: e.target.value })}
-                            placeholder="Player 1"
-                            className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                          />
-                          <input
-                            type="text"
-                            value={newTeam.player2}
-                            onChange={(e) => setNewTeam({ ...newTeam, player2: e.target.value })}
-                            placeholder="Player 2"
-                            className="px-4 py-2 rounded-lg border-2 border-blue-200 focus:border-blue-500 focus:outline-none"
-                          />
-                        </div>
-                        <button
-                          onClick={addTeam}
-                          className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 font-semibold"
-                        >
-                          Add Team
-                        </button>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {feedback && (
-                <div className="bg-blue-50 border-2 border-blue-200 text-blue-800 px-4 py-3 rounded-xl text-sm">
-                  {feedback}
-                </div>
-              )}
-
-              <button
-                onClick={createEvent}
-                className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
-              >
-                Create Event
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <CreateEventView
+        currentUser={currentUser}
+        currentLeague={currentLeague}
+        courses={courses}
+        globalCourses={globalCourses}
+        newEvent={newEvent}
+        setNewEvent={setNewEvent}
+        selectedBaseCourse={selectedBaseCourse}
+        setSelectedBaseCourse={setSelectedBaseCourse}
+        newTeam={newTeam}
+        setNewTeam={setNewTeam}
+        creatingEventForLeague={creatingEventForLeague}
+        setCreatingEventForLeague={setCreatingEventForLeague}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setCurrentEvent={setCurrentEvent}
+        setCurrentLeague={setCurrentLeague}
+        generateEventCode={generateEventCode}
+        deviceId={deviceId}
+      />
     );
   }
-  // ==================== EVENT LOBBY VIEW ====================
-  
+
   if (view === 'event-lobby' && currentEvent) {
-    const teams = Object.entries(currentEvent.teams || {}).map(([key, data]) => ({
-      key,
-      ...data
-    }));
-
-    const handleJoinTeam = (teamKey) => {
-      setSelectedTeam(teamKey);
-      setView('scoring');
-    };
-
-    const formatNames = {
-      scramble: "2-Man Scramble",
-      shamble: "2-Man Shamble",
-      bestball: "2-Man Best Ball",
-      stableford: "Individual Stableford"
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-        <div className="max-w-2xl mx-auto">
-          <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">
-            ← Back to Home
-          </button>
-
-          {/* Event Header */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">{currentEvent.meta.name}</h1>
-            <div className="space-y-1 text-gray-600">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Course:</span>
-                {currentEvent.meta.courseName}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Format:</span>
-                {formatNames[currentEvent.meta.format]}
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="font-semibold">Date:</span>
-                {new Date(currentEvent.meta.date).toLocaleDateString()}
-                {currentEvent.meta.time && ` at ${currentEvent.meta.time}`}
-              </div>
-            </div>
-
-            <div className="mt-4 flex items-center gap-3">
-              <div className="bg-blue-50 px-4 py-2 rounded-lg">
-                <div className="text-xs text-gray-600 mb-1">Event Code</div>
-                <div className="font-mono font-bold text-blue-600 text-lg">{currentEvent.meta.eventCode}</div>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(currentEvent.meta.eventCode);
-                  setFeedback('Code copied!');
-                  setTimeout(() => setFeedback(''), 2000);
-                }}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold"
-              >
-                Copy Code
-              </button>
-            </div>
-            {feedback && <div className="mt-2 text-sm text-green-600">{feedback}</div>}
-          </div>
-
-          {/* Teams */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {currentEvent.meta.format === 'stableford' ? 'Players' : 'Teams'}
-            </h2>
-            
-            {teams.length > 0 ? (
-              <div className="space-y-3">
-                {teams.map(team => (
-                  <div key={team.key} className="p-4 bg-gray-50 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-semibold text-gray-900">{team.name}</div>
-                        <div className="text-sm text-gray-600">
-                          {team.players.join(' & ')}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          Currently on hole {team.currentHole}
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => handleJoinTeam(team.key)}
-                        className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold"
-                      >
-                        View Scores
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <UsersIcon className="mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-600">No teams yet</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <EventLobbyView
+        currentEvent={currentEvent}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setSelectedTeam={setSelectedTeam}
+      />
     );
   }
 
-  // ==================== EVENT DETAILS VIEW (for league events) ====================
-  
   if (view === 'event-details' && editingEvent) {
-    const registrations = Object.entries(eventRegistrations || {}).map(([uid, data]) => ({
-      uid,
-      ...data
-    }));
-
-    const handleRegister = async () => {
-      if (!userProfile) {
-        setFeedback('User profile not loaded');
-        return;
-      }
-
-      try {
-        await set(ref(database, `events/${editingEvent.id}/registrations/${currentUser.uid}`), {
-          displayName: userProfile.displayName,
-          handicap: userProfile.handicap || null,
-          registeredAt: Date.now()
-        });
-
-        setFeedback('Successfully registered!');
-        setTimeout(() => setFeedback(''), 2000);
-      } catch (error) {
-        console.error('Error registering:', error);
-        setFeedback('Error registering. Please try again.');
-        setTimeout(() => setFeedback(''), 3000);
-      }
-    };
-
-    const handleWithdraw = async () => {
-      if (!confirm('Withdraw from this event?')) {
-        return;
-      }
-
-      try {
-        await remove(ref(database, `events/${editingEvent.id}/registrations/${currentUser.uid}`));
-        setFeedback('Withdrawn from event');
-        setTimeout(() => setFeedback(''), 2000);
-      } catch (error) {
-        console.error('Error withdrawing:', error);
-        setFeedback('Error withdrawing. Please try again.');
-        setTimeout(() => setFeedback(''), 3000);
-      }
-    };
-
-    const isRegistered = eventRegistrations && eventRegistrations[currentUser.uid];
-    const isCommissioner = currentLeague && currentLeague.userRole === 'commissioner';
-
-    const formatNames = {
-      scramble: "2-Man Scramble",
-      shamble: "2-Man Shamble",
-      bestball: "2-Man Best Ball",
-      stableford: "Individual Stableford"
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-        <div className="max-w-2xl mx-auto">
-          <button 
-            onClick={() => {
-              setEditingEvent(null);
-              setView('league-dashboard');
-            }} 
-            className="text-white mb-6 hover:text-blue-200"
-          >
-            ← Back to League
-          </button>
-
-          {/* Event Header */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h1 className="text-3xl font-bold text-gray-900 mb-2">{editingEvent.meta.name}</h1>
-                <div className="space-y-1 text-gray-600">
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">Course:</span>
-                    {editingEvent.meta.courseName}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">Format:</span>
-                    {formatNames[editingEvent.meta.format]}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold">Date:</span>
-                    {new Date(editingEvent.meta.date).toLocaleDateString()}
-                    {editingEvent.meta.time && ` at ${editingEvent.meta.time}`}
-                  </div>
-                </div>
-              </div>
-              
-              {isCommissioner && (
-                <button
-                  onClick={() => {
-                    setView('edit-event');
-                  }}
-                  className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-semibold flex items-center gap-2"
-                >
-                  <EditIcon />
-                  Edit
-                </button>
-              )}
-            </div>
-
-            {feedback && (
-              <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
-                feedback.includes('Error')
-                  ? 'bg-red-50 border-red-200 text-red-800'
-                  : 'bg-green-50 border-green-200 text-green-800'
-              }`}>
-                {feedback}
-              </div>
-            )}
-
-            {editingEvent.meta.status === 'draft' && (
-              <div className="mt-4">
-                {isRegistered ? (
-                  <button
-                    onClick={handleWithdraw}
-                    className="w-full bg-red-600 text-white py-3 rounded-xl font-semibold hover:bg-red-700"
-                  >
-                    Withdraw from Event
-                  </button>
-                ) : (
-                  <button
-                    onClick={handleRegister}
-                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700"
-                  >
-                    Register for Event
-                  </button>
-                )}
-              </div>
-            )}
-
-            {editingEvent.meta.status === 'locked' && (
-              <div className="mt-4 bg-yellow-50 border-2 border-yellow-200 text-yellow-800 px-4 py-3 rounded-xl text-sm">
-                🔒 This event is locked. Registration is closed.
-              </div>
-            )}
-          </div>
-
-          {/* Registrations */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              Registered Players ({registrations.length})
-            </h2>
-            
-            {registrations.length > 0 ? (
-              <div className="space-y-2">
-                {registrations.map(reg => (
-                  <div key={reg.uid} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                    <div>
-                      <div className="font-semibold text-gray-900">{reg.displayName}</div>
-                      {reg.handicap !== null && reg.handicap !== undefined && (
-                        <div className="text-sm text-gray-600">Handicap: {reg.handicap}</div>
-                      )}
-                    </div>
-                    {reg.uid === currentUser.uid && (
-                      <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-semibold">
-                        You
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <UsersIcon className="mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-600">No registrations yet</p>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <EventDetailsView
+        currentUser={currentUser}
+        userProfile={userProfile}
+        currentLeague={currentLeague}
+        editingEvent={editingEvent}
+        setEditingEvent={setEditingEvent}
+        eventRegistrations={eventRegistrations}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+      />
     );
   }
-  // ==================== SCORING VIEW ====================
-  
+
   if (view === 'scoring' && currentEvent && selectedTeam) {
-    const team = currentEvent.teams[selectedTeam];
-    const coursePars = currentEvent.meta.coursePars;
-    const format = currentEvent.meta.format;
-
-    if (!team) {
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
-          <div className="text-white text-center">
-            <p className="text-xl mb-4">Team not found</p>
-            <button onClick={() => setView('event-lobby')} className="bg-white text-blue-900 px-6 py-3 rounded-xl font-semibold">
-              Back to Lobby
-            </button>
-          </div>
-        </div>
-      );
-    }
-
-    const currentHole = team.currentHole;
-    const currentPar = coursePars[currentHole - 1];
-
-    // Calculate Stableford points
-    const calculateStablefordPoints = (score, par) => {
-      const diff = score - par;
-      if (diff >= 2) return 0;
-      if (diff === 1) return 1;
-      if (diff === 0) return 2;
-      if (diff === -1) return 3;
-      if (diff === -2) return 4;
-      if (diff <= -3) return 5;
-      return 0;
-    };
-
-    // Get score for current hole
-    const getHoleScore = (hole) => {
-      return team.scores[hole] || null;
-    };
-
-    // Save score
-    const saveScore = async (hole, score) => {
-      if (!score || score < 1 || score > 15) {
-        setFeedback('Please enter a valid score');
-        setTimeout(() => setFeedback(''), 2000);
-        return;
-      }
-
-      try {
-        // Update score
-        await set(ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/scores/${hole}`), parseInt(score));
-
-        // Show confirmation
-        setScoreConfirmation({ hole, score: parseInt(score) });
-
-        // Auto-advance to next hole after 1 second
-        setTimeout(async () => {
-          setScoreConfirmation(null);
-          
-          // Move to next hole if not on 18
-          if (hole < 18) {
-            await set(ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/currentHole`), hole + 1);
-            
-            // Reload event data
-            const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
-            const updatedEvent = eventSnapshot.val();
-            setCurrentEvent({ id: currentEvent.id, ...updatedEvent });
-          }
-        }, 1000);
-
-      } catch (error) {
-        console.error('Error saving score:', error);
-        setFeedback('Error saving score');
-        setTimeout(() => setFeedback(''), 2000);
-      }
-    };
-
-    // Navigate holes
-    const goToHole = async (hole) => {
-      if (hole < 1 || hole > 18) return;
-
-      try {
-        await set(ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/currentHole`), hole);
-        
-        // Reload event data
-        const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
-        const updatedEvent = eventSnapshot.val();
-        setCurrentEvent({ id: currentEvent.id, ...updatedEvent });
-      } catch (error) {
-        console.error('Error changing hole:', error);
-      }
-    };
-
-    // Calculate total score and points
-    const calculateTotals = () => {
-      let totalScore = 0;
-      let totalPoints = 0;
-      let holesPlayed = 0;
-
-      for (let i = 1; i <= 18; i++) {
-        const score = team.scores[i];
-        if (score) {
-          totalScore += score;
-          holesPlayed++;
-          if (format === 'stableford') {
-            totalPoints += calculateStablefordPoints(score, coursePars[i - 1]);
-          }
-        }
-      }
-
-      const totalPar = coursePars.reduce((sum, par) => sum + par, 0);
-      const scoreToPar = totalScore - totalPar;
-
-      return { totalScore, totalPoints, holesPlayed, scoreToPar };
-    };
-
-    const totals = calculateTotals();
-
-    // Quick score buttons
-    const quickScoreButtons = [
-      { label: 'Eagle', value: currentPar - 2 },
-      { label: 'Birdie', value: currentPar - 1 },
-      { label: 'Par', value: currentPar },
-      { label: 'Bogey', value: currentPar + 1 },
-      { label: 'Double', value: currentPar + 2 }
-    ];
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-4">
-        <div className="max-w-2xl mx-auto">
-          <button 
-            onClick={() => {
-              setSelectedTeam(null);
-              setView('event-lobby');
-            }} 
-            className="text-white mb-4 hover:text-blue-200"
-          >
-            ← Back to Lobby
-          </button>
-
-          {/* Team Header */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">{team.name}</h1>
-            <div className="text-sm text-gray-600 mb-4">{team.players.join(' & ')}</div>
-            
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-blue-50 p-3 rounded-lg text-center">
-                <div className="text-xs text-gray-600 mb-1">Holes</div>
-                <div className="text-2xl font-bold text-gray-900">{totals.holesPlayed}/18</div>
-              </div>
-              <div className="bg-blue-50 p-3 rounded-lg text-center">
-                <div className="text-xs text-gray-600 mb-1">Score</div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {totals.totalScore > 0 ? (
-                    <>
-                      {totals.totalScore}
-                      <span className="text-sm ml-1">
-                        ({totals.scoreToPar > 0 ? '+' : ''}{totals.scoreToPar})
-                      </span>
-                    </>
-                  ) : '-'}
-                </div>
-              </div>
-              {format === 'stableford' && (
-                <div className="bg-blue-50 p-3 rounded-lg text-center">
-                  <div className="text-xs text-gray-600 mb-1">Points</div>
-                  <div className="text-2xl font-bold text-gray-900">{totals.totalPoints}</div>
-                </div>
-              )}
-              {format !== 'stableford' && (
-                <div className="bg-blue-50 p-3 rounded-lg text-center">
-                  <div className="text-xs text-gray-600 mb-1">Par</div>
-                  <div className="text-2xl font-bold text-gray-900">{coursePars.reduce((a, b) => a + b, 0)}</div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Current Hole */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
-            <div className="flex items-center justify-between mb-4">
-              <button
-                onClick={() => goToHole(currentHole - 1)}
-                disabled={currentHole === 1}
-                className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed p-3 rounded-xl"
-              >
-                <ChevronLeftIcon />
-              </button>
-
-              <div className="text-center">
-                <div className="text-sm text-gray-600 mb-1">Hole</div>
-                <div className="text-5xl font-bold text-gray-900">{currentHole}</div>
-                <div className="text-lg text-gray-600 mt-1">Par {currentPar}</div>
-              </div>
-
-              <button
-                onClick={() => goToHole(currentHole + 1)}
-                disabled={currentHole === 18}
-                className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed p-3 rounded-xl"
-              >
-                <ChevronRightIcon />
-              </button>
-            </div>
-
-            {/* Score Confirmation */}
-            {scoreConfirmation && scoreConfirmation.hole === currentHole && (
-              <div className="bg-green-50 border-2 border-green-200 text-green-800 px-4 py-3 rounded-xl mb-4 text-center font-semibold">
-                ✓ Score saved: {scoreConfirmation.score}
-              </div>
-            )}
-
-            {/* Quick Score Buttons */}
-            <div className="grid grid-cols-5 gap-2 mb-4">
-              {quickScoreButtons.map(btn => (
-                <button
-                  key={btn.label}
-                  onClick={() => saveScore(currentHole, btn.value)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold text-sm"
-                >
-                  <div>{btn.label}</div>
-                  <div className="text-xs opacity-80">{btn.value}</div>
-                </button>
-              ))}
-            </div>
-
-            {/* Manual Score Entry */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Or enter score manually:</label>
-              <div className="flex gap-2">
-                <input
-                  type="number"
-                  min="1"
-                  max="15"
-                  placeholder="Score"
-                  onKeyPress={(e) => {
-                    if (e.key === 'Enter') {
-                      saveScore(currentHole, parseInt(e.target.value));
-                      e.target.value = '';
-                    }
-                  }}
-                  className="flex-1 px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center text-2xl font-bold"
-                />
-                <button
-                  onClick={(e) => {
-                    const input = e.target.parentElement.querySelector('input');
-                    saveScore(currentHole, parseInt(input.value));
-                    input.value = '';
-                  }}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold"
-                >
-                  Save
-                </button>
-              </div>
-            </div>
-
-            {feedback && (
-              <div className="mt-4 bg-red-50 border-2 border-red-200 text-red-800 px-4 py-3 rounded-xl text-sm text-center">
-                {feedback}
-              </div>
-            )}
-          </div>
-
-          {/* Scorecard */}
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">Scorecard</h2>
-            
-            {/* Front 9 */}
-            <div className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="text-left p-2">Hole</th>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                        <th key={h} className="text-center p-2 min-w-[40px]">{h}</th>
-                      ))}
-                      <th className="text-center p-2 font-bold">OUT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-200">
-                      <td className="p-2 text-gray-600">Par</td>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                        <td key={h} className="text-center p-2">{coursePars[h - 1]}</td>
-                      ))}
-                      <td className="text-center p-2 font-bold">
-                        {coursePars.slice(0, 9).reduce((a, b) => a + b, 0)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 text-gray-600">Score</td>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => {
-                        const score = getHoleScore(h);
-                        const par = coursePars[h - 1];
-                        let bgColor = 'bg-white';
-                        if (score) {
-                          if (score === par - 2) bgColor = 'bg-yellow-200'; // Eagle
-                          else if (score === par - 1) bgColor = 'bg-red-200'; // Birdie
-                          else if (score === par + 1) bgColor = 'bg-blue-200'; // Bogey
-                          else if (score >= par + 2) bgColor = 'bg-gray-300'; // Double+
-                        }
-                        return (
-                          <td key={h} className={`text-center p-2 ${bgColor} font-semibold`}>
-                            {score || '-'}
-                          </td>
-                        );
-                      })}
-                      <td className="text-center p-2 font-bold bg-gray-100">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].reduce((sum, h) => sum + (getHoleScore(h) || 0), 0) || '-'}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Back 9 */}
-            <div>
-              <h3 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="text-left p-2">Hole</th>
-                      {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                        <th key={h} className="text-center p-2 min-w-[40px]">{h}</th>
-                      ))}
-                      <th className="text-center p-2 font-bold">IN</th>
-                      <th className="text-center p-2 font-bold">TOT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-200">
-                      <td className="p-2 text-gray-600">Par</td>
-                      {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                        <td key={h} className="text-center p-2">{coursePars[h - 1]}</td>
-                      ))}
-                      <td className="text-center p-2 font-bold">
-                        {coursePars.slice(9, 18).reduce((a, b) => a + b, 0)}
-                      </td>
-                      <td className="text-center p-2 font-bold bg-gray-200">
-                        {coursePars.reduce((a, b) => a + b, 0)}
-                      </td>
-                    </tr>
-                    <tr>
-                      <td className="p-2 text-gray-600">Score</td>
-                      {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => {
-                        const score = getHoleScore(h);
-                        const par = coursePars[h - 1];
-                        let bgColor = 'bg-white';
-                        if (score) {
-                          if (score === par - 2) bgColor = 'bg-yellow-200'; // Eagle
-                          else if (score === par - 1) bgColor = 'bg-red-200'; // Birdie
-                          else if (score === par + 1) bgColor = 'bg-blue-200'; // Bogey
-                          else if (score >= par + 2) bgColor = 'bg-gray-300'; // Double+
-                        }
-                        return (
-                          <td key={h} className={`text-center p-2 ${bgColor} font-semibold`}>
-                            {score || '-'}
-                          </td>
-                        );
-                      })}
-                      <td className="text-center p-2 font-bold bg-gray-100">
-                        {[10, 11, 12, 13, 14, 15, 16, 17, 18].reduce((sum, h) => sum + (getHoleScore(h) || 0), 0) || '-'}
-                      </td>
-                      <td className="text-center p-2 font-bold bg-gray-200">
-                        {totals.totalScore || '-'}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <ScoringView
+        currentEvent={currentEvent}
+        setCurrentEvent={setCurrentEvent}
+        selectedTeam={selectedTeam}
+        setSelectedTeam={setSelectedTeam}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        scoreConfirmation={scoreConfirmation}
+        setScoreConfirmation={setScoreConfirmation}
+        setView={setView}
+      />
     );
   }
-  // ==================== EDIT EVENT VIEW ====================
-  
+
   if (view === 'edit-event' && editingEvent && editForm) {
-    const saveEventEdits = async () => {
-      try {
-        const course = courses.find(c => c.id === editForm.courseId);
-        
-        if (!editForm.name || !editForm.courseId) {
-          setFeedback('Please fill in all required fields');
-          setTimeout(() => setFeedback(''), 2000);
-          return;
-        }
-        
-        // Prepare updates object
-        const updates = {};
-        updates[`events/${editingEvent.id}/meta/name`] = editForm.name;
-        updates[`events/${editingEvent.id}/meta/courseId`] = course.id;
-        updates[`events/${editingEvent.id}/meta/courseName`] = course.name;
-        updates[`events/${editingEvent.id}/meta/coursePars`] = course.holes;
-        updates[`events/${editingEvent.id}/meta/date`] = editForm.date;
-        updates[`events/${editingEvent.id}/meta/time`] = editForm.time || null;
-        updates[`events/${editingEvent.id}/meta/format`] = editForm.format;
-
-        await update(ref(database), updates);
-        
-        setFeedback('Event updated!');
-        setTimeout(() => {
-          setEditingEvent(null);
-          setView('league-dashboard');
-          setFeedback('');
-        }, 1500);
-      } catch (error) {
-        console.error('Error updating event:', error);
-        setFeedback('Error updating event');
-        setTimeout(() => setFeedback(''), 2000);
-      }
-    };
-
-    const formatNames = {
-      scramble: "2-Man Scramble",
-      shamble: "2-Man Shamble",
-      bestball: "2-Man Best Ball",
-      stableford: "Individual Stableford"
-    };
-
-    const formatDescriptions = {
-      scramble: "Both players hit, pick the best shot, both play from there. One team score per hole.",
-      shamble: "Both players hit, pick the best drive, then each plays their own ball. Best individual score counts.",
-      bestball: "Each player plays their own ball. Lower score of the two counts for the team.",
-      stableford: "Individual scoring. Points awarded based on score vs par. Highest points wins."
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-        <div className="max-w-2xl mx-auto">
-          <button 
-            onClick={() => { 
-              setEditingEvent(null); 
-              setView('event-details'); 
-            }} 
-            className="text-white mb-6 hover:text-blue-200"
-          >
-            ← Back
-          </button>
-          
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6">Edit Event</h2>
-
-            {feedback && (
-              <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
-                feedback.includes('Error') || feedback.includes('required')
-                  ? 'bg-red-50 border-red-200 text-red-800'
-                  : 'bg-green-50 border-green-200 text-green-800'
-              }`}>
-                {feedback}
-              </div>
-            )}
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Event Name</label>
-                <input
-                  type="text"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Course</label>
-                <select
-                  value={(() => {
-                    // Extract base course ID from the combined courseId
-                    const selectedCourse = courses.find(c => c.id === editForm.courseId);
-                    return selectedCourse?.courseId || '';
-                  })()}
-                  onChange={(e) => {
-                    // When course changes, reset the tee selection
-                    setEditForm({ ...editForm, courseId: '' });
-                  }}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="">Select a course</option>
-                  {globalCourses.map(course => (
-                    <option key={course.id} value={course.id}>
-                      {course.name} {course.location && `- ${course.location}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {(() => {
-                const selectedCourse = courses.find(c => c.id === editForm.courseId);
-                const baseCourseId = selectedCourse?.courseId;
-                return baseCourseId ? (
-                  <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">Tee</label>
-                    <select
-                      value={editForm.courseId}
-                      onChange={(e) => setEditForm({ ...editForm, courseId: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                    >
-                      <option value="">Select a tee</option>
-                      {courses
-                        .filter(c => c.courseId === baseCourseId)
-                        .map(course => {
-                          const totalYards = course.yardages?.reduce((sum, y) => sum + (parseInt(y) || 0), 0) || 0;
-                          return (
-                            <option key={course.id} value={course.id}>
-                              {course.teeName} - Rating: {course.rating} / Slope: {course.slope} / {totalYards} yards
-                            </option>
-                          );
-                        })}
-                    </select>
-                  </div>
-                ) : null;
-              })()}
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
-                  <input
-                    type="date"
-                    value={editForm.date}
-                    onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Time</label>
-                  <input
-                    type="time"
-                    value={editForm.time}
-                    onChange={(e) => setEditForm({ ...editForm, time: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
-                <select
-                  value={editForm.format}
-                  onChange={(e) => setEditForm({ ...editForm, format: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="scramble">2-Man Scramble</option>
-                  <option value="shamble">2-Man Shamble</option>
-                  <option value="bestball">2-Man Best Ball</option>
-                  <option value="stableford">Individual Stableford</option>
-                </select>
-                <p className="text-sm text-gray-600 mt-2">{formatDescriptions[editForm.format]}</p>
-              </div>
-
-              <button
-                onClick={saveEventEdits}
-                className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 text-lg"
-              >
-                Save Changes
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <EditEventView
+        editingEvent={editingEvent}
+        setEditingEvent={setEditingEvent}
+        editForm={editForm}
+        setEditForm={setEditForm}
+        courses={courses}
+        globalCourses={globalCourses}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+      />
     );
   }
-  // ==================== MANAGE COURSES VIEW ====================
-  
+
   if (view === 'manage-courses') {
-    const handleDeleteCourse = async (courseId, courseName) => {
-      if (!confirm(`Delete ${courseName}? This cannot be undone.`)) {
-        return;
-      }
-
-      try {
-        await remove(ref(database, `courses/${courseId}`));
-        await loadCourses();
-        setFeedback('Course deleted');
-        setTimeout(() => setFeedback(''), 2000);
-      } catch (error) {
-        console.error('Error deleting course:', error);
-        setFeedback('Error deleting course');
-        setTimeout(() => setFeedback(''), 2000);
-      }
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-        <div className="max-w-4xl mx-auto">
-          <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">
-            ← Back to Home
-          </button>
-
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-3xl font-bold text-gray-900">Manage Courses</h2>
-              <button
-                onClick={() => {
-                  setCourseForm({
-                    name: '',
-                    location: '',
-                    strokeIndex: Array(18).fill(''),
-                    tees: [{
-                      id: 'tee-1',
-                      name: '',
-                      rating: '',
-                      slope: '',
-                      pars: Array(18).fill(''),
-                      yardages: Array(18).fill('')
-                    }]
-                  });
-                  setEditingCourse(null);
-                  setView('add-edit-course');
-                }}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold flex items-center gap-2"
-              >
-                <PlusIcon />
-                Add Course
-              </button>
-            </div>
-
-            {feedback && (
-              <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
-                feedback.includes('Error')
-                  ? 'bg-red-50 border-red-200 text-red-800'
-                  : 'bg-green-50 border-green-200 text-green-800'
-              }`}>
-                {feedback}
-              </div>
-            )}
-
-            {globalCourses.length > 0 ? (
-              <div className="space-y-3">
-                {globalCourses.map(course => (
-                  <div key={course.id} className="p-4 bg-gray-50 rounded-xl">
-                    <div className="flex items-start justify-between">
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900 text-lg">{course.name}</div>
-                        {course.location && (
-                          <div className="text-sm text-gray-600 mb-2">{course.location}</div>
-                        )}
-                        <div className="text-sm text-gray-600">
-                          {Object.keys(course.tees || {}).length} tee{Object.keys(course.tees || {}).length !== 1 ? 's' : ''}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          onClick={() => {
-                            // Populate form with course data
-                            const teesArray = Object.entries(course.tees || {}).map(([id, tee]) => ({
-                              id,
-                              ...tee
-                            }));
-                            setCourseForm({
-                              name: course.name,
-                              location: course.location || '',
-                              strokeIndex: course.strokeIndex || Array(18).fill(''),
-                              tees: teesArray.length > 0 ? teesArray : [{
-                                id: 'tee-1',
-                                name: '',
-                                rating: '',
-                                slope: '',
-                                pars: Array(18).fill(''),
-                                yardages: Array(18).fill('')
-                              }]
-                            });
-                            setEditingCourse(course);
-                            setView('add-edit-course');
-                          }}
-                          className="text-blue-600 hover:text-blue-700 font-semibold"
-                        >
-                          <EditIcon />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteCourse(course.id, course.name)}
-                          className="text-red-600 hover:text-red-700"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12">
-                <p className="text-gray-600 mb-4">No courses yet</p>
-                <button
-                  onClick={() => {
-                    setCourseForm({
-                      name: '',
-                      location: '',
-                      strokeIndex: Array(18).fill(''),
-                      tees: [{
-                        id: 'tee-1',
-                        name: '',
-                        rating: '',
-                        slope: '',
-                        pars: Array(18).fill(''),
-                        yardages: Array(18).fill('')
-                      }]
-                    });
-                    setEditingCourse(null);
-                    setView('add-edit-course');
-                  }}
-                  className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 font-semibold"
-                >
-                  Add First Course
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
+      <ManageCoursesView
+        globalCourses={globalCourses}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setCourseForm={setCourseForm}
+        setEditingCourse={setEditingCourse}
+        loadCourses={loadCourses}
+      />
     );
   }
 
-  // ==================== ADD/EDIT COURSE VIEW ====================
-  
   if (view === 'add-edit-course') {
-    const addTee = () => {
-      const newTee = {
-        id: `tee-${Date.now()}`,
-        name: '',
-        rating: '',
-        slope: '',
-        pars: Array(18).fill(''),
-        yardages: Array(18).fill('')
-      };
-      setCourseForm({ ...courseForm, tees: [...courseForm.tees, newTee] });
-    };
-
-    const removeTee = (index) => {
-      if (courseForm.tees.length === 1) {
-        setFeedback('Must have at least one tee');
-        setTimeout(() => setFeedback(''), 2000);
-        return;
-      }
-      const newTees = courseForm.tees.filter((_, i) => i !== index);
-      setCourseForm({ ...courseForm, tees: newTees });
-    };
-
-    const updateTeeField = (teeIndex, field, value) => {
-      const newTees = [...courseForm.tees];
-      newTees[teeIndex][field] = value;
-      setCourseForm({ ...courseForm, tees: newTees });
-    };
-
-    const updateTeeHole = (teeIndex, holeIndex, field, value) => {
-      const newTees = [...courseForm.tees];
-      newTees[teeIndex][field][holeIndex] = value;
-      setCourseForm({ ...courseForm, tees: newTees });
-    };
-
-    const updateStrokeIndex = (holeIndex, value) => {
-      const newStrokeIndex = [...courseForm.strokeIndex];
-      newStrokeIndex[holeIndex] = value;
-      setCourseForm({ ...courseForm, strokeIndex: newStrokeIndex });
-    };
-
-    const saveCourse = async () => {
-      setFeedback('');
-
-      // Validation
-      if (!courseForm.name) {
-        setFeedback('Course name is required');
-        setTimeout(() => setFeedback(''), 3000);
-        return;
-      }
-
-      // Validate tees
-      for (let i = 0; i < courseForm.tees.length; i++) {
-        const tee = courseForm.tees[i];
-        if (!tee.name) {
-          setFeedback(`Tee ${i + 1}: Name is required`);
-          setTimeout(() => setFeedback(''), 3000);
-          return;
-        }
-        if (!tee.rating || !tee.slope) {
-          setFeedback(`Tee ${i + 1}: Rating and slope are required`);
-          setTimeout(() => setFeedback(''), 3000);
-          return;
-        }
-        // Check pars
-        for (let h = 0; h < 18; h++) {
-          if (!tee.pars[h] || parseInt(tee.pars[h]) < 3 || parseInt(tee.pars[h]) > 6) {
-            setFeedback(`Tee ${i + 1}, Hole ${h + 1}: Par must be between 3 and 6`);
-            setTimeout(() => setFeedback(''), 3000);
-            return;
-          }
-        }
-        // Check yardages
-        for (let h = 0; h < 18; h++) {
-          if (!tee.yardages[h] || parseInt(tee.yardages[h]) < 50 || parseInt(tee.yardages[h]) > 700) {
-            setFeedback(`Tee ${i + 1}, Hole ${h + 1}: Yardage must be between 50 and 700`);
-            setTimeout(() => setFeedback(''), 3000);
-            return;
-          }
-        }
-      }
-
-      // Validate stroke index
-      const siSet = new Set();
-      for (let i = 0; i < 18; i++) {
-        const si = parseInt(courseForm.strokeIndex[i]);
-        if (!si || si < 1 || si > 18) {
-          setFeedback(`Hole ${i + 1}: Stroke index must be between 1 and 18`);
-          setTimeout(() => setFeedback(''), 3000);
-          return;
-        }
-        if (siSet.has(si)) {
-          setFeedback(`Stroke index ${si} is used more than once. Each value from 1-18 must be used exactly once.`);
-          setTimeout(() => setFeedback(''), 4000);
-          return;
-        }
-        siSet.add(si);
-      }
-
-      // Check all stroke indexes 1-18 are present
-      for (let i = 1; i <= 18; i++) {
-        if (!siSet.has(i)) {
-          setFeedback(`Stroke index ${i} is missing. Each value from 1-18 must be used exactly once.`);
-          setTimeout(() => setFeedback(''), 4000);
-          return;
-        }
-      }
-
-      try {
-        const courseId = editingCourse?.id || `course-${Date.now()}`;
-        
-        const teeData = {};
-        courseForm.tees.forEach(tee => {
-          teeData[tee.id] = {
-            name: tee.name,
-            rating: parseFloat(tee.rating) || 0,
-            slope: parseInt(tee.slope) || 0,
-            pars: tee.pars.map(p => parseInt(p) || 0),
-            yardages: tee.yardages.map(y => parseInt(y) || 0)
-          };
-        });
-
-        const courseData = {
-          name: courseForm.name,
-          location: courseForm.location,
-          strokeIndex: courseForm.strokeIndex.map(si => parseInt(si) || 0),
-          tees: teeData,
-          createdBy: currentUser.uid,
-          createdAt: editingCourse?.createdAt || Date.now()
-        };
-
-        await set(ref(database, `courses/${courseId}`), courseData);
-        
-        setFeedback('Course saved!');
-        setTimeout(async () => {
-          await loadCourses();
-          setView('manage-courses');
-          setFeedback('');
-        }, 1500);
-
-      } catch (error) {
-        console.error('Error saving course:', error);
-        setFeedback('Error saving course: ' + error.message);
-      }
-    };
-
-    const calculateTotal = (array, start, end) => {
-      return array.slice(start, end).reduce((sum, val) => sum + (parseInt(val) || 0), 0);
-    };
-
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
-        <div className="max-w-6xl mx-auto">
-          <button 
-            onClick={() => { 
-              setView('manage-courses'); 
-              setEditingCourse(null); 
-            }} 
-            className="text-white mb-6 hover:text-blue-200"
-          >
-            ← Back
-          </button>
-          
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-            <h2 className="text-3xl font-bold text-gray-900 mb-6">
-              {editingCourse ? 'Edit Course' : 'Add Course'}
-            </h2>
-
-            {/* Basic Info */}
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Basic Information</h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Course Name</label>
-                  <input
-                    type="text"
-                    value={courseForm.name}
-                    onChange={(e) => setCourseForm({ ...courseForm, name: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                    placeholder="Glen Eagle Golf Course"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Location</label>
-                  <input
-                    type="text"
-                    value={courseForm.location}
-                    onChange={(e) => setCourseForm({ ...courseForm, location: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                    placeholder="Syracuse, UT"
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Tees */}
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Tees</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="text-left p-2 text-sm font-semibold text-gray-700">Tee Name</th>
-                      <th className="text-left p-2 text-sm font-semibold text-gray-700">Rating</th>
-                      <th className="text-left p-2 text-sm font-semibold text-gray-700">Slope</th>
-                      <th className="w-12"></th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {courseForm.tees.map((tee, index) => (
-                      <tr key={tee.id} className="border-b border-gray-200">
-                        <td className="p-2">
-                          <input
-                            type="text"
-                            value={tee.name}
-                            onChange={(e) => updateTeeField(index, 'name', e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                            placeholder="Black"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="number"
-                            step="0.1"
-                            value={tee.rating}
-                            onChange={(e) => updateTeeField(index, 'rating', e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                            placeholder="72.1"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <input
-                            type="number"
-                            value={tee.slope}
-                            onChange={(e) => updateTeeField(index, 'slope', e.target.value)}
-                            className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                            placeholder="131"
-                          />
-                        </td>
-                        <td className="p-2">
-                          <button
-                            onClick={() => removeTee(index)}
-                            className="text-red-600 hover:text-red-700 p-1"
-                            title="Delete tee"
-                          >
-                            <TrashIcon />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <button
-                onClick={addTee}
-                className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold flex items-center gap-2"
-              >
-                <PlusIcon />
-                Add Tee
-              </button>
-            </div>
-
-            {/* Stroke Index */}
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Stroke Index (Handicap)</h3>
-              <p className="text-sm text-gray-600 mb-3">
-                Assign each hole a handicap stroke value from 1-18 (1 = hardest, 18 = easiest). Each value must be used exactly once.
-              </p>
-              
-              {/* Front 9 */}
-              <div className="mb-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b-2 border-gray-300">
-                        <th className="p-1 text-left min-w-[60px]"></th>
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                          <th key={h} className="p-1 text-center w-16">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-gray-200">
-                        <td className="p-1 text-gray-600">SI</td>
-                        {[...Array(9)].map((_, i) => (
-                          <td key={i} className="p-1">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={courseForm.strokeIndex[i]}
-                              onChange={(e) => updateStrokeIndex(i, e.target.value)}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Back 9 */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b-2 border-gray-300">
-                        <th className="p-1 text-left min-w-[60px]"></th>
-                        {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                          <th key={h} className="p-1 text-center w-16">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-gray-200">
-                        <td className="p-1 text-gray-600">SI</td>
-                        {[...Array(9)].map((_, i) => (
-                          <td key={i} className="p-1">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={courseForm.strokeIndex[i + 9]}
-                              onChange={(e) => updateStrokeIndex(i + 9, e.target.value)}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                            />
-                          </td>
-                        ))}
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Pars (shared across all tees) */}
-            <div className="mb-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">Par (Same for All Tees)</h3>
-              
-              {/* Front 9 */}
-              <div className="mb-4">
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b-2 border-gray-300">
-                        <th className="p-1 text-left min-w-[60px]"></th>
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                          <th key={h} className="p-1 text-center w-16">{h}</th>
-                        ))}
-                        <th className="p-1 text-center w-16 font-bold">OUT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-gray-200">
-                        <td className="p-1 text-gray-600">Par</td>
-                        {[...Array(9)].map((_, i) => (
-                          <td key={i} className="p-1">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={courseForm.tees[0]?.pars[i] || ''}
-                              onChange={(e) => {
-                                // Update par for ALL tees
-                                const newTees = courseForm.tees.map(tee => ({
-                                  ...tee,
-                                  pars: tee.pars.map((p, idx) => idx === i ? e.target.value : p)
-                                }));
-                                setCourseForm({ ...courseForm, tees: newTees });
-                              }}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                            />
-                          </td>
-                        ))}
-                        <td className="p-1 text-center font-bold bg-gray-200">
-                          {calculateTotal(courseForm.tees[0]?.pars || [], 0, 9)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Back 9 */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h4>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b-2 border-gray-300">
-                        <th className="p-1 text-left min-w-[60px]"></th>
-                        {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                          <th key={h} className="p-1 text-center w-16">{h}</th>
-                        ))}
-                        <th className="p-1 text-center w-16 font-bold">IN</th>
-                        <th className="p-1 text-center w-16 font-bold">TOT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-gray-200">
-                        <td className="p-1 text-gray-600">Par</td>
-                        {[...Array(9)].map((_, i) => (
-                          <React.Fragment key={i}>
-                            <td className="p-1">
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                value={courseForm.tees[0]?.pars[i + 9] || ''}
-                                onChange={(e) => {
-                                  // Update par for ALL tees
-                                  const newTees = courseForm.tees.map(tee => ({
-                                    ...tee,
-                                    pars: tee.pars.map((p, idx) => idx === i + 9 ? e.target.value : p)
-                                  }));
-                                  setCourseForm({ ...courseForm, tees: newTees });
-                                }}
-                                className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                              />
-                            </td>
-                            {i === 8 && (
-                              <td className="p-1 text-center font-bold bg-gray-200">
-                                {calculateTotal(courseForm.tees[0]?.pars || [], 9, 18)}
-                              </td>
-                            )}
-                          </React.Fragment>
-                        ))}
-                        <td className="p-1 text-center font-bold bg-gray-200">
-                          {calculateTotal(courseForm.tees[0]?.pars || [], 0, 18)}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-
-            {/* Yardages by Tee */}
-            {courseForm.tees.map((tee, teeIndex) => (
-              <div key={tee.id} className="mb-6 border-2 border-gray-200 rounded-xl p-4">
-                <h4 className="text-md font-bold text-gray-900 mb-3">
-                  {tee.name || `Tee ${teeIndex + 1}`} - Yardages
-                </h4>
-                
-                {/* Front 9 */}
-                <div className="mb-4">
-                  <h5 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h5>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b-2 border-gray-300">
-                          <th className="p-1 text-left min-w-[60px]"></th>
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                            <th key={h} className="p-1 text-center w-16">{h}</th>
-                          ))}
-                          <th className="p-1 text-center w-16 font-bold">OUT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-gray-200">
-                          <td className="p-1 text-gray-600">Yds</td>
-                          {[...Array(9)].map((_, i) => (
-                            <td key={i} className="p-1">
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                value={tee.yardages[i]}
-                                onChange={(e) => updateTeeHole(teeIndex, i, 'yardages', e.target.value)}
-                                className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                              />
-                            </td>
-                          ))}
-                          <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 0, 9)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Back 9 */}
-                <div>
-                  <h5 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h5>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse text-xs">
-                      <thead>
-                        <tr className="border-b-2 border-gray-300">
-                          <th className="p-1 text-left min-w-[60px]"></th>
-                          {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                            <th key={h} className="p-1 text-center w-16">{h}</th>
-                          ))}
-                          <th className="p-1 text-center w-16 font-bold">IN</th>
-                          <th className="p-1 text-center w-16 font-bold">TOT</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        <tr className="border-b border-gray-200">
-                          <td className="p-1 text-gray-600">Yds</td>
-                          {[...Array(9)].map((_, i) => (
-                            <td key={i} className="p-1">
-                              <input
-                                type="text"
-                                inputMode="numeric"
-                                pattern="[0-9]*"
-                                value={tee.yardages[i + 9]}
-                                onChange={(e) => updateTeeHole(teeIndex, i + 9, 'yardages', e.target.value)}
-                                className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
-                              />
-                            </td>
-                          ))}
-                          <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 9, 18)}</td>
-                          <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 0, 18)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-              </div>
-            ))}
-
-            {/* Feedback message right above Save button */}
-            {feedback && (
-              <div className={`mb-4 p-4 rounded-xl text-center font-semibold ${
-                feedback.includes('Error') || feedback.includes('required') || feedback.includes('must') || feedback.includes('missing')
-                  ? 'bg-red-50 border-2 border-red-500 text-red-800'
-                  : 'bg-green-50 border-2 border-green-500 text-green-800'
-              }`}>
-                {feedback}
-              </div>
-            )}
-
-            <button
-              onClick={saveCourse}
-              className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 text-lg"
-            >
-              Save Course
-            </button>
-          </div>
-        </div>
-      </div>
+      <AddEditCourseView
+        currentUser={currentUser}
+        courseForm={courseForm}
+        setCourseForm={setCourseForm}
+        editingCourse={editingCourse}
+        setEditingCourse={setEditingCourse}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        loadCourses={loadCourses}
+      />
     );
   }
-return null;
+
+  if (view === 'solo-setup') {
+    return (
+      <SoloSetupView 
+        setView={setView}
+        setCurrentSoloRound={setCurrentSoloRound}
+        user={currentUser}
+      />
+    );
+  }
+
+  if (view === 'solo-scoring') {
+    return (
+      <SoloScoringView
+        currentSoloRound={currentSoloRound}
+        setCurrentSoloRound={setCurrentSoloRound}
+        setView={setView}
+        user={currentUser}
+      />
+    );
+  }
+
+  if (view === 'past-rounds') {
+    return (
+      <PastRoundsView
+        user={currentUser}
+        setView={setView}
+        setCurrentSoloRound={setCurrentSoloRound}
+      />
+    );
+  }
+
+  if (view === 'solo-scorecard') {
+    return (
+      <SoloScorecardView
+        currentSoloRound={currentSoloRound}
+        setView={setView}
+      />
+    );
+  }
+  return null;
 }
 
 export default App;
-  
