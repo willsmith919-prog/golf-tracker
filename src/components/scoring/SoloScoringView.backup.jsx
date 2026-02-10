@@ -1,137 +1,30 @@
 import { useState, useEffect } from 'react';
-import { ref, get, set } from 'firebase/database';
+import { ref, set, get } from 'firebase/database';
 import { database } from '../../firebase';
 import { ChevronLeftIcon, ChevronRightIcon } from '../icons';
 
-// ============================================================
-// UNIFIED SCORING VIEW
-// Handles both solo rounds and team event scoring.
-// 
-// Mode is determined by which props are passed in:
-//   - Solo mode:  currentSoloRound + setCurrentSoloRound + user
-//   - Team mode:  currentEvent + setCurrentEvent + selectedTeam + setSelectedTeam
-// ============================================================
+const ENTRY_STATE = {
+  SCORE: 'ENTERING_SCORE',
+  FAIRWAY: 'ENTERING_FAIRWAY',
+  PUTTS: 'ENTERING_PUTTS'
+};
 
-export default function ScoringView({
-  // --- Solo mode props ---
-  currentSoloRound = null,
-  setCurrentSoloRound = null,
-  user = null,
-  // --- Team mode props ---
-  currentEvent = null,
-  setCurrentEvent = null,
-  selectedTeam = null,
-  setSelectedTeam = null,
-  // --- Shared props ---
-  feedback = '',
-  setFeedback = () => {},
-  setView
+export default function SoloScoringView({ 
+  currentSoloRound, 
+  setCurrentSoloRound, 
+  setView,
+  user 
 }) {
-
-  // ==================== MODE DETECTION ====================
-  // Determine if we're in solo or team mode based on which props were provided.
-  const isSolo = !!currentSoloRound;
-
-  // ==================== DATA EXTRACTION ====================
-  // Pull out the data we need regardless of mode, so the rest of the component
-  // doesn't need to care which mode it's in.
-
-  // --- Team mode data ---
-  const team = !isSolo ? currentEvent?.teams?.[selectedTeam] : null;
-
-  // --- Unified data (works for both modes) ---
-  const coursePars = isSolo
-    ? currentSoloRound.coursePars
-    : currentEvent?.meta?.coursePars || [];
-
-  const courseYardages = isSolo
-    ? currentSoloRound.courseYardages || []
-    : currentEvent?.meta?.courseYardages || [];
-
-  const courseStrokeIndexes = isSolo
-    ? currentSoloRound.courseStrokeIndexes || []
-    : currentEvent?.meta?.courseStrokeIndexes || [];
-
-  const format = isSolo
-    ? currentSoloRound.format
-    : currentEvent?.meta?.format || 'stroke';
-
-  const courseName = isSolo
-    ? currentSoloRound.courseName
-    : currentEvent?.meta?.courseName || '';
-
-  const startingHole = isSolo
-    ? (currentSoloRound.startingHole || 1)
-    : (currentEvent?.meta?.startingHole || 1);
-
-  const endingHole = isSolo
-    ? (currentSoloRound.endingHole || 18)
-    : (currentEvent?.meta?.endingHole || 18);
-
-  const numHoles = isSolo
-    ? (currentSoloRound.numHoles || 18)
-    : (endingHole - startingHole + 1);
-
-  const currentHole = isSolo
-    ? currentSoloRound.currentHole
-    : team?.currentHole || 1;
-
-  // ==================== NOT FOUND STATES ====================
-
-  if (!isSolo && !team) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
-        <div className="text-white text-center">
-          <p className="text-xl mb-4">Team not found</p>
-          <button onClick={() => setView('event-lobby')} className="bg-white text-blue-900 px-6 py-3 rounded-xl font-semibold">
-            Back to Lobby
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (isSolo && !currentSoloRound) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
-        <div className="text-white text-center">
-          <p className="text-xl mb-4">Round not found</p>
-          <button onClick={() => setView('home')} className="bg-white text-blue-900 px-6 py-3 rounded-xl font-semibold">
-            Back to Home
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ==================== LOCAL STATE ====================
+  const [entryState, setEntryState] = useState(ENTRY_STATE.SCORE);
   const [currentScore, setCurrentScore] = useState(null);
   const [currentFairway, setCurrentFairway] = useState(null);
   const [notes, setNotes] = useState('');
 
-  // ==================== HOLE DATA ACCESS ====================
-  // Reads hole data from the appropriate source depending on mode.
-
-  const getHoleData = (hole) => {
-    if (isSolo) {
-      return currentSoloRound.holes[hole] || null;
-    }
-    // Team mode — check new format first, fall back to old format
-    if (team.holes && team.holes[hole]) {
-      return team.holes[hole];
-    }
-    if (team.scores && team.scores[hole]) {
-      return { score: team.scores[hole], putts: null, fairway: null, gir: null, notes: '' };
-    }
-    return null;
-  };
-
-  const currentPar = coursePars[currentHole - 1];
-  const currentYardage = courseYardages[currentHole - 1];
-  const currentSI = courseStrokeIndexes[currentHole - 1];
-  const holeData = getHoleData(currentHole);
-
-  // ==================== EFFECTS ====================
+  const currentHole = currentSoloRound.currentHole;
+  const currentPar = currentSoloRound.coursePars[currentHole - 1];
+  const currentYardage = currentSoloRound.courseYardages[currentHole - 1];
+  const currentSI = currentSoloRound.courseStrokeIndexes[currentHole - 1];
+  const holeData = currentSoloRound.holes[currentHole];
 
   // Load existing hole data when navigating to a hole
   useEffect(() => {
@@ -139,25 +32,24 @@ export default function ScoringView({
       setCurrentScore(holeData.score);
       setCurrentFairway(holeData.fairway);
       setNotes(holeData.notes || '');
+      setEntryState(ENTRY_STATE.SCORE); // Allow re-editing
     } else {
       setCurrentScore(null);
       setCurrentFairway(null);
       setNotes('');
+      setEntryState(ENTRY_STATE.SCORE);
     }
   }, [currentHole]);
 
-  // Solo mode: recalculate stats when holes change
+  // Recalculate stats whenever we return to this view
   useEffect(() => {
-    if (!isSolo) return;
-    const stats = calculateStats(null, null);
+    const stats = calculateStats(currentSoloRound);
     if (JSON.stringify(stats) !== JSON.stringify(currentSoloRound.stats)) {
       const updatedRound = { ...currentSoloRound };
       updatedRound.stats = stats;
       setCurrentSoloRound(updatedRound);
     }
-  }, [currentHole, isSolo ? currentSoloRound.holes : null]);
-
-  // ==================== CALCULATIONS ====================
+  }, [currentHole, currentSoloRound.holes]);
 
   const calculateStablefordPoints = (score, par) => {
     const diff = score - par;
@@ -170,74 +62,37 @@ export default function ScoringView({
     return 0;
   };
 
+  const getPuttOptions = (par, score) => {
+    // Hole in one - don't show putts (auto = 1)
+    if (par === 3 && score === 1) return [];
+    
+    // Eagle
+    if (score === par - 2) return [0, 1];
+    
+    // Birdie  
+    if (score === par - 1) return [0, 1, 2];
+    
+    // Par or worse
+    return [0, 1, 2, '3+'];
+  };
+
   const calculateGIR = (par, score, putts) => {
+    // Hole in one is always GIR
     if (score === 1) return true;
-    if (putts === null || putts === undefined) return false;
+    
     const strokesToGreen = score - putts;
     return strokesToGreen <= (par - 2);
   };
 
-  const getPuttOptions = (par, score) => {
-    if (!score) return [];
-    if (par === 3 && score === 1) return [];
-    if (score === par - 2) return [0, 1];
-    if (score === par - 1) return [0, 1, 2];
-    return [0, 1, 2, '3+'];
-  };
-
-  const calculateStats = (justSavedHole, justSavedData) => {
-    let totalScore = 0;
-    let totalPutts = 0;
-    let totalPoints = 0;
-    let fairwaysHit = 0;
-    let fairwaysPossible = 0;
-    let greensInRegulation = 0;
-    let holesPlayed = 0;
-
-    for (let i = 1; i <= 18; i++) {
-      const hole = (i === justSavedHole) ? justSavedData : getHoleData(i);
-      if (hole && hole.score) {
-        holesPlayed++;
-        totalScore += hole.score;
-        totalPutts += hole.putts || 0;
-        greensInRegulation += hole.gir ? 1 : 0;
-
-        const par = coursePars[i - 1];
-        if (par >= 4) {
-          fairwaysPossible++;
-          if (hole.fairway === 'hit') {
-            fairwaysHit++;
-          }
-        }
-        if (format === 'stableford') {
-          totalPoints += calculateStablefordPoints(hole.score, par);
-        }
-      }
-    }
-
-    const playedPars = coursePars.slice(0, holesPlayed);
-    const parTotal = playedPars.reduce((sum, par) => sum + par, 0);
-    const toPar = totalScore - parTotal;
-
-    return {
-      totalScore,
-      toPar,
-      totalPutts,
-      fairwaysHit,
-      fairwaysPossible,
-      greensInRegulation,
-      stablefordPoints: totalPoints,
-      holesPlayed
-    };
-  };
-
-  // ==================== HANDLERS ====================
-
   const handleScoreSelect = (score) => {
     setCurrentScore(score);
+    
+    // For Par 3, clear fairway
     if (currentPar < 4) {
       setCurrentFairway(null);
     }
+    
+    // Check if hole in one (skip putts)
     if (currentPar === 3 && score === 1) {
       setCurrentFairway(null);
       saveHoleData(score, null, 1);
@@ -253,149 +108,123 @@ export default function ScoringView({
     saveHoleData(currentScore, currentFairway, finalPutts);
   };
 
-  // ==================== SAVE ====================
-  // This is where the two modes diverge the most — they save to different
-  // places in Firebase.
-
   const saveHoleData = async (score, fairway, putts) => {
-    if (!score || score < 1 || score > 15) {
-      setFeedback('Please enter a valid score');
-      setTimeout(() => setFeedback(''), 2000);
-      return;
-    }
-
     const gir = calculateGIR(currentPar, score, putts);
-    const holeEntry = { score, putts, fairway, gir, notes };
+    
+    const holeData = {
+      score,
+      putts,
+      fairway,
+      gir,
+      notes
+    };
 
+    // Update round data
+    const updatedRound = { ...currentSoloRound };
+    updatedRound.holes[currentHole] = holeData;
+
+    // Recalculate stats
+    const stats = calculateStats(updatedRound);
+    updatedRound.stats = stats;
+
+    // Save to Firebase
     try {
-      if (isSolo) {
-        // --- SOLO SAVE ---
-        const updatedRound = { ...currentSoloRound };
-        updatedRound.holes[currentHole] = holeEntry;
-        const stats = calculateStats(currentHole, holeEntry);
-        updatedRound.stats = stats;
+      await set(ref(database, `soloRounds/${updatedRound.id}`), updatedRound);
+      
+      // Update user's solo rounds list
+      await set(ref(database, `users/${user.uid}/soloRounds/${updatedRound.id}`), {
+        date: updatedRound.date,
+        courseName: updatedRound.courseName,
+        score: stats.totalScore,
+        toPar: stats.toPar,
+        numHoles: updatedRound.numHoles
+      });
 
-        await set(ref(database, `soloRounds/${updatedRound.id}`), updatedRound);
+      setCurrentSoloRound(updatedRound);
 
-        // Update user's solo rounds summary list
-        await set(ref(database, `users/${user.uid}/soloRounds/${updatedRound.id}`), {
-          date: updatedRound.date,
-          courseName: updatedRound.courseName,
-          score: stats.totalScore,
-          toPar: stats.toPar,
-          numHoles: updatedRound.numHoles
-        });
+      // Check if this is the final hole
+      const endingHole = updatedRound.endingHole || 18;
+      const isLastHole = currentHole === endingHole;
 
-        setCurrentSoloRound(updatedRound);
-
-        // Check if this is the final hole
-        const isLastHole = currentHole === endingHole;
-        if (isLastHole) {
-          setTimeout(() => {
-            if (confirm('Round complete! Would you like to finish and view your scorecard?')) {
-              updatedRound.status = 'complete';
-              set(ref(database, `soloRounds/${updatedRound.id}/status`), 'complete');
-              setView('solo-scorecard');
-            }
-          }, 500);
-        } else {
-          setTimeout(() => goToHole(currentHole + 1), 500);
-        }
-
-      } else {
-        // --- TEAM SAVE ---
-        await set(
-          ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/holes/${currentHole}`),
-          holeEntry
-        );
-
-        // Backward compatibility: also save bare score
-        await set(
-          ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/scores/${currentHole}`),
-          parseInt(score)
-        );
-
-        // Save stats
-        const updatedStats = calculateStats(currentHole, holeEntry);
-        await set(
-          ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/stats`),
-          updatedStats
-        );
-
-        // Auto-advance and refresh
-        setTimeout(async () => {
-          if (currentHole < endingHole) {
-            await set(
-              ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/currentHole`),
-              currentHole + 1
-            );
+      if (isLastHole) {
+        // Prompt to end round
+        setTimeout(() => {
+          if (confirm('Round complete! Would you like to finish and view your scorecard?')) {
+            updatedRound.status = 'complete';
+            set(ref(database, `soloRounds/${updatedRound.id}/status`), 'complete');
+            setView('solo-scorecard');
           }
-          const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
-          const updatedEvent = eventSnapshot.val();
-          setCurrentEvent({ id: currentEvent.id, ...updatedEvent });
+        }, 500);
+      } else {
+        // Auto-advance to next hole
+        setTimeout(() => {
+          goToHole(currentHole + 1);
         }, 500);
       }
+
     } catch (error) {
-      console.error('Error saving score:', error);
-      setFeedback('Error saving score');
-      setTimeout(() => setFeedback(''), 2000);
+      console.error('Error saving hole data:', error);
     }
   };
 
-  // ==================== NAVIGATION ====================
+  const calculateStats = (round) => {
+    let totalScore = 0;
+    let totalPutts = 0;
+    let fairwaysHit = 0;
+    let fairwaysPossible = 0;
+    let greensInRegulation = 0;
+    let stablefordPoints = 0;
+    let holesPlayed = 0;
 
-  const goToHole = (hole) => {
-    if (hole < startingHole || hole > endingHole) return;
+    for (let i = 1; i <= 18; i++) {
+      const hole = round.holes[i];
+      if (hole) {
+        holesPlayed++;
+        totalScore += hole.score;
+        totalPutts += hole.putts;
+        greensInRegulation += hole.gir ? 1 : 0;
 
-    if (isSolo) {
-      // Solo: update local state (Firebase gets updated on next save)
-      const updatedRound = { ...currentSoloRound };
-      updatedRound.currentHole = hole;
-      setCurrentSoloRound(updatedRound);
-    } else {
-      // Team: update Firebase immediately
-      set(
-        ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/currentHole`),
-        hole
-      ).then(async () => {
-        const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
-        const updatedEvent = eventSnapshot.val();
-        setCurrentEvent({ id: currentEvent.id, ...updatedEvent });
-      }).catch(error => {
-        console.error('Error changing hole:', error);
-      });
-    }
-  };
+        const par = round.coursePars[i - 1];
+        
+        // Fairway tracking (par 4 and 5 only)
+        if (par >= 4) {
+          fairwaysPossible++;
+          if (hole.fairway === 'hit') {
+            fairwaysHit++;
+          }
+        }
 
-  const endRound = async () => {
-    if (!confirm('End round and save?')) return;
-    
-    if (isSolo) {
-      const updatedRound = { ...currentSoloRound };
-      updatedRound.status = 'complete';
-      try {
-        await set(ref(database, `soloRounds/${updatedRound.id}`), updatedRound);
-        setView('home');
-      } catch (error) {
-        console.error('Error ending round:', error);
+        if (round.format === 'stableford') {
+          stablefordPoints += calculateStablefordPoints(hole.score, par);
+        }
       }
     }
+
+    const playedPars = round.coursePars.slice(0, holesPlayed);
+    const parTotal = playedPars.reduce((sum, par) => sum + par, 0);
+    const toPar = totalScore - parTotal;
+
+    return {
+      totalScore,
+      toPar,
+      totalPutts,
+      fairwaysHit,
+      fairwaysPossible,
+      greensInRegulation,
+      stablefordPoints
+    };
   };
 
-  // ==================== BACK NAVIGATION ====================
-
-  const handleBack = () => {
-    if (isSolo) {
-      setView('home');
-    } else {
-      setSelectedTeam(null);
-      setView('event-lobby');
-    }
+  const goToHole = (hole) => {
+    const startingHole = currentSoloRound.startingHole || 1;
+    const endingHole = currentSoloRound.endingHole || 18;
+    
+    if (hole < startingHole || hole > endingHole) return;
+    
+    const updatedRound = { ...currentSoloRound };
+    updatedRound.currentHole = hole;
+    setCurrentSoloRound(updatedRound);
   };
-
-  // ==================== DISPLAY HELPERS ====================
-
-  const stats = calculateStats(null, null);
 
   const quickScoreButtons = [
     { label: 'Eagle', value: currentPar - 2, color: 'bg-yellow-400 hover:bg-yellow-500' },
@@ -421,83 +250,86 @@ export default function ScoringView({
     return 'text-red-600 font-bold';
   };
 
-  // ==================== RENDER ====================
+  const endRound = async () => {
+    if (confirm('End round and save?')) {
+      const updatedRound = { ...currentSoloRound };
+      updatedRound.status = 'complete';
+      
+      try {
+        await set(ref(database, `soloRounds/${updatedRound.id}`), updatedRound);
+        setView('home');
+      } catch (error) {
+        console.error('Error ending round:', error);
+      }
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-2 md:p-4">
       <div className="max-w-2xl mx-auto">
-
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <button onClick={handleBack} className="text-white hover:text-blue-200">
-            ← {isSolo ? 'Back' : 'Back to Lobby'}
+          <button 
+            onClick={() => setView('home')} 
+            className="text-white hover:text-blue-200"
+          >
+            ← Back
           </button>
-          {isSolo && (
-            <button
-              onClick={endRound}
-              className="text-white hover:text-blue-200 font-semibold"
-            >
-              End Round
-            </button>
-          )}
+          <button
+            onClick={endRound}
+            className="text-white hover:text-blue-200 font-semibold"
+          >
+            End Round
+          </button>
         </div>
 
         {/* Stats Header */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
-          {/* Title: course name for solo, team name + players for team */}
-          {isSolo ? (
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{courseName}</h2>
-          ) : (
-            <>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">{team.name}</h1>
-              <div className="text-sm text-gray-600 mb-4">{team.players.join(' & ')}</div>
-            </>
-          )}
-
+          <h2 className="text-xl font-bold text-gray-900 mb-4">{currentSoloRound.courseName}</h2>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="text-center">
               <div className="text-sm text-gray-600">Score</div>
-              <div className="text-3xl font-bold text-gray-900">{stats.totalScore || 0}</div>
+              <div className="text-3xl font-bold text-gray-900">{currentSoloRound.stats.totalScore || 0}</div>
               <div className="text-sm text-gray-600">
-                Thru {stats.holesPlayed} holes
+                Thru {Object.keys(currentSoloRound.holes).length} holes
               </div>
             </div>
             <div className="text-center">
               <div className="text-sm text-gray-600">To Par</div>
               <div className="text-3xl font-bold text-gray-900">
-                {stats.toPar > 0 ? '+' : ''}{stats.toPar || 0}
+                {currentSoloRound.stats.toPar > 0 ? '+' : ''}{currentSoloRound.stats.toPar || 0}
               </div>
             </div>
             <div className="text-center">
               <div className="text-sm text-gray-600">
-                {format === 'stableford' ? 'Points' : 'Putts'}
+                {currentSoloRound.format === 'stableford' ? 'Points' : 'Putts'}
               </div>
               <div className="text-3xl font-bold text-gray-900">
-                {format === 'stableford'
-                  ? stats.stablefordPoints
-                  : stats.totalPutts}
+                {currentSoloRound.format === 'stableford' 
+                  ? currentSoloRound.stats.stablefordPoints 
+                  : currentSoloRound.stats.totalPutts}
               </div>
             </div>
             <div className="text-center">
               <div className="text-sm text-gray-600">Fairways</div>
               <div className="text-3xl font-bold text-gray-900">
-                {stats.fairwaysHit}/{stats.fairwaysPossible}
+                {currentSoloRound.stats.fairwaysHit}/{currentSoloRound.stats.fairwaysPossible}
               </div>
               <div className="text-xs text-gray-500">
-                {stats.fairwaysPossible > 0
-                  ? `${((stats.fairwaysHit / stats.fairwaysPossible) * 100).toFixed(0)}%`
+                {currentSoloRound.stats.fairwaysPossible > 0 
+                  ? `${((currentSoloRound.stats.fairwaysHit / currentSoloRound.stats.fairwaysPossible) * 100).toFixed(0)}%`
                   : '0%'}
               </div>
             </div>
           </div>
         </div>
 
-        {/* Current Hole */}
+        {/* Hole Info */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
           <div className="flex items-center justify-between mb-4">
             <button
               onClick={() => goToHole(currentHole - 1)}
-              disabled={currentHole === startingHole}
+              disabled={currentHole === (currentSoloRound.startingHole || 1)}
               className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed p-3 rounded-xl"
             >
               <ChevronLeftIcon />
@@ -506,24 +338,20 @@ export default function ScoringView({
             <div className="text-center">
               <div className="text-5xl font-bold text-gray-900">Hole {currentHole}</div>
               <div className="text-xl text-gray-600 mt-1">Par {currentPar}</div>
-              {currentYardage && (
-                <div className="text-sm text-gray-500">{currentYardage} yards</div>
-              )}
-              {currentSI && (
-                <div className="text-sm text-gray-500">SI: {currentSI}</div>
-              )}
+              <div className="text-sm text-gray-500">{currentYardage} yards</div>
+              <div className="text-sm text-gray-500">SI: {currentSI}</div>
             </div>
 
             <button
               onClick={() => goToHole(currentHole + 1)}
-              disabled={currentHole === endingHole}
+              disabled={currentHole === (currentSoloRound.endingHole || 18)}
               className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed p-3 rounded-xl"
             >
               <ChevronRightIcon />
             </button>
           </div>
 
-          {/* Score Entry */}
+          {/* Score Entry - Always Visible */}
           <div className="mb-4">
             <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Score</h3>
             <div className="grid grid-cols-5 gap-2">
@@ -532,8 +360,8 @@ export default function ScoringView({
                   key={btn.label}
                   onClick={() => handleScoreSelect(btn.value)}
                   className={`${
-                    currentScore === btn.value
-                      ? 'ring-4 ring-blue-400'
+                    currentScore === btn.value 
+                      ? 'ring-4 ring-blue-400' 
                       : ''
                   } ${btn.color} text-white py-4 rounded-xl font-semibold shadow-lg transition-all`}
                 >
@@ -544,7 +372,7 @@ export default function ScoringView({
             </div>
           </div>
 
-          {/* Fairway Entry — shows after score entered, only for Par 4+ */}
+          {/* Fairway Entry - Shows after score entered (Par 4/5 only) */}
           {currentScore && currentPar >= 4 && (
             <div className="mb-4">
               <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Fairway</h3>
@@ -554,8 +382,8 @@ export default function ScoringView({
                     key={btn.label}
                     onClick={() => handleFairwaySelect(btn.value)}
                     className={`${
-                      currentFairway === btn.value
-                        ? 'ring-4 ring-blue-400'
+                      currentFairway === btn.value 
+                        ? 'ring-4 ring-blue-400' 
                         : ''
                     } ${btn.color} text-white py-6 rounded-xl font-semibold text-lg shadow-lg transition-all`}
                   >
@@ -566,7 +394,7 @@ export default function ScoringView({
             </div>
           )}
 
-          {/* Putts Entry — shows after fairway (or after score for Par 3) */}
+          {/* Putts Entry - Shows after fairway (or after score for Par 3) */}
           {currentScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Putts</h3>
@@ -597,22 +425,21 @@ export default function ScoringView({
           />
         </div>
 
-        {feedback && (
-          <div className="mb-4 bg-red-50 border-2 border-red-200 text-red-800 px-4 py-3 rounded-xl text-sm text-center">
-            {feedback}
-          </div>
-        )}
-
         {/* Scorecard */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
           <h2 className="text-xl font-bold text-gray-900 mb-4">Scorecard</h2>
-
+          
+          {/* Determine which holes to show */}
           {(() => {
+            const startingHole = currentSoloRound.startingHole || 1;
+            const endingHole = currentSoloRound.endingHole || 18;
+            const numHoles = currentSoloRound.numHoles || 18;
+
             // For 9-hole rounds, only show the 9 being played
             if (numHoles === 9) {
               const holes = Array.from({ length: 9 }, (_, i) => startingHole + i);
               const isFront9 = startingHole === 1;
-
+              
               return (
                 <div>
                   <h3 className="text-sm font-semibold text-gray-700 mb-2">
@@ -632,22 +459,22 @@ export default function ScoringView({
                         <tr className="border-b border-gray-200">
                           <td className="p-2 text-gray-600">Par</td>
                           {holes.map(h => (
-                            <td key={h} className="text-center p-2">{coursePars[h - 1]}</td>
+                            <td key={h} className="text-center p-2">{currentSoloRound.coursePars[h - 1]}</td>
                           ))}
                         </tr>
                         <tr>
                           <td className="p-2 text-gray-600">Score</td>
                           {holes.map(h => {
-                            const hole = getHoleData(h);
-                            const par = coursePars[h - 1];
+                            const hole = currentSoloRound.holes[h];
+                            const par = currentSoloRound.coursePars[h - 1];
                             return (
-                              <td
-                                key={h}
+                              <td 
+                                key={h} 
                                 className={`text-center p-2 cursor-pointer hover:bg-gray-100 ${getScoreColor(hole?.score, par)}`}
                                 onClick={() => goToHole(h)}
                               >
                                 {hole?.score || '-'}
-                                {hole?.gir && <span className="text-green-600 text-xs">●</span>}
+                                {hole?.gir && <span className="text-green-600">●</span>}
                               </td>
                             );
                           })}
@@ -679,22 +506,22 @@ export default function ScoringView({
                         <tr className="border-b border-gray-200">
                           <td className="p-2 text-gray-600">Par</td>
                           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                            <td key={h} className="text-center p-2">{coursePars[h - 1]}</td>
+                            <td key={h} className="text-center p-2">{currentSoloRound.coursePars[h - 1]}</td>
                           ))}
                         </tr>
                         <tr>
                           <td className="p-2 text-gray-600">Score</td>
                           {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => {
-                            const hole = getHoleData(h);
-                            const par = coursePars[h - 1];
+                            const hole = currentSoloRound.holes[h];
+                            const par = currentSoloRound.coursePars[h - 1];
                             return (
-                              <td
-                                key={h}
+                              <td 
+                                key={h} 
                                 className={`text-center p-2 cursor-pointer hover:bg-gray-100 ${getScoreColor(hole?.score, par)}`}
                                 onClick={() => goToHole(h)}
                               >
                                 {hole?.score || '-'}
-                                {hole?.gir && <span className="text-green-600 text-xs">●</span>}
+                                {hole?.gir && <span className="text-green-600">●</span>}
                               </td>
                             );
                           })}
@@ -721,22 +548,22 @@ export default function ScoringView({
                         <tr className="border-b border-gray-200">
                           <td className="p-2 text-gray-600">Par</td>
                           {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                            <td key={h} className="text-center p-2">{coursePars[h - 1]}</td>
+                            <td key={h} className="text-center p-2">{currentSoloRound.coursePars[h - 1]}</td>
                           ))}
                         </tr>
                         <tr>
                           <td className="p-2 text-gray-600">Score</td>
                           {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => {
-                            const hole = getHoleData(h);
-                            const par = coursePars[h - 1];
+                            const hole = currentSoloRound.holes[h];
+                            const par = currentSoloRound.coursePars[h - 1];
                             return (
-                              <td
-                                key={h}
+                              <td 
+                                key={h} 
                                 className={`text-center p-2 cursor-pointer hover:bg-gray-100 ${getScoreColor(hole?.score, par)}`}
                                 onClick={() => goToHole(h)}
                               >
                                 {hole?.score || '-'}
-                                {hole?.gir && <span className="text-green-600 text-xs">●</span>}
+                                {hole?.gir && <span className="text-green-600">●</span>}
                               </td>
                             );
                           })}

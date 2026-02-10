@@ -71,9 +71,6 @@ export default function CreateEventView({
       const course = courses.find(c => c.id === newEvent.courseId);
       const eventId = 'event-' + Date.now();
       const eventCode = await generateEventCode(course.id);
-
-      // Find the base course to get strokeIndex
-      const baseCourse = globalCourses.find(c => c.id === course.courseId);
       
       const eventData = {
         meta: {
@@ -81,16 +78,9 @@ export default function CreateEventView({
           courseId: course.id,
           courseName: course.name,
           coursePars: course.holes,
-          courseYardages: course.yardages || [],
-          courseStrokeIndexes: baseCourse?.strokeIndex || course.strokeIndex || [],
           format: newEvent.format,
           date: newEvent.date,
           time: newEvent.time || null,
-          numHoles: newEvent.numHoles || 18,
-          startingHole: newEvent.startingHole || 1,
-          endingHole: newEvent.numHoles === 9
-            ? (newEvent.startingHole === 1 ? 9 : 18)
-            : 18,
           createdBy: currentUser?.uid || deviceId,
           status: creatingEventForLeague ? "draft" : "active",
           leagueId: creatingEventForLeague?.leagueId || null,
@@ -108,18 +98,8 @@ export default function CreateEventView({
           eventData.teams[teamKey] = {
             name: team.name,
             players: newEvent.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
-            currentHole: newEvent.startingHole || 1,
-            // UPGRADED: Using holes:{} (rich objects) instead of scores:{} (bare numbers)
-            holes: {},
-            stats: {
-              totalScore: 0,
-              toPar: 0,
-              totalPutts: 0,
-              fairwaysHit: 0,
-              fairwaysPossible: 0,
-              greensInRegulation: 0,
-              stablefordPoints: 0
-            }
+            currentHole: newEvent.startingHole,
+            scores: {}
           };
         });
       }
@@ -145,7 +125,6 @@ export default function CreateEventView({
           time: '',
           format: 'scramble',
           startingHole: 1,
-          numHoles: 18,
           teams: []
         });
         setSelectedBaseCourse('');
@@ -220,7 +199,7 @@ export default function CreateEventView({
                 type="text"
                 value={newEvent.name}
                 onChange={(e) => setNewEvent({ ...newEvent, name: e.target.value })}
-                placeholder="e.g., Week 1 Scramble"
+                placeholder="March Scramble"
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
               />
             </div>

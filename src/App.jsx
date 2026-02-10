@@ -20,7 +20,6 @@ import ScoringView from './components/scoring/ScoringView.jsx';
 import ManageCoursesView from './components/admin/ManageCoursesView.jsx';
 import AddEditCourseView from './components/admin/AddEditCourseView.jsx';
 import SoloSetupView from './components/scoring/SoloSetupView.jsx';
-import SoloScoringView from './components/scoring/SoloScoringView.jsx';
 import RoundsHistoryView from './components/scoring/RoundsHistoryView.jsx';
 import SoloScorecardView from './components/scoring/SoloScorecardView.jsx';
 
@@ -118,6 +117,7 @@ function App() {
     time: '',
     format: 'scramble',
     startingHole: 1,
+    numHoles: 18,
     teams: []
   });
   const [selectedBaseCourse, setSelectedBaseCourse] = useState('');
@@ -130,7 +130,7 @@ function App() {
   
   // UI state
   const [feedback, setFeedback] = useState('');
-  const [scoreConfirmation, setScoreConfirmation] = useState(null);
+  
   
   // Auth state
   const [loginEmail, setLoginEmail] = useState('');
@@ -512,8 +512,6 @@ function App() {
         setSelectedTeam={setSelectedTeam}
         feedback={feedback}
         setFeedback={setFeedback}
-        scoreConfirmation={scoreConfirmation}
-        setScoreConfirmation={setScoreConfirmation}
         setView={setView}
       />
     );
@@ -577,7 +575,7 @@ function App() {
 
   if (view === 'solo-scoring') {
     return (
-      <SoloScoringView
+      <ScoringView
         currentSoloRound={currentSoloRound}
         setCurrentSoloRound={setCurrentSoloRound}
         setView={setView}
