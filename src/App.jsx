@@ -110,9 +110,17 @@ function App() {
   });
   
   // Event creation state
-  const [newEvent, setNewEvent] = useState({
+ const [newEvent, setNewEvent] = useState({
     name: '',
     courseId: '',
+    selectedCourseId: '',
+    selectedTeeId: '',
+    courseName: '',
+    coursePars: [],
+    courseYardages: [],
+    courseStrokeIndexes: [],
+    teeId: '',
+    teeName: '',
     date: new Date().toISOString().split('T')[0],
     time: '',
     format: 'scramble',
@@ -120,7 +128,7 @@ function App() {
     numHoles: 18,
     teams: []
   });
-  const [selectedBaseCourse, setSelectedBaseCourse] = useState('');
+  
   const [newTeam, setNewTeam] = useState({ name: '', player1: '', player2: '' });
   
   // Current event/team state
@@ -450,30 +458,27 @@ function App() {
   }
 
   if (view === 'create-event') {
-    return (
-      <CreateEventView
-        currentUser={currentUser}
-        currentLeague={currentLeague}
-        courses={courses}
-        globalCourses={globalCourses}
-        newEvent={newEvent}
-        setNewEvent={setNewEvent}
-        selectedBaseCourse={selectedBaseCourse}
-        setSelectedBaseCourse={setSelectedBaseCourse}
-        newTeam={newTeam}
-        setNewTeam={setNewTeam}
-        creatingEventForLeague={creatingEventForLeague}
-        setCreatingEventForLeague={setCreatingEventForLeague}
-        feedback={feedback}
-        setFeedback={setFeedback}
-        setView={setView}
-        setCurrentEvent={setCurrentEvent}
-        setCurrentLeague={setCurrentLeague}
-        generateEventCode={generateEventCode}
-        deviceId={deviceId}
-      />
-    );
-  }
+      return (
+        <CreateEventView
+          currentUser={currentUser}
+          currentLeague={currentLeague}
+          globalCourses={globalCourses}
+          newEvent={newEvent}
+          setNewEvent={setNewEvent}
+          newTeam={newTeam}
+          setNewTeam={setNewTeam}
+          creatingEventForLeague={creatingEventForLeague}
+          setCreatingEventForLeague={setCreatingEventForLeague}
+          feedback={feedback}
+          setFeedback={setFeedback}
+          setView={setView}
+          setCurrentEvent={setCurrentEvent}
+          setCurrentLeague={setCurrentLeague}
+          generateEventCode={generateEventCode}
+          deviceId={deviceId}
+        />
+      );
+    }
 
   if (view === 'event-lobby' && currentEvent) {
     return (

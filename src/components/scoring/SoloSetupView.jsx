@@ -1,11 +1,14 @@
 import { useState, useEffect } from 'react';
 import { ref, get } from 'firebase/database';
 import { database } from '../../firebase';
+import CourseSelector from '../shared/CourseSelector.jsx';
 
 export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
-  const [courses, setCourses] = useState([]);
-  const [selectedCourse, setSelectedCourse] = useState(null);
-  const [selectedTee, setSelectedTee] = useState(null);
+  const [globalCourses, setGlobalCourses] = useState([]);
+  const [selectedCourseId, setSelectedCourseId] = useState('');
+  const [selectedTeeId, setSelectedTeeId] = useState('');
+  const [selectedTeeData, setSelectedTeeData] = useState(null);
+  const [selectedCourseData, setSelectedCourseData] = useState(null);
   const [format, setFormat] = useState('stroke');
   const [numHoles, setNumHoles] = useState(18);
   const [startingHole, setStartingHole] = useState(1);
@@ -24,7 +27,7 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
           id,
           ...data
         }));
-        setCourses(coursesArray);
+        setGlobalCourses(coursesArray);
       }
       setLoading(false);
     } catch (error) {
@@ -33,25 +36,27 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
     }
   };
 
-  // Convert tees object to array for mapping
-  const getTeesArray = (course) => {
-    if (!course?.tees) return [];
-    return Object.entries(course.tees).map(([id, data]) => ({
-      id,
-      ...data
-    }));
+  const handleCourseChange = (courseId) => {
+    setSelectedCourseId(courseId);
+    setSelectedTeeId('');
+    setSelectedTeeData(null);
+    setSelectedCourseData(null);
+  };
+
+  const handleTeeChange = (teeId, teeData, courseData) => {
+    setSelectedTeeId(teeId);
+    setSelectedTeeData(teeData);
+    setSelectedCourseData(courseData);
   };
 
   const startRound = async () => {
-    if (!selectedCourse || !selectedTee) {
+    if (!selectedCourseData || !selectedTeeData) {
       alert('Please select a course and tee');
       return;
     }
 
     const roundId = `solo-${Date.now()}`;
-    const selectedTeeData = selectedCourse.tees[selectedTee];
 
-    // Determine ending hole based on starting hole and number of holes
     const endingHole = numHoles === 9 
       ? (startingHole === 1 ? 9 : 18)
       : 18;
@@ -60,9 +65,9 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
       id: roundId,
       userId: user.uid,
       userName: user.displayName || 'Player',
-      courseId: selectedCourse.id,
-      courseName: selectedCourse.name,
-      teeId: selectedTee,
+      courseId: selectedCourseData.id,
+      courseName: selectedCourseData.name,
+      teeId: selectedTeeId,
       teeName: selectedTeeData.name,
       format: format,
       numHoles: numHoles,
@@ -83,7 +88,7 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
       },
       coursePars: selectedTeeData.pars,
       courseYardages: selectedTeeData.yardages,
-      courseStrokeIndexes: selectedCourse.strokeIndex
+      courseStrokeIndexes: selectedCourseData.strokeIndex
     };
 
     setCurrentSoloRound(newRound);
@@ -111,51 +116,14 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-8">Play Solo</h1>
 
-          {/* Course Selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Course
-            </label>
-            <select
-              value={selectedCourse?.id || ''}
-              onChange={(e) => {
-                const course = courses.find(c => c.id === e.target.value);
-                setSelectedCourse(course);
-                setSelectedTee(null);
-              }}
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-gray-900"
-            >
-              <option value="">Select a course</option>
-              {courses.map(course => (
-                <option key={course.id} value={course.id}>
-                  {course.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Tee Selection */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-2">
-              Tee
-            </label>
-            <select
-              value={selectedTee || ''}
-              onChange={(e) => setSelectedTee(e.target.value)}
-              disabled={!selectedCourse}
-              className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
-            >
-              <option value="">Select a tee</option>
-              {getTeesArray(selectedCourse).map(tee => {
-                const totalYards = tee.yardages?.reduce((sum, y) => sum + (parseInt(y) || 0), 0) || 0;
-                return (
-                  <option key={tee.id} value={tee.id}>
-                    {tee.name} - Rating: {tee.rating} / Slope: {tee.slope} / {totalYards} yards
-                  </option>
-                );
-              })}
-            </select>
-          </div>
+          {/* Shared Course/Tee Selector */}
+          <CourseSelector
+            globalCourses={globalCourses}
+            selectedCourseId={selectedCourseId}
+            selectedTeeId={selectedTeeId}
+            onCourseChange={handleCourseChange}
+            onTeeChange={handleTeeChange}
+          />
 
           {/* Scoring Format */}
           <div className="mb-6">
@@ -255,7 +223,7 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
           {/* Start Button */}
           <button
             onClick={startRound}
-            disabled={!selectedCourse || !selectedTee}
+            disabled={!selectedCourseId || !selectedTeeId}
             className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-lg transition-colors"
           >
             Start Round

@@ -1,16 +1,14 @@
 import { ref, get, set } from 'firebase/database';
 import { database } from '../../firebase';
 import { TrashIcon } from '../icons';
+import CourseSelector from '../shared/CourseSelector.jsx';
 
 export default function CreateEventView({
   currentUser,
   currentLeague,
-  courses,
   globalCourses,
   newEvent,
   setNewEvent,
-  selectedBaseCourse,
-  setSelectedBaseCourse,
   newTeam,
   setNewTeam,
   creatingEventForLeague,
@@ -23,6 +21,40 @@ export default function CreateEventView({
   generateEventCode,
   deviceId
 }) {
+  // Track selected course/tee IDs locally
+  // (We store the resolved course + tee data in newEvent when selections change)
+  const selectedCourseId = newEvent.selectedCourseId || '';
+  const selectedTeeId = newEvent.selectedTeeId || '';
+
+  const handleCourseChange = (courseId) => {
+    setNewEvent({
+      ...newEvent,
+      selectedCourseId: courseId,
+      selectedTeeId: '',
+      courseId: '',
+      courseName: '',
+      coursePars: [],
+      courseYardages: [],
+      courseStrokeIndexes: []
+    });
+  };
+
+  const handleTeeChange = (teeId, teeData, courseData) => {
+    setNewEvent({
+      ...newEvent,
+      selectedTeeId: teeId,
+      courseId: courseData?.id || '',
+      courseName: courseData?.name || '',
+      coursePars: teeData?.pars || [],
+      courseYardages: teeData?.yardages || [],
+      courseStrokeIndexes: courseData?.strokeIndex || [],
+      teeId: teeId,
+      teeName: teeData?.name || '',
+      teeRating: teeData?.rating || '',
+      teeSlope: teeData?.slope || ''
+    });
+  };
+
   const addTeam = () => {
     if (newEvent.format === 'stableford') {
       if (!newTeam.name) {
@@ -59,30 +91,28 @@ export default function CreateEventView({
   const createEvent = async () => {
     const minPlayers = creatingEventForLeague ? 0 : (newEvent.format === 'stableford' ? 1 : 2);
     
-    if (!newEvent.name || !newEvent.courseId || newEvent.teams.length < minPlayers) {
+    if (!newEvent.name || !newEvent.courseId || !newEvent.selectedTeeId || newEvent.teams.length < minPlayers) {
       const teamWord = newEvent.format === 'stableford' ? 'player' : 'teams';
       const teamMsg = minPlayers === 0 ? '' : ` and at least ${minPlayers} ${teamWord}`;
-      setFeedback(`Please add event name, course${teamMsg}`);
+      setFeedback(`Please add event name, course/tee${teamMsg}`);
       setTimeout(() => setFeedback(''), 3000);
       return;
     }
 
     try {
-      const course = courses.find(c => c.id === newEvent.courseId);
       const eventId = 'event-' + Date.now();
-      const eventCode = await generateEventCode(course.id);
-
-      // Find the base course to get strokeIndex
-      const baseCourse = globalCourses.find(c => c.id === course.courseId);
+      const eventCode = await generateEventCode(newEvent.courseId);
       
       const eventData = {
         meta: {
           name: newEvent.name,
-          courseId: course.id,
-          courseName: course.name,
-          coursePars: course.holes,
-          courseYardages: course.yardages || [],
-          courseStrokeIndexes: baseCourse?.strokeIndex || course.strokeIndex || [],
+          courseId: newEvent.courseId,
+          courseName: newEvent.courseName,
+          coursePars: newEvent.coursePars,
+          courseYardages: newEvent.courseYardages || [],
+          courseStrokeIndexes: newEvent.courseStrokeIndexes || [],
+          teeId: newEvent.teeId,
+          teeName: newEvent.teeName,
           format: newEvent.format,
           date: newEvent.date,
           time: newEvent.time || null,
@@ -109,7 +139,6 @@ export default function CreateEventView({
             name: team.name,
             players: newEvent.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
             currentHole: newEvent.startingHole || 1,
-            // UPGRADED: Using holes:{} (rich objects) instead of scores:{} (bare numbers)
             holes: {},
             stats: {
               totalScore: 0,
@@ -141,6 +170,14 @@ export default function CreateEventView({
         setNewEvent({
           name: '',
           courseId: '',
+          selectedCourseId: '',
+          selectedTeeId: '',
+          courseName: '',
+          coursePars: [],
+          courseYardages: [],
+          courseStrokeIndexes: [],
+          teeId: '',
+          teeName: '',
           date: new Date().toISOString().split('T')[0],
           time: '',
           format: 'scramble',
@@ -148,7 +185,6 @@ export default function CreateEventView({
           numHoles: 18,
           teams: []
         });
-        setSelectedBaseCourse('');
         setNewTeam({ name: '', player1: '', player2: '' });
         setFeedback('');
         
@@ -173,13 +209,6 @@ export default function CreateEventView({
       setFeedback('Error creating event. Please try again.');
       setTimeout(() => setFeedback(''), 3000);
     }
-  };
-
-  const formatNames = {
-    scramble: "2-Man Scramble",
-    shamble: "2-Man Shamble",
-    bestball: "2-Man Best Ball",
-    stableford: "Individual Stableford"
   };
 
   const formatDescriptions = {
@@ -225,47 +254,14 @@ export default function CreateEventView({
               />
             </div>
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Course</label>
-              <select
-                value={selectedBaseCourse}
-                onChange={(e) => {
-                  setSelectedBaseCourse(e.target.value);
-                  setNewEvent({ ...newEvent, courseId: '' });
-                }}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-              >
-                <option value="">Select a course</option>
-                {globalCourses.map(course => (
-                  <option key={course.id} value={course.id}>
-                    {course.name} {course.location && `- ${course.location}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {selectedBaseCourse && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Tee</label>
-                <select
-                  value={newEvent.courseId}
-                  onChange={(e) => setNewEvent({ ...newEvent, courseId: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                >
-                  <option value="">Select a tee</option>
-                  {courses
-                    .filter(c => c.courseId === selectedBaseCourse)
-                    .map(course => {
-                      const totalYards = course.yardages?.reduce((sum, y) => sum + (parseInt(y) || 0), 0) || 0;
-                      return (
-                        <option key={course.id} value={course.id}>
-                          {course.teeName} - Rating: {course.rating} / Slope: {course.slope} / {totalYards} yards
-                        </option>
-                      );
-                    })}
-                </select>
-              </div>
-            )}
+            {/* Shared Course/Tee Selector */}
+            <CourseSelector
+              globalCourses={globalCourses}
+              selectedCourseId={selectedCourseId}
+              selectedTeeId={selectedTeeId}
+              onCourseChange={handleCourseChange}
+              onTeeChange={handleTeeChange}
+            />
 
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
