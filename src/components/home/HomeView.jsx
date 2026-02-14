@@ -88,6 +88,18 @@ export default function HomeView({
                 <div className="text-gray-400">›</div>
               </div>
             </button>
+            <button
+              onClick={() => setView('manage-formats')}
+              className="w-full mt-3 bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all text-left"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-xl font-bold text-gray-900">Manage Formats</div>
+                  <div className="text-sm text-gray-600">Add or Edit Formats for Events</div>
+                </div>
+                <div className="text-gray-400">›</div>
+              </div>
+            </button>
           </div>
         )}
 

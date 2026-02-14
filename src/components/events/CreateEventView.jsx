@@ -2,11 +2,14 @@ import { ref, get, set } from 'firebase/database';
 import { database } from '../../firebase';
 import { TrashIcon } from '../icons';
 import CourseSelector from '../shared/CourseSelector.jsx';
+import RoundOptions from '../shared/RoundOptions.jsx';
+import FormatSelector from '../shared/FormatSelector.jsx';
 
 export default function CreateEventView({
   currentUser,
   currentLeague,
   globalCourses,
+  formats,
   newEvent,
   setNewEvent,
   newTeam,
@@ -22,7 +25,6 @@ export default function CreateEventView({
   deviceId
 }) {
   // Track selected course/tee IDs locally
-  // (We store the resolved course + tee data in newEvent when selections change)
   const selectedCourseId = newEvent.selectedCourseId || '';
   const selectedTeeId = newEvent.selectedTeeId || '';
 
@@ -52,6 +54,19 @@ export default function CreateEventView({
       teeName: teeData?.name || '',
       teeRating: teeData?.rating || '',
       teeSlope: teeData?.slope || ''
+    });
+  };
+
+  const handleFormatChange = (formatId, formatData) => {
+    setNewEvent({
+      ...newEvent,
+      formatId: formatId,
+      format: formatData?.combinationMethod || 'scramble',
+      scoringMethod: formatData?.scoringMethod || 'stroke',
+      teamSize: formatData?.teamSize || 2,
+      formatName: formatData?.name || '',
+      handicap: formatData?.handicap || { enabled: false, allowance: 100 },
+      stablefordPoints: formatData?.stablefordPoints || null
     });
   };
 
@@ -102,6 +117,18 @@ export default function CreateEventView({
     try {
       const eventId = 'event-' + Date.now();
       const eventCode = await generateEventCode(newEvent.courseId);
+
+      const eventStartingHole = newEvent.startingHole || 1;
+      const eventNumHoles = newEvent.numHoles || 18;
+
+      // Calculate ending hole
+      let eventEndingHole;
+      if (eventNumHoles === 9) {
+        eventEndingHole = eventStartingHole === 1 ? 9 : 18;
+      } else {
+        // 18 holes: if starting on 10, wrap around and end on 9
+        eventEndingHole = eventStartingHole === 1 ? 18 : 9;
+      }
       
       const eventData = {
         meta: {
@@ -113,14 +140,18 @@ export default function CreateEventView({
           courseStrokeIndexes: newEvent.courseStrokeIndexes || [],
           teeId: newEvent.teeId,
           teeName: newEvent.teeName,
-          format: newEvent.format,
+          format: newEvent.format,               // combination method (scramble, etc.)
+          formatId: newEvent.formatId || null,    // ← ADD: reference to format
+          formatName: newEvent.formatName || '',  // ← ADD: human-readable name
+          scoringMethod: newEvent.scoringMethod || 'stroke',  // ← ADD
+          teamSize: newEvent.teamSize || 2,       // ← ADD
+          handicap: newEvent.handicap || { enabled: false, allowance: 100 },  // ← ADD
+          stablefordPoints: newEvent.stablefordPoints || null,  // ← ADD
           date: newEvent.date,
           time: newEvent.time || null,
-          numHoles: newEvent.numHoles || 18,
-          startingHole: newEvent.startingHole || 1,
-          endingHole: newEvent.numHoles === 9
-            ? (newEvent.startingHole === 1 ? 9 : 18)
-            : 18,
+          numHoles: eventNumHoles,
+          startingHole: eventStartingHole,
+          endingHole: eventEndingHole,
           createdBy: currentUser?.uid || deviceId,
           status: creatingEventForLeague ? "draft" : "active",
           leagueId: creatingEventForLeague?.leagueId || null,
@@ -138,7 +169,7 @@ export default function CreateEventView({
           eventData.teams[teamKey] = {
             name: team.name,
             players: newEvent.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
-            currentHole: newEvent.startingHole || 1,
+            currentHole: eventStartingHole,
             holes: {},
             stats: {
               totalScore: 0,
@@ -181,6 +212,12 @@ export default function CreateEventView({
           date: new Date().toISOString().split('T')[0],
           time: '',
           format: 'scramble',
+          formatId: '',                  // ← ADD
+          formatName: '',                // ← ADD
+          scoringMethod: 'stroke',       // ← ADD
+          teamSize: 2,                   // ← ADD
+          handicap: { enabled: false, allowance: 100 },  // ← ADD
+          stablefordPoints: null,        // ← ADD
           startingHole: 1,
           numHoles: 18,
           teams: []
@@ -209,13 +246,6 @@ export default function CreateEventView({
       setFeedback('Error creating event. Please try again.');
       setTimeout(() => setFeedback(''), 3000);
     }
-  };
-
-  const formatDescriptions = {
-    scramble: "Both players hit, pick the best shot, both play from there. One team score per hole.",
-    shamble: "Both players hit, pick the best drive, then each plays their own ball. Best individual score counts.",
-    bestball: "Each player plays their own ball. Lower score of the two counts for the team.",
-    stableford: "Individual scoring. Points awarded based on score vs par. Highest points wins."
   };
 
   return (
@@ -263,20 +293,11 @@ export default function CreateEventView({
               onTeeChange={handleTeeChange}
             />
 
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
-              <select
-                value={newEvent.format}
-                onChange={(e) => setNewEvent({ ...newEvent, format: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-              >
-                <option value="scramble">2-Man Scramble</option>
-                <option value="shamble">2-Man Shamble</option>
-                <option value="bestball">2-Man Best Ball</option>
-                <option value="stableford">Individual Stableford</option>
-              </select>
-              <p className="text-sm text-gray-600 mt-2">{formatDescriptions[newEvent.format]}</p>
-            </div>
+            <FormatSelector
+              formats={formats}
+              selectedFormatId={newEvent.formatId || ''}
+              onFormatChange={handleFormatChange}
+            />
 
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -299,19 +320,14 @@ export default function CreateEventView({
               </div>
             </div>
 
+            {/* Shared Round Options (9/18 holes + starting hole) */}
             {!creatingEventForLeague && (
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Starting Hole</label>
-                <select
-                  value={newEvent.startingHole}
-                  onChange={(e) => setNewEvent({ ...newEvent, startingHole: parseInt(e.target.value) })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
-                >
-                  {Array.from({ length: 18 }, (_, i) => i + 1).map(hole => (
-                    <option key={hole} value={hole}>Hole {hole}</option>
-                  ))}
-                </select>
-              </div>
+              <RoundOptions
+                numHoles={newEvent.numHoles || 18}
+                startingHole={newEvent.startingHole || 1}
+                onNumHolesChange={(n) => setNewEvent({ ...newEvent, numHoles: n })}
+                onStartingHoleChange={(h) => setNewEvent({ ...newEvent, startingHole: h })}
+              />
             )}
 
             {!creatingEventForLeague && (

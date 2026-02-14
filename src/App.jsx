@@ -22,6 +22,8 @@ import AddEditCourseView from './components/admin/AddEditCourseView.jsx';
 import SoloSetupView from './components/scoring/SoloSetupView.jsx';
 import RoundsHistoryView from './components/scoring/RoundsHistoryView.jsx';
 import SoloScorecardView from './components/scoring/SoloScorecardView.jsx';
+import ManageFormatsView from './components/admin/ManageFormatsView.jsx';
+import AddEditFormatView from './components/admin/AddEditFormatView.jsx';
 
 function App() {
   // ==================== HELPER FUNCTIONS ====================
@@ -108,6 +110,28 @@ function App() {
       yardages: Array(18).fill('')
     }]
   });
+
+  // Format state
+  const [formats, setFormats] = useState([]);
+  const [editingFormat, setEditingFormat] = useState(null);
+  const [formatForm, setFormatForm] = useState({
+    name: '',
+    description: '',
+    teamSize: 2,
+    scoringMethod: 'stroke',
+    combinationMethod: 'scramble',
+    handicapEnabled: false,
+    handicapAllowance: 100,
+    stablefordPoints: {
+      albatross: 5,
+      eagle: 4,
+      birdie: 3,
+      par: 2,
+      bogey: 1,
+      doubleBogey: 0,
+      worse: 0
+    }
+  });
   
   // Event creation state
  const [newEvent, setNewEvent] = useState({
@@ -124,6 +148,12 @@ function App() {
     date: new Date().toISOString().split('T')[0],
     time: '',
     format: 'scramble',
+    formatId: '',                  // ← ADD
+    formatName: '',                // ← ADD
+    scoringMethod: 'stroke',       // ← ADD
+    teamSize: 2,                   // ← ADD
+    handicap: { enabled: false, allowance: 100 },  // ← ADD
+    stablefordPoints: null,        // ← ADD
     startingHole: 1,
     numHoles: 18,
     teams: []
@@ -174,7 +204,7 @@ function App() {
   // Solo Scoring
   const [currentSoloRound, setCurrentSoloRound] = useState(null);
 
-  // ==================== LOAD COURSES ====================
+  // ==================== LOAD COURSES & FORMATS ====================
   
   const loadCourses = async () => {
     try {
@@ -213,10 +243,27 @@ function App() {
     }
   };
 
+  const loadFormats = async () => {
+    try {
+      const formatsSnapshot = await get(ref(database, 'formats'));
+      if (formatsSnapshot.exists()) {
+        const formatsData = formatsSnapshot.val();
+        const formatsArray = Object.entries(formatsData).map(([id, data]) => ({
+          id,
+          ...data
+        })).sort((a, b) => a.name.localeCompare(b.name));
+        setFormats(formatsArray);
+      }
+    } catch (error) {
+      console.error('Error loading formats:', error);
+    }
+  };
+
   // ==================== EFFECTS ====================
   
   useEffect(() => { 
-    loadCourses(); 
+    loadCourses();
+    loadFormats();
   }, []);
 
   useEffect(() => {
@@ -463,6 +510,7 @@ function App() {
           currentUser={currentUser}
           currentLeague={currentLeague}
           globalCourses={globalCourses}
+          formats={formats} 
           newEvent={newEvent}
           setNewEvent={setNewEvent}
           newTeam={newTeam}
@@ -531,6 +579,7 @@ function App() {
         setEditForm={setEditForm}
         courses={courses}
         globalCourses={globalCourses}
+        formats={formats} 
         feedback={feedback}
         setFeedback={setFeedback}
         setView={setView}
@@ -564,6 +613,36 @@ function App() {
         setFeedback={setFeedback}
         setView={setView}
         loadCourses={loadCourses}
+      />
+    );
+  }
+
+  if (view === 'manage-formats') {
+    return (
+      <ManageFormatsView
+        formats={formats}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setFormatForm={setFormatForm}
+        setEditingFormat={setEditingFormat}
+        loadFormats={loadFormats}
+      />
+    );
+  }
+
+  if (view === 'add-edit-format') {
+    return (
+      <AddEditFormatView
+        currentUser={currentUser}
+        formatForm={formatForm}
+        setFormatForm={setFormatForm}
+        editingFormat={editingFormat}
+        setEditingFormat={setEditingFormat}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        loadFormats={loadFormats}
       />
     );
   }

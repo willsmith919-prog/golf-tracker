@@ -23,6 +23,12 @@ export default function CourseSelector({
   onTeeChange,
   disabled = false
 }) {
+  // Sort courses alphabetically so the list is consistent regardless
+  // of what order the data was loaded from Firebase
+  const sortedCourses = [...globalCourses].sort((a, b) =>
+    (a.name || '').localeCompare(b.name || '')
+  );
+
   const selectedCourse = globalCourses.find(c => c.id === selectedCourseId) || null;
 
   // Convert the tees object on a course into an array for the dropdown
@@ -50,7 +56,7 @@ export default function CourseSelector({
           className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
         >
           <option value="">Select a course</option>
-          {globalCourses.map(course => (
+          {sortedCourses.map(course => (
             <option key={course.id} value={course.id}>
               {course.name} {course.location && `- ${course.location}`}
             </option>

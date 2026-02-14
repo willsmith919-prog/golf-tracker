@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { ref, get } from 'firebase/database';
 import { database } from '../../firebase';
 import CourseSelector from '../shared/CourseSelector.jsx';
+import RoundOptions from '../shared/RoundOptions.jsx';
 
 export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
   const [globalCourses, setGlobalCourses] = useState([]);
@@ -57,9 +58,14 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
 
     const roundId = `solo-${Date.now()}`;
 
-    const endingHole = numHoles === 9 
-      ? (startingHole === 1 ? 9 : 18)
-      : 18;
+    // Calculate ending hole based on starting hole and number of holes
+    let endingHole;
+    if (numHoles === 9) {
+      endingHole = startingHole === 1 ? 9 : 18;
+    } else {
+      // 18 holes: if starting on 10, you wrap around and end on 9
+      endingHole = startingHole === 1 ? 18 : 9;
+    }
 
     const newRound = {
       id: roundId,
@@ -156,69 +162,13 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
             </div>
           </div>
 
-          {/* Number of Holes */}
-          <div className="mb-6">
-            <label className="block text-sm font-semibold text-gray-700 mb-3">
-              Number of Holes
-            </label>
-            <div className="grid grid-cols-2 gap-3">
-              <label className="flex items-center justify-center p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
-                <input
-                  type="radio"
-                  name="numHoles"
-                  value="9"
-                  checked={numHoles === 9}
-                  onChange={(e) => setNumHoles(parseInt(e.target.value))}
-                  className="w-5 h-5 text-blue-600"
-                />
-                <span className="ml-3 text-gray-900 font-medium">9 Holes</span>
-              </label>
-              <label className="flex items-center justify-center p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
-                <input
-                  type="radio"
-                  name="numHoles"
-                  value="18"
-                  checked={numHoles === 18}
-                  onChange={(e) => setNumHoles(parseInt(e.target.value))}
-                  className="w-5 h-5 text-blue-600"
-                />
-                <span className="ml-3 text-gray-900 font-medium">18 Holes</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Starting Hole (only for 9 holes) */}
-          {numHoles === 9 && (
-            <div className="mb-6">
-              <label className="block text-sm font-semibold text-gray-700 mb-3">
-                Starting Hole
-              </label>
-              <div className="grid grid-cols-2 gap-3">
-                <label className="flex items-center justify-center p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="radio"
-                    name="startingHole"
-                    value="1"
-                    checked={startingHole === 1}
-                    onChange={(e) => setStartingHole(parseInt(e.target.value))}
-                    className="w-5 h-5 text-blue-600"
-                  />
-                  <span className="ml-3 text-gray-900 font-medium">Front 9 (1-9)</span>
-                </label>
-                <label className="flex items-center justify-center p-4 rounded-xl border-2 border-gray-200 cursor-pointer hover:bg-gray-50 transition-colors">
-                  <input
-                    type="radio"
-                    name="startingHole"
-                    value="10"
-                    checked={startingHole === 10}
-                    onChange={(e) => setStartingHole(parseInt(e.target.value))}
-                    className="w-5 h-5 text-blue-600"
-                  />
-                  <span className="ml-3 text-gray-900 font-medium">Back 9 (10-18)</span>
-                </label>
-              </div>
-            </div>
-          )}
+          {/* Shared Round Options (9/18 holes + starting hole) */}
+          <RoundOptions
+            numHoles={numHoles}
+            startingHole={startingHole}
+            onNumHolesChange={setNumHoles}
+            onStartingHoleChange={setStartingHole}
+          />
 
           {/* Start Button */}
           <button
