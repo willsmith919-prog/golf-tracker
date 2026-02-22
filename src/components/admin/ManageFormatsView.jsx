@@ -1,9 +1,10 @@
+import { useState } from 'react';
 import { ref, remove } from 'firebase/database';
 import { database } from '../../firebase';
 
 // ============================================================
 // MANAGE FORMATS VIEW — List all formats with edit/delete
-// Mirrors the ManageCoursesView pattern.
+// Includes filter chips to narrow down the format list.
 // ============================================================
 
 export default function ManageFormatsView({
@@ -15,10 +16,57 @@ export default function ManageFormatsView({
   setEditingFormat,
   loadFormats
 }) {
-  console.log('ManageFormatsView rendering, formats:', formats);
+  // ==================== FILTER STATE ====================
+  const [filters, setFilters] = useState({
+    teamSize: null,        // null = any, or 1/2/3/4
+    scoringMethod: null,   // null = any, or 'stroke'/'stableford'/'match_play'
+    combinationMethod: null, // null = any, or 'scramble'/'shamble'/etc.
+    competition: null,     // null = any, or 'full_field'/'round_robin'/'wolf'
+    handicap: null         // null = any, 'enabled', or 'disabled'
+  });
+
+  const toggleFilter = (key, value) => {
+    setFilters(prev => ({
+      ...prev,
+      [key]: prev[key] === value ? null : value
+    }));
+  };
+
+  const clearFilters = () => {
+    setFilters({ teamSize: null, scoringMethod: null, combinationMethod: null, competition: null, handicap: null });
+  };
+
+  const hasActiveFilters = Object.values(filters).some(v => v !== null);
+
+  // Apply filters to the format list
+  const filteredFormats = formats.filter(format => {
+    if (filters.teamSize !== null && format.teamSize !== filters.teamSize) return false;
+    if (filters.scoringMethod !== null && format.scoringMethod !== filters.scoringMethod) return false;
+    if (filters.combinationMethod !== null && format.combinationMethod !== filters.combinationMethod) return false;
+    if (filters.competition !== null) {
+      const structure = format.competition?.structure || 'full_field';
+      if (structure !== filters.competition) return false;
+    }
+    if (filters.handicap === 'enabled' && !format.handicap?.enabled) return false;
+    if (filters.handicap === 'disabled' && format.handicap?.enabled) return false;
+    return true;
+  });
+
+  // Build chip options from what actually exists in the format list
+  // (so we only show filter options that would match at least one format)
+  const existingTeamSizes = [...new Set(formats.map(f => f.teamSize))].sort();
+  const existingScoringMethods = [...new Set(formats.map(f => f.scoringMethod))];
+  const existingCombinations = [...new Set(formats.filter(f => f.teamSize > 1).map(f => f.combinationMethod))];
+  const existingCompetitions = [...new Set(formats.map(f => f.competition?.structure || 'full_field'))];
+  const hasHandicapFormats = formats.some(f => f.handicap?.enabled);
+  const hasNonHandicapFormats = formats.some(f => !f.handicap?.enabled);
+
+  // ==================== LABEL MAPS ====================
+  // ==================== LABEL MAPS ====================
   const teamSizeLabels = {
     1: 'Individual',
     2: '2-Person Team',
+    3: '3-Person Team',
     4: '4-Person Team'
   };
 
@@ -36,6 +84,18 @@ export default function ManageFormatsView({
     alternate_shot: 'Alternate Shot'
   };
 
+  const competitionLabels = {
+    full_field: null,  // Don't show a badge for the default
+    round_robin: 'Round Robin',
+    wolf: 'Wolf'
+  };
+
+  const applicationMethodLabels = {
+    strokes: null,  // Don't show a badge for the default
+    mulligans: 'Mulligans',
+    none: 'HC: Seeding Only'
+  };
+
   const handleEdit = (format) => {
     setEditingFormat(format);
     setFormatForm({
@@ -46,6 +106,12 @@ export default function ManageFormatsView({
       combinationMethod: format.combinationMethod || 'scramble',
       handicapEnabled: format.handicap?.enabled || false,
       handicapAllowance: format.handicap?.allowance || 100,
+      handicapApplicationMethod: format.handicap?.applicationMethod || 'strokes',
+      mulliganConversion: format.handicap?.mulliganConversion || {
+        strokesPerMulligan: 3,
+        maxMulligans: 10,
+        perHoleLimit: 1
+      },
       stablefordPoints: format.stablefordPoints || {
         albatross: 5,
         eagle: 4,
@@ -54,6 +120,21 @@ export default function ManageFormatsView({
         bogey: 1,
         doubleBogey: 0,
         worse: 0
+      },
+      competitionStructure: format.competition?.structure || 'full_field',
+      roundRobin: format.competition?.roundRobin || {
+        holesPerMatch: 6,
+        pointsForWin: 1,
+        pointsForTie: 0.5,
+        pointsForLoss: 0,
+        matchScoringMethod: 'match_play',
+        autoGenerateMatchups: true
+      },
+      wolf: format.competition?.wolf || {
+        blindWolfBonus: 2,
+        loneWolfBonus: 1,
+        pointsPerHoleWon: 1,
+        pointsPerHoleLost: 1
       }
     });
     setView('add-edit-format');
@@ -84,6 +165,12 @@ export default function ManageFormatsView({
       combinationMethod: 'scramble',
       handicapEnabled: false,
       handicapAllowance: 100,
+      handicapApplicationMethod: 'strokes',
+      mulliganConversion: {
+        strokesPerMulligan: 3,
+        maxMulligans: 10,
+        perHoleLimit: 1
+      },
       stablefordPoints: {
         albatross: 5,
         eagle: 4,
@@ -92,6 +179,21 @@ export default function ManageFormatsView({
         bogey: 1,
         doubleBogey: 0,
         worse: 0
+      },
+      competitionStructure: 'full_field',
+      roundRobin: {
+        holesPerMatch: 6,
+        pointsForWin: 1,
+        pointsForTie: 0.5,
+        pointsForLoss: 0,
+        matchScoringMethod: 'match_play',
+        autoGenerateMatchups: true
+      },
+      wolf: {
+        blindWolfBonus: 2,
+        loneWolfBonus: 1,
+        pointsPerHoleWon: 1,
+        pointsPerHoleLost: 1
       }
     });
     setView('add-edit-format');
@@ -131,8 +233,121 @@ export default function ManageFormatsView({
               No formats yet. Click "+ Add Format" to create one.
             </p>
           ) : (
-            <div className="space-y-4">
-              {formats.map(format => (
+            <>
+              {/* Filter Chips */}
+              {formats.length > 1 && (
+                <div className="mb-4 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filter</span>
+                    {hasActiveFilters && (
+                      <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">
+                        Clear all
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {/* Team Size chips */}
+                    {existingTeamSizes.length > 1 && existingTeamSizes.map(size => (
+                      <button
+                        key={`ts-${size}`}
+                        onClick={() => toggleFilter('teamSize', size)}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                          filters.teamSize === size
+                            ? 'bg-blue-600 text-white border-blue-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {teamSizeLabels[size] || `${size}-Person`}
+                      </button>
+                    ))}
+
+                    {/* Scoring Method chips */}
+                    {existingScoringMethods.length > 1 && existingScoringMethods.map(method => (
+                      <button
+                        key={`sm-${method}`}
+                        onClick={() => toggleFilter('scoringMethod', method)}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                          filters.scoringMethod === method
+                            ? 'bg-green-600 text-white border-green-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {scoringMethodLabels[method] || method}
+                      </button>
+                    ))}
+
+                    {/* Combination Method chips */}
+                    {existingCombinations.length > 1 && existingCombinations.map(combo => (
+                      <button
+                        key={`cm-${combo}`}
+                        onClick={() => toggleFilter('combinationMethod', combo)}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                          filters.combinationMethod === combo
+                            ? 'bg-purple-600 text-white border-purple-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {combinationLabels[combo] || combo}
+                      </button>
+                    ))}
+
+                    {/* Competition Structure chips */}
+                    {existingCompetitions.length > 1 && existingCompetitions.map(comp => (
+                      <button
+                        key={`comp-${comp}`}
+                        onClick={() => toggleFilter('competition', comp)}
+                        className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                          filters.competition === comp
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                        }`}
+                      >
+                        {competitionLabels[comp] || 'Full Field'}
+                      </button>
+                    ))}
+
+                    {/* Handicap chips */}
+                    {hasHandicapFormats && hasNonHandicapFormats && (
+                      <>
+                        <button
+                          onClick={() => toggleFilter('handicap', 'enabled')}
+                          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                            filters.handicap === 'enabled'
+                              ? 'bg-orange-600 text-white border-orange-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          Handicap
+                        </button>
+                        <button
+                          onClick={() => toggleFilter('handicap', 'disabled')}
+                          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                            filters.handicap === 'disabled'
+                              ? 'bg-gray-600 text-white border-gray-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          No Handicap
+                        </button>
+                      </>
+                    )}
+                  </div>
+                  {hasActiveFilters && (
+                    <p className="text-xs text-gray-500">
+                      Showing {filteredFormats.length} of {formats.length} formats
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Format List */}
+              {filteredFormats.length === 0 ? (
+                <p className="text-gray-500 text-center py-8">
+                  No formats match the current filters.
+                </p>
+              ) : (
+              <div className="space-y-4">
+              {filteredFormats.map(format => (
                 <div key={format.id} className="border-2 border-gray-200 rounded-xl p-4">
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
@@ -152,7 +367,12 @@ export default function ManageFormatsView({
                         )}
                         {format.handicap?.enabled && (
                           <span className="inline-block bg-orange-100 text-orange-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
-                            Handicap: {format.handicap.allowance}%
+                            HC: {format.handicap.allowance}% {format.handicap.applicationMethod === 'mulligans' ? 'Mulligans' : format.handicap.applicationMethod === 'none' ? 'Seeding Only' : 'Strokes'}
+                          </span>
+                        )}
+                        {competitionLabels[format.competition?.structure] && (
+                          <span className="inline-block bg-indigo-100 text-indigo-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                            {competitionLabels[format.competition.structure]}
                           </span>
                         )}
                       </div>
@@ -174,7 +394,9 @@ export default function ManageFormatsView({
                   </div>
                 </div>
               ))}
-            </div>
+              </div>
+              )}
+            </>
           )}
         </div>
       </div>

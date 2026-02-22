@@ -58,20 +58,40 @@ export default function CreateEventView({
   };
 
   const handleFormatChange = (formatId, formatData) => {
+    // Build smart display defaults based on the format's settings
+    const handicapEnabled = formatData?.handicap?.enabled || false;
+    const applicationMethod = formatData?.handicap?.applicationMethod || 'strokes';
+    const scoringMethod = formatData?.scoringMethod || 'stroke';
+    const competitionStructure = formatData?.competition?.structure || 'full_field';
+
+    const smartDisplay = {
+      showGross: true,
+      showNet: handicapEnabled && applicationMethod === 'strokes',
+      primarySort: handicapEnabled && applicationMethod === 'strokes' ? 'net' : 'gross',
+      showRelativeToPar: true,
+      showHoleByHole: true,
+      showStrokeHoles: handicapEnabled && applicationMethod === 'strokes',
+      showMulligansRemaining: handicapEnabled && applicationMethod === 'mulligans',
+      showMatchStatus: scoringMethod === 'match_play' || competitionStructure === 'round_robin',
+      showRoundRobinGrid: competitionStructure === 'round_robin'
+    };
+
     setNewEvent({
       ...newEvent,
       formatId: formatId,
       format: formatData?.combinationMethod || 'scramble',
-      scoringMethod: formatData?.scoringMethod || 'stroke',
+      scoringMethod: scoringMethod,
       teamSize: formatData?.teamSize || 2,
       formatName: formatData?.name || '',
       handicap: formatData?.handicap || { enabled: false, allowance: 100 },
-      stablefordPoints: formatData?.stablefordPoints || null
+      stablefordPoints: formatData?.stablefordPoints || null,
+      competition: formatData?.competition || { structure: 'full_field' },
+      display: smartDisplay
     });
   };
 
   const addTeam = () => {
-    if (newEvent.format === 'stableford') {
+    if (newEvent.teamSize === 1) {
       if (!newTeam.name) {
         setFeedback('Please enter player name');
         setTimeout(() => setFeedback(''), 2000);
@@ -103,11 +123,30 @@ export default function CreateEventView({
     });
   };
 
+  // Reusable toggle for display settings
+  const DisplayToggle = ({ label, description, checked, onChange }) => (
+    <div className="flex items-center justify-between">
+      <div>
+        <span className="text-sm font-medium text-gray-700">{label}</span>
+        {description && <p className="text-xs text-gray-500 mt-0.5">{description}</p>}
+      </div>
+      <label className="relative inline-flex items-center cursor-pointer flex-shrink-0 ml-4">
+        <input
+          type="checkbox"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+          className="sr-only peer"
+        />
+        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+      </label>
+    </div>
+  );
+
   const createEvent = async () => {
-    const minPlayers = creatingEventForLeague ? 0 : (newEvent.format === 'stableford' ? 1 : 2);
+    const minPlayers = creatingEventForLeague ? 0 : (newEvent.teamSize === 1 ? 1 : 2);
     
     if (!newEvent.name || !newEvent.courseId || !newEvent.selectedTeeId || newEvent.teams.length < minPlayers) {
-      const teamWord = newEvent.format === 'stableford' ? 'player' : 'teams';
+      const teamWord = newEvent.teamSize === 1 ? 'player' : 'teams';
       const teamMsg = minPlayers === 0 ? '' : ` and at least ${minPlayers} ${teamWord}`;
       setFeedback(`Please add event name, course/tee${teamMsg}`);
       setTimeout(() => setFeedback(''), 3000);
@@ -147,6 +186,8 @@ export default function CreateEventView({
           teamSize: newEvent.teamSize || 2,       // ← ADD
           handicap: newEvent.handicap || { enabled: false, allowance: 100 },  // ← ADD
           stablefordPoints: newEvent.stablefordPoints || null,  // ← ADD
+          competition: newEvent.competition || { structure: 'full_field' },
+          display: newEvent.display || {},
           date: newEvent.date,
           time: newEvent.time || null,
           numHoles: eventNumHoles,
@@ -168,7 +209,7 @@ export default function CreateEventView({
           const teamKey = `team-${Date.now()}-${index}`;
           eventData.teams[teamKey] = {
             name: team.name,
-            players: newEvent.format === 'stableford' ? [team.player1] : [team.player1, team.player2],
+            players: newEvent.teamSize === 1 ? [team.player1] : [team.player1, team.player2],
             currentHole: eventStartingHole,
             holes: {},
             stats: {
@@ -218,6 +259,12 @@ export default function CreateEventView({
           teamSize: 2,                   // ← ADD
           handicap: { enabled: false, allowance: 100 },  // ← ADD
           stablefordPoints: null,        // ← ADD
+          competition: { structure: 'full_field' },
+          display: {
+            showGross: true, showNet: true, primarySort: 'net',
+            showRelativeToPar: true, showHoleByHole: true, showStrokeHoles: true,
+            showMulligansRemaining: false, showMatchStatus: false, showRoundRobinGrid: false
+          },
           startingHole: 1,
           numHoles: 18,
           teams: []
@@ -299,6 +346,121 @@ export default function CreateEventView({
               onFormatChange={handleFormatChange}
             />
 
+            {/* Leaderboard Display — only shown after a format is selected */}
+            {newEvent.formatId && (
+              <div className="border-2 border-gray-200 rounded-xl p-5">
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Leaderboard Display</label>
+                <p className="text-sm text-gray-500 mb-3">What should the scoreboard show for this event?</p>
+                <div className="space-y-3">
+
+                  {/* Always available */}
+                  <DisplayToggle
+                    label="Show scores relative to par"
+                    description='Display "+3" or "-2" instead of just the total'
+                    checked={newEvent.display?.showRelativeToPar ?? true}
+                    onChange={(val) => setNewEvent({ ...newEvent, display: { ...newEvent.display, showRelativeToPar: val } })}
+                  />
+                  <DisplayToggle
+                    label="Show hole-by-hole scores"
+                    description="Show each hole's score, not just the running total"
+                    checked={newEvent.display?.showHoleByHole ?? true}
+                    onChange={(val) => setNewEvent({ ...newEvent, display: { ...newEvent.display, showHoleByHole: val } })}
+                  />
+
+                  {/* Handicap stroke display */}
+                  {newEvent.handicap?.enabled && newEvent.handicap?.applicationMethod === 'strokes' && (
+                    <>
+                      <div className="border-t border-gray-200 pt-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Handicap Display</p>
+                      </div>
+                      <DisplayToggle
+                        label="Show Gross score"
+                        description="The raw score before handicap adjustment"
+                        checked={newEvent.display?.showGross ?? true}
+                        onChange={(val) => setNewEvent({ ...newEvent, display: { ...newEvent.display, showGross: val } })}
+                      />
+                      <DisplayToggle
+                        label="Show Net score"
+                        description="The score after handicap strokes are subtracted"
+                        checked={newEvent.display?.showNet ?? true}
+                        onChange={(val) => setNewEvent({ ...newEvent, display: { ...newEvent.display, showNet: val } })}
+                      />
+                      {newEvent.display?.showGross && newEvent.display?.showNet && (
+                        <div>
+                          <label className="block text-sm text-gray-700 mb-2">Sort leaderboard by:</label>
+                          <div className="flex gap-3">
+                            {['net', 'gross'].map(sort => (
+                              <label key={sort} className={`flex-1 text-center p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                                newEvent.display?.primarySort === sort
+                                  ? 'border-blue-500 bg-blue-50 font-semibold'
+                                  : 'border-gray-200 hover:bg-gray-50'
+                              }`}>
+                                <input
+                                  type="radio"
+                                  name="eventPrimarySort"
+                                  value={sort}
+                                  checked={newEvent.display?.primarySort === sort}
+                                  onChange={() => setNewEvent({ ...newEvent, display: { ...newEvent.display, primarySort: sort } })}
+                                  className="sr-only"
+                                />
+                                {sort === 'net' ? 'Net Score' : 'Gross Score'}
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      <DisplayToggle
+                        label="Highlight stroke holes"
+                        description="Mark which holes get a handicap stroke"
+                        checked={newEvent.display?.showStrokeHoles ?? true}
+                        onChange={(val) => setNewEvent({ ...newEvent, display: { ...newEvent.display, showStrokeHoles: val } })}
+                      />
+                    </>
+                  )}
+
+                  {/* Mulligan display */}
+                  {newEvent.handicap?.enabled && newEvent.handicap?.applicationMethod === 'mulligans' && (
+                    <>
+                      <div className="border-t border-gray-200 pt-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Mulligan Display</p>
+                      </div>
+                      <DisplayToggle
+                        label="Show mulligans remaining"
+                        description="Display how many mulligans each team has left"
+                        checked={newEvent.display?.showMulligansRemaining ?? true}
+                        onChange={(val) => setNewEvent({ ...newEvent, display: { ...newEvent.display, showMulligansRemaining: val } })}
+                      />
+                    </>
+                  )}
+
+                  {/* Match play display */}
+                  {(newEvent.scoringMethod === 'match_play' || newEvent.competition?.structure === 'round_robin') && (
+                    <>
+                      <div className="border-t border-gray-200 pt-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Match Play Display</p>
+                      </div>
+                      <DisplayToggle
+                        label="Show match status"
+                        description='Display "2 UP", "1 DOWN", "AS" (all square)'
+                        checked={newEvent.display?.showMatchStatus ?? true}
+                        onChange={(val) => setNewEvent({ ...newEvent, display: { ...newEvent.display, showMatchStatus: val } })}
+                      />
+                    </>
+                  )}
+
+                  {/* Round robin display */}
+                  {newEvent.competition?.structure === 'round_robin' && (
+                    <DisplayToggle
+                      label="Show round-robin results grid"
+                      description="Display the grid showing who played whom and point totals"
+                      checked={newEvent.display?.showRoundRobinGrid ?? true}
+                      onChange={(val) => setNewEvent({ ...newEvent, display: { ...newEvent.display, showRoundRobinGrid: val } })}
+                    />
+                  )}
+                </div>
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
@@ -333,7 +495,7 @@ export default function CreateEventView({
             {!creatingEventForLeague && (
               <div>
                 <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  {newEvent.format === 'stableford' ? 'Players' : 'Teams'}
+                  {newEvent.teamSize === 1 ? 'Players' : 'Teams'}
                 </label>
                 
                 {newEvent.teams.length > 0 && (
@@ -342,7 +504,7 @@ export default function CreateEventView({
                       <div key={team.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div>
                           <div className="font-semibold text-gray-900">{team.name}</div>
-                          {newEvent.format !== 'stableford' && (
+                          {newEvent.teamSize !== 1 && (
                             <div className="text-sm text-gray-600">{team.player1} & {team.player2}</div>
                           )}
                         </div>
@@ -358,7 +520,7 @@ export default function CreateEventView({
                 )}
 
                 <div className="space-y-3 p-4 bg-blue-50 rounded-xl">
-                  {newEvent.format === 'stableford' ? (
+                  {newEvent.teamSize === 1 ? (
                     <>
                       <input
                         type="text"

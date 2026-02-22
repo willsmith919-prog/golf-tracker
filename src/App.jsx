@@ -122,6 +122,12 @@ function App() {
     combinationMethod: 'scramble',
     handicapEnabled: false,
     handicapAllowance: 100,
+    handicapApplicationMethod: 'strokes',
+    mulliganConversion: {
+      strokesPerMulligan: 3,
+      maxMulligans: 10,
+      perHoleLimit: 1
+    },
     stablefordPoints: {
       albatross: 5,
       eagle: 4,
@@ -130,6 +136,21 @@ function App() {
       bogey: 1,
       doubleBogey: 0,
       worse: 0
+    },
+    competitionStructure: 'full_field',
+    roundRobin: {
+      holesPerMatch: 6,
+      pointsForWin: 1,
+      pointsForTie: 0.5,
+      pointsForLoss: 0,
+      matchScoringMethod: 'match_play',
+      autoGenerateMatchups: true
+    },
+    wolf: {
+      blindWolfBonus: 2,
+      loneWolfBonus: 1,
+      pointsPerHoleWon: 1,
+      pointsPerHoleLost: 1
     }
   });
   
@@ -156,7 +177,18 @@ function App() {
     stablefordPoints: null,        // ← ADD
     startingHole: 1,
     numHoles: 18,
-    teams: []
+    teams: [],
+    display: {
+      showGross: true,
+      showNet: true,
+      primarySort: 'net',
+      showRelativeToPar: true,
+      showHoleByHole: true,
+      showStrokeHoles: true,
+      showMulligansRemaining: false,
+      showMatchStatus: false,
+      showRoundRobinGrid: false
+    }
   });
   
   const [newTeam, setNewTeam] = useState({ name: '', player1: '', player2: '' });
