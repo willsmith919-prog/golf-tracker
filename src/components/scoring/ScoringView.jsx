@@ -36,7 +36,7 @@ export default function ScoringView({
   const isSolo = !!currentSoloRound;
 
   // ==================== DATA EXTRACTION ====================
-  const team = !isSolo ? currentEvent?.teams?.[selectedTeam] : null;
+  const team = !isSolo ? currentEvent?.players?.[selectedTeam] : null;
 
   const coursePars = isSolo
     ? currentSoloRound.coursePars
@@ -72,7 +72,7 @@ export default function ScoringView({
 
   const currentHole = isSolo
     ? currentSoloRound.currentHole
-    : team?.currentHole || 1;
+    : team?.currentHole || startingHole;
 
   // ==================== HOLE ORDER ====================
   // Build an array of hole numbers in the order they're played.
@@ -128,7 +128,7 @@ export default function ScoringView({
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
         <div className="text-white text-center">
-          <p className="text-xl mb-4">Team not found</p>
+          <p className="text-xl mb-4">Player not found in this event</p>
           <button onClick={() => setView('event-lobby')} className="bg-white text-blue-900 px-6 py-3 rounded-xl font-semibold">
             Back to Lobby
           </button>
@@ -279,12 +279,19 @@ export default function ScoringView({
 
   const handleScoreSelect = (score) => {
     setCurrentScore(score);
-    if (currentPar < 4) {
-      setCurrentFairway(null);
-    }
-    if (currentPar === 3 && score === 1) {
-      setCurrentFairway(null);
-      saveHoleData(score, null, 1);
+
+    if (isSolo) {
+      // Solo mode: continue to fairway/putts flow
+      if (currentPar < 4) {
+        setCurrentFairway(null);
+      }
+      if (currentPar === 3 && score === 1) {
+        setCurrentFairway(null);
+        saveHoleData(score, null, 1);
+      }
+    } else {
+      // Event mode: save immediately with just the score
+      saveHoleData(score, null, null);
     }
   };
 
@@ -342,16 +349,16 @@ export default function ScoringView({
 
       } else {
         await set(
-          ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/holes/${currentHole}`),
+          ref(database, `events/${currentEvent.id}/players/${selectedTeam}/holes/${currentHole}`),
           holeEntry
         );
         await set(
-          ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/scores/${currentHole}`),
+          ref(database, `events/${currentEvent.id}/players/${selectedTeam}/scores/${currentHole}`),
           parseInt(score)
         );
         const updatedStats = calculateStats(currentHole, holeEntry);
         await set(
-          ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/stats`),
+          ref(database, `events/${currentEvent.id}/players/${selectedTeam}/stats`),
           updatedStats
         );
 
@@ -359,7 +366,7 @@ export default function ScoringView({
           const next = getNextHole(currentHole);
           if (next) {
             await set(
-              ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/currentHole`),
+              ref(database, `events/${currentEvent.id}/players/${selectedTeam}/currentHole`),
               next
             );
           }
@@ -387,7 +394,7 @@ export default function ScoringView({
       setCurrentSoloRound(updatedRound);
     } else {
       set(
-        ref(database, `events/${currentEvent.id}/teams/${selectedTeam}/currentHole`),
+        ref(database, `events/${currentEvent.id}/players/${selectedTeam}/currentHole`),
         hole
       ).then(async () => {
         const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
@@ -483,7 +490,7 @@ export default function ScoringView({
                     onClick={() => goToHole(h)}
                   >
                     {hole?.score || '-'}
-                    {hole?.gir && <span className="text-green-600 text-xs">●</span>}
+                    {isSolo && hole?.gir && <span className="text-green-600 text-xs">●</span>}
                   </td>
                 );
               })}
@@ -521,12 +528,14 @@ export default function ScoringView({
             <h2 className="text-xl font-bold text-gray-900 mb-4">{courseName}</h2>
           ) : (
             <>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">{team.name}</h1>
-              <div className="text-sm text-gray-600 mb-4">{team.players.join(' & ')}</div>
+              <h1 className="text-2xl font-bold text-gray-900 mb-2">
+                {team.displayName || 'Player'}
+              </h1>
+              <div className="text-sm text-gray-600 mb-4">{courseName}</div>
             </>
           )}
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className={`grid ${isSolo ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2'} gap-4`}>
             <div className="text-center">
               <div className="text-sm text-gray-600">Score</div>
               <div className="text-3xl font-bold text-gray-900">{stats.totalScore || 0}</div>
@@ -540,27 +549,31 @@ export default function ScoringView({
                 {stats.toPar > 0 ? '+' : ''}{stats.toPar || 0}
               </div>
             </div>
-            <div className="text-center">
-              <div className="text-sm text-gray-600">
-                {format === 'stableford' ? 'Points' : 'Putts'}
-              </div>
-              <div className="text-3xl font-bold text-gray-900">
-                {format === 'stableford'
-                  ? stats.stablefordPoints
-                  : stats.totalPutts}
-              </div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm text-gray-600">Fairways</div>
-              <div className="text-3xl font-bold text-gray-900">
-                {stats.fairwaysHit}/{stats.fairwaysPossible}
-              </div>
-              <div className="text-xs text-gray-500">
-                {stats.fairwaysPossible > 0
-                  ? `${((stats.fairwaysHit / stats.fairwaysPossible) * 100).toFixed(0)}%`
-                  : '0%'}
-              </div>
-            </div>
+            {isSolo && (
+              <>
+                <div className="text-center">
+                  <div className="text-sm text-gray-600">
+                    {format === 'stableford' ? 'Points' : 'Putts'}
+                  </div>
+                  <div className="text-3xl font-bold text-gray-900">
+                    {format === 'stableford'
+                      ? stats.stablefordPoints
+                      : stats.totalPutts}
+                  </div>
+                </div>
+                <div className="text-center">
+                  <div className="text-sm text-gray-600">Fairways</div>
+                  <div className="text-3xl font-bold text-gray-900">
+                    {stats.fairwaysHit}/{stats.fairwaysPossible}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {stats.fairwaysPossible > 0
+                      ? `${((stats.fairwaysHit / stats.fairwaysPossible) * 100).toFixed(0)}%`
+                      : '0%'}
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -616,8 +629,8 @@ export default function ScoringView({
             </div>
           </div>
 
-          {/* Fairway Entry */}
-          {currentScore && currentPar >= 4 && (
+          {/* Fairway Entry — solo only */}
+          {isSolo && currentScore && currentPar >= 4 && (
             <div className="mb-4">
               <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Fairway</h3>
               <div className="grid grid-cols-4 gap-3">
@@ -638,8 +651,8 @@ export default function ScoringView({
             </div>
           )}
 
-          {/* Putts Entry */}
-          {currentScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
+          {/* Putts Entry — solo only */}
+          {isSolo && currentScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Putts</h3>
               <div className="grid grid-cols-4 gap-3">
@@ -657,7 +670,8 @@ export default function ScoringView({
           )}
         </div>
 
-        {/* Notes */}
+        {/* Notes — solo only */}
+        {isSolo && (
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
           <label className="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
           <textarea
@@ -668,6 +682,7 @@ export default function ScoringView({
             rows="3"
           />
         </div>
+        )}
 
         {feedback && (
           <div className="mb-4 bg-red-50 border-2 border-red-200 text-red-800 px-4 py-3 rounded-xl text-sm text-center">
@@ -683,7 +698,7 @@ export default function ScoringView({
           {second9.length > 0 && renderScorecardSection(second9, second9Label)}
 
           <div className="mt-4 text-sm text-gray-600 text-center">
-            ● = Green in Regulation · Tap any hole to edit
+            {isSolo && '● = Green in Regulation · '}Tap any hole to edit
           </div>
         </div>
       </div>

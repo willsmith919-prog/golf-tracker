@@ -14,6 +14,7 @@ import JoinLeagueView from './components/leagues/JoinLeagueView.jsx';
 import LeagueDashboardView from './components/leagues/LeagueDashboardView.jsx';
 import CreateEventView from './components/events/CreateEventView.jsx';
 import EventLobbyView from './components/events/EventLobbyView.jsx';
+import JoinEventView from './components/events/JoinEventView.jsx';
 import EventDetailsView from './components/events/EventDetailsView.jsx';
 import EditEventView from './components/events/EditEventView.jsx';
 import ScoringView from './components/scoring/ScoringView.jsx';
@@ -81,6 +82,39 @@ function App() {
       return leaguesData;
     } catch (error) {
       console.error('Error loading leagues:', error);
+      return [];
+    }
+  };
+
+  const loadUserEvents = async (userId) => {
+    try {
+      // Read the list of event IDs from the user's profile
+      const userEventsSnapshot = await get(ref(database, `users/${userId}/events`));
+      const userEventsMap = userEventsSnapshot.val() || {};
+      
+      const eventsData = [];
+      for (const eventId of Object.keys(userEventsMap)) {
+        // Fetch the full event data for each one
+        const eventSnapshot = await get(ref(database, `events/${eventId}`));
+        const event = eventSnapshot.val();
+        if (event) {
+          eventsData.push({
+            id: eventId,
+            ...event,
+            // Carry forward the role from the user's events list
+            role: userEventsMap[eventId].role || 'player',
+            // Pull commonly displayed fields up for easy access
+            eventName: event.meta?.name || '',
+            courseName: event.meta?.courseName || '',
+            status: event.meta?.status || 'open',
+            leagueId: event.meta?.leagueId || null
+          });
+        }
+      }
+      
+      return eventsData;
+    } catch (error) {
+      console.error('Error loading user events:', error);
       return [];
     }
   };
@@ -155,48 +189,15 @@ function App() {
   });
   
   // Event creation state
- const [newEvent, setNewEvent] = useState({
-    name: '',
-    courseId: '',
-    selectedCourseId: '',
-    selectedTeeId: '',
-    courseName: '',
-    coursePars: [],
-    courseYardages: [],
-    courseStrokeIndexes: [],
-    teeId: '',
-    teeName: '',
-    date: new Date().toISOString().split('T')[0],
-    time: '',
-    format: 'scramble',
-    formatId: '',                  // ← ADD
-    formatName: '',                // ← ADD
-    scoringMethod: 'stroke',       // ← ADD
-    teamSize: 2,                   // ← ADD
-    handicap: { enabled: false, allowance: 100 },  // ← ADD
-    stablefordPoints: null,        // ← ADD
-    startingHole: 1,
-    numHoles: 18,
-    teams: [],
-    display: {
-      showGross: true,
-      showNet: true,
-      primarySort: 'net',
-      showRelativeToPar: true,
-      showHoleByHole: true,
-      showStrokeHoles: true,
-      showMulligansRemaining: false,
-      showMatchStatus: false,
-      showRoundRobinGrid: false
-    }
-  });
-  
-  const [newTeam, setNewTeam] = useState({ name: '', player1: '', player2: '' });
+  // Event creation state is now managed inside EventForm component
   
   // Current event/team state
   const [joinCode, setJoinCode] = useState('');
   const [currentEvent, setCurrentEvent] = useState(null);
   const [selectedTeam, setSelectedTeam] = useState(null);
+  
+  // User events (similar to userLeagues)
+  const [userEvents, setUserEvents] = useState([]);
   
   // UI state
   const [feedback, setFeedback] = useState('');
@@ -323,6 +324,9 @@ function App() {
           const leagues = await loadUserLeagues(user.uid);
           setUserLeagues(leagues);
           
+          const events = await loadUserEvents(user.uid);
+          setUserEvents(events);
+          
           if (view === 'login' || view === 'signup') {
             setView('home');
           }
@@ -332,6 +336,7 @@ function App() {
       } else {
         setUserProfile(null);
         setUserLeagues([]);
+        setUserEvents([]);
         setView('login');
       }
       
@@ -473,6 +478,9 @@ function App() {
         currentUser={currentUser}
         userProfile={userProfile}
         userLeagues={userLeagues}
+        userEvents={userEvents}
+        setUserEvents={setUserEvents}
+        loadUserEvents={loadUserEvents}
         isAdmin={isAdmin}
         joinCode={joinCode}
         setJoinCode={setJoinCode}
@@ -540,13 +548,10 @@ function App() {
       return (
         <CreateEventView
           currentUser={currentUser}
+          userProfile={userProfile}
           currentLeague={currentLeague}
           globalCourses={globalCourses}
-          formats={formats} 
-          newEvent={newEvent}
-          setNewEvent={setNewEvent}
-          newTeam={newTeam}
-          setNewTeam={setNewTeam}
+          formats={formats}
           creatingEventForLeague={creatingEventForLeague}
           setCreatingEventForLeague={setCreatingEventForLeague}
           feedback={feedback}
@@ -555,15 +560,27 @@ function App() {
           setCurrentEvent={setCurrentEvent}
           setCurrentLeague={setCurrentLeague}
           generateEventCode={generateEventCode}
-          deviceId={deviceId}
         />
       );
     }
 
+  if (view === 'join-event') {
+    return (
+      <JoinEventView
+        currentUser={currentUser}
+        userProfile={userProfile}
+        setView={setView}
+        setCurrentEvent={setCurrentEvent}
+      />
+    );
+  }
+
   if (view === 'event-lobby' && currentEvent) {
     return (
       <EventLobbyView
+        currentUser={currentUser}
         currentEvent={currentEvent}
+        setCurrentEvent={setCurrentEvent}
         feedback={feedback}
         setFeedback={setFeedback}
         setView={setView}
@@ -602,14 +619,11 @@ function App() {
     );
   }
 
-  if (view === 'edit-event' && editingEvent && editForm) {
+  if (view === 'edit-event' && currentEvent) {
     return (
       <EditEventView
-        editingEvent={editingEvent}
-        setEditingEvent={setEditingEvent}
-        editForm={editForm}
-        setEditForm={setEditForm}
-        courses={courses}
+        currentEvent={currentEvent}
+        setCurrentEvent={setCurrentEvent}
         globalCourses={globalCourses}
         formats={formats} 
         feedback={feedback}

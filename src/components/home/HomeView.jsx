@@ -1,11 +1,15 @@
 import { signOut } from 'firebase/auth';
-import { ref, get } from 'firebase/database';
+import { ref, get, set } from 'firebase/database';
+import { useEffect } from 'react';
 import { auth, database } from '../../firebase';
 
 export default function HomeView({
   currentUser,
   userProfile,
   userLeagues,
+  userEvents = [],
+  setUserEvents,
+  loadUserEvents,
   isAdmin,
   joinCode,
   setJoinCode,
@@ -15,6 +19,26 @@ export default function HomeView({
   setCurrentLeague,
   setCurrentEvent
 }) {
+  // Refresh events every time HomeView is shown
+  useEffect(() => {
+    if (currentUser?.uid && loadUserEvents) {
+      loadUserEvents(currentUser.uid).then(events => {
+        setUserEvents(events);
+      });
+    }
+  }, [currentUser?.uid]);
+
+  // Split events into active vs completed
+  const activeEvents = userEvents
+    .filter(e => e.status !== 'completed')
+    // Sort: active events first, then open, alphabetical within each group
+    .sort((a, b) => {
+      if (a.status === 'active' && b.status !== 'active') return -1;
+      if (a.status !== 'active' && b.status === 'active') return 1;
+      return (a.eventName || '').localeCompare(b.eventName || '');
+    });
+  const hasEventHistory = userEvents.some(e => e.status === 'completed');
+
   const joinEvent = async () => {
     if (!joinCode) {
       setFeedback('Please enter an event code');
@@ -40,6 +64,26 @@ export default function HomeView({
       }
 
       const event = eventSnapshot.val();
+
+      // Check if the user is already in this event
+      const alreadyJoined = event.players && event.players[currentUser.uid];
+
+      if (!alreadyJoined) {
+        // Add user to the event's players node
+        await set(ref(database, `events/${eventId}/players/${currentUser.uid}`), {
+          displayName: userProfile?.displayName || currentUser.displayName || 'Unknown',
+          joinedAt: Date.now(),
+          role: 'player',
+          handicap: userProfile?.handicap || null
+        });
+
+        // Add event reference to user's profile
+        await set(ref(database, `users/${currentUser.uid}/events/${eventId}`), {
+          role: 'player',
+          joinedAt: Date.now()
+        });
+      }
+
       setCurrentEvent({ id: eventId, ...event });
       setJoinCode('');
       setView('event-lobby');
@@ -161,58 +205,121 @@ export default function HomeView({
           </div>
         </div>
 
-        {/* QUICK PLAY */}
-        <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6">
-          <h3 className="text-white text-sm font-semibold mb-3 uppercase tracking-wider">Quick Play</h3>
-          <p className="text-white/70 text-sm mb-4">For one-off events without a league</p>
-          
-          <div className="space-y-3">
-            <button
-              onClick={() => setView('create-event')}
-              className="w-full bg-white/20 hover:bg-white/30 p-4 rounded-xl transition-all text-white text-left"
-            >
-              <div className="font-semibold">Create Event</div>
-              <div className="text-sm text-white/80">Host a standalone golf event</div>
-            </button>
-
-            <button
-              onClick={() => setView('solo-setup')}
-              className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white p-6 rounded-xl text-left shadow-lg transition-all"
-            >
-              <div className="font-bold text-lg mb-1">Play Solo</div>
-              <div className="text-sm text-green-100">Track your personal round</div>
-            </button>
-
-            <div className="bg-white/20 p-4 rounded-xl">
-              <div className="font-semibold text-white mb-3">Join Event</div>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  value={joinCode}
-                  onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                  onKeyPress={(e) => e.key === 'Enter' && joinEvent()}
-                  placeholder="WOLF-A3X9"
-                  className="flex-1 px-4 py-2 rounded-lg border-2 border-white/30 bg-white/10 text-white placeholder-white/50 focus:border-white/50 focus:outline-none uppercase"
-                />
-                <button
-                  onClick={joinEvent}
-                  className="bg-white text-blue-900 px-5 py-2 rounded-lg hover:bg-white/90 font-semibold"
-                >
-                  Join
-                </button>
-              </div>
-              {feedback && <div className="mt-2 text-sm text-white/90">{feedback}</div>}
+        {/* ============================================ */}
+        {/* MY EVENTS — mirrors the My Leagues pattern   */}
+        {/* ============================================ */}
+        {activeEvents.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-white text-lg font-semibold mb-3">MY EVENTS</h2>
+            <div className="space-y-3">
+              {activeEvents.map(event => {
+                const isActive = event.status === 'active';
+                return (
+                  <button
+                    key={event.id}
+                    onClick={() => {
+                      setCurrentEvent(event);
+                      setView('event-lobby');
+                    }}
+                    className={`w-full p-5 rounded-2xl shadow-xl transition-all text-left ${
+                      isActive
+                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 hover:border-green-400'
+                        : 'bg-white/95 backdrop-blur-sm hover:bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                          {/* Icon distinguishes created vs joined */}
+                          {event.role === 'host' ? (
+                            <span title="You created this event">📋</span>
+                          ) : (
+                            <span title="You joined this event">🏌️</span>
+                          )}
+                          {event.eventName || event.name || 'Unnamed Event'}
+                          {isActive && (
+                            <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">LIVE</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {event.role === 'host' ? 'Host' : 'Player'}
+                          {event.courseName ? ` · ${event.courseName}` : ''}
+                          {!isActive && event.status ? ` · ${event.status.charAt(0).toUpperCase() + event.status.slice(1)}` : ''}
+                        </div>
+                      </div>
+                      <div className={isActive ? 'text-green-500' : 'text-gray-400'}>›</div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
+        )}
+
+        {/* CREATE / JOIN EVENT — same 2-column layout as leagues */}
+        <div className="mb-6">
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setView('create-event')}
+              className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
+            >
+              <div className="text-center">
+                <div className="text-3xl mb-2">📋</div>
+                <div className="font-bold text-gray-900">Create Event</div>
+              </div>
+            </button>
+            <button
+              onClick={() => {
+                /* Show a small join-event modal/inline, or navigate to a join view */
+                setView('join-event');
+              }}
+              className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
+            >
+              <div className="text-center">
+                <div className="text-3xl mb-2">🏌️</div>
+                <div className="font-bold text-gray-900">Join Event</div>
+              </div>
+            </button>
+          </div>
         </div>
+
+        {/* EVENT HISTORY */}
+        {hasEventHistory && (
+          <div className="mb-6">
+            <button
+              onClick={() => setView('event-history')}
+              className="w-full bg-white/10 backdrop-blur-sm p-5 rounded-2xl hover:bg-white/20 transition-all text-left"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <div className="text-lg font-semibold text-white">📂 Event History</div>
+                  <div className="text-sm text-white/70">View completed events</div>
+                </div>
+                <div className="text-white/50">›</div>
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* PLAY SOLO */}
+        <div className="mb-6">
+          <h2 className="text-white text-lg font-semibold mb-3">SOLO</h2>
+          <button
+            onClick={() => setView('solo-setup')}
+            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white p-6 rounded-2xl text-left shadow-lg transition-all"
+          >
+            <div className="font-bold text-lg mb-1">Play Solo</div>
+            <div className="text-sm text-green-100">Track your personal round</div>
+          </button>
+        </div>
+
         {/* ROUND HISTORY */}
         <div className="mb-6">
-            <h2 className="text-white text-lg font-semibold mb-3">ROUND HISTORY</h2>
-          
+          <h2 className="text-white text-lg font-semibold mb-3">ROUND HISTORY</h2>
           <div className="space-y-3">
             <button
               onClick={() => setView('rounds-history')}
-              className="bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white p-6 rounded-xl text-left shadow-lg transition-all"
+              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white p-6 rounded-2xl text-left shadow-lg transition-all"
             >
               <div className="font-bold text-lg mb-1">My Rounds</div>
               <div className="text-sm text-indigo-100">View all your golf rounds</div>
