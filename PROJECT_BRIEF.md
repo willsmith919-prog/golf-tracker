@@ -9,7 +9,21 @@
 
 ---
 
-## 2. Tech Stack
+## 2. Product Philosophy
+
+This is the most important section for understanding how to build LiveLinks correctly.
+
+**The Workday Principle:** LiveLinks is built like an enterprise-grade configurable platform underneath, but feels effortless on the surface. The complexity exists for power users (league commissioners, series organizers) but casual golfers never have to wrestle with it.
+
+**The AI Bridge:** An AI layer sits between the complex engine and the casual user. The conversational format builder is an early example of this. The Game creation flow is the most important use case — "4 guys, $5 nassau, Davis Park, Blue tees, go" should be all the input needed.
+
+**The Growth Engine:** Guest participants (non-users added by name) lower the barrier to entry. Someone joins as a guest, has a great live scoring experience, and creates an account themselves. Organic adoption through great UX.
+
+**One Engine, Multiple Entry Points:** League, Series, Event, Game, and Solo Round all use the same underlying scoring and leaderboard logic. What differs is the creation flow, exposed config options, and what happens to results afterward.
+
+---
+
+## 3. Tech Stack
 
 | Layer | Technology |
 |---|---|
@@ -21,9 +35,10 @@
 
 ---
 
-## 3. Folder Structure
+## 4. Folder Structure
 
 ```
+PROJECT_BRIEF.md     ← this file, lives at project root
 src/
 ├── assets/
 │   └── react.svg
@@ -38,8 +53,8 @@ src/
 │   └── shared/      # Reusable UI components
 ├── utils/
 │   ├── scoring.js   # Stableford + team score calculation (ACTIVE)
-│   └── helpers.js   # Device ID helper + legacy hardcoded format names/descriptions (CANDIDATE FOR DELETION — formats now managed via Format Management UI)
-├── App.css
+│   └── helpers.js   # getDeviceId() only — used in App.jsx (ACTIVE, trimmed)
+├── App.css          # Note: padding on #root was removed (was Vite boilerplate causing mobile layout issues)
 ├── App.jsx
 ├── firebase.js      # Firebase init and config
 ├── index.css
@@ -48,81 +63,240 @@ src/
 
 ---
 
-## 4. Firebase Realtime Database — Top-Level Nodes
+## 5. Taxonomy
 
-| Node | Purpose |
-|---|---|
-| `courses` | Golf course data (holes, pars, etc.) |
-| `eventCodes` | Join codes for events |
-| `events` | Individual event records |
-| `formats` | Scoring format definitions |
-| `leagueCodes` | Join codes for leagues |
-| `leagues` | League records |
-| `soloRounds` | Solo round records |
-| `users` | User profiles and settings |
+Everything shares the same core scoring engine. What differs is the creation flow, config options, and what happens to results.
+
+| Type | Description | Multi-Foursome | Points | Seasons | AI-First |
+|---|---|---|---|---|---|
+| **League** | Season-long, persistent membership. Think: Country Club. Members get updates on events/series within it. History tracked across seasons. | Yes | Yes | Yes | No |
+| **Series** | Trip or tournament-based. Think: Golf Trip. Defined end, group disbands when over. Can live inside a League or be standalone. | Yes | Yes | No | No |
+| **Event** | One day, one course, multiple foursomes. Can be standalone, inside a League season, or inside a Series. | Yes | Optional | No | No |
+| **Game** | One day, one course, one foursome or less. Spontaneous — set up at the first tee. Same engine as Event, lighter creation flow. Exclusive formats available. | No | Optional | No | **Yes** |
+| **Solo Round** | One day, one course, one golfer. | No | No | No | No |
+
+### Hierarchy
+```
+League
+  └── Season
+        └── Events (standalone)
+        └── Series
+              └── Events
+
+Series (standalone)
+  └── Events
+
+Event (standalone or nested)
+
+Game (standalone only)
+
+Solo Round
+```
 
 ---
 
-## 5. User Roles & Permissions
+## 6. Participant Model
+
+All activity types support two participant types:
+
+| Type | Description |
+|---|---|
+| **Registered User** | Has a LiveLinks account. Linked by `userId`. Scores and history tracked across sessions. |
+| **Guest** | Added by name only — no account required. Designed to lower barrier to entry and drive organic signups. |
+
+Guest participants are a deliberate growth mechanic — a great live scoring experience as a guest should make people want to create an account.
+
+---
+
+## 7. Codes System
+
+A single unified code system handles joining everything. One "Enter a Code" input on the home screen routes the user to the right place automatically — no need to navigate to Join League, Join Series, Join Event, or Join Game separately.
+
+### Code Format
+Prefix identifies the type, suffix is randomly generated. Four characters each.
+
+| Type | Prefix | Example |
+|---|---|---|
+| League | `LG` | `LG-4X9K` |
+| Series | `SR` | `SR-7MQP` |
+| Event | `EV` | `EV-2BNF` |
+| Game | `GM` | `GM-5RTJ` |
+
+### Code Lifecycle
+
+| Type | Expires? |
+|---|---|
+| League | Never (unless commissioner regenerates it) |
+| Series | When series is completed or cancelled |
+| Event | When event is completed or cancelled |
+| Game | When game is completed or cancelled |
+
+**Expired code behavior:** Rather than showing a dead-end error, the app shows what the thing *was* (name, date, location) and offers a read-only view of the final leaderboard. The leaderboard is a permanent record.
+
+**League code regeneration:** A commissioner can invalidate their current League code and generate a new one at any time (e.g. if a code was shared somewhere it shouldn't have been). The old code immediately stops working. The league and its members are unaffected.
+
+### Firebase Structure
+```
+codes/
+  {code}/                  e.g. "LG-4X9K"
+    type/                  (league | series | event | game)
+    targetId/              (the leagueId, seriesId, eventId, or gameId)
+    status/                (active | expired)
+    createdAt/
+    expiresAt/             (null for leagues)
+```
+
+---
+
+## 8. Firebase Realtime Database — Full Structure
+
+> **Note:** All existing Firebase data is test data and was wiped for this redesign (Feb 2026).
+
+```
+users/
+  {userId}/
+    profile/            (name, email, handicap, avatarUrl, createdAt)
+    leagueMemberships/  (leagueId → role: commissioner | member)
+
+leagues/
+  {leagueId}/
+    meta/               (name, description, commissionerId, createdAt)
+    settings/           (notification prefs, defaults)
+    members/            (userId → { role, joinedAt })
+    seasons/
+      {seasonId}/
+        meta/           (name, startDate, endDate, status)
+        pointsConfig/   (finishing spots → points, participation points, side event points)
+        eventRefs/      (eventId → true)
+        seriesRefs/     (seriesId → true)
+        standings/      (userId → totalPoints — recalculated on score change)
+
+series/
+  {seriesId}/
+    meta/               (name, description, createdBy, createdAt, startDate, endDate)
+    leagueId/           (null if standalone)
+    seasonId/           (null if standalone)
+    pointsConfig/       (own config + flowToLeague: true/false + percentage)
+    eventRefs/          (eventId → true)
+    standings/          (participantId → totalPoints)
+
+events/
+  {eventId}/
+    meta/               (name, date, status, createdBy)
+    leagueId/           (null if standalone)
+    seriesId/           (null if standalone)
+    seasonId/           (null if standalone)
+    course/             (snapshot: courseId, name, pars, yardages, strokeIndexes)
+    format/             (snapshot: formatId, name, scoringMethod, handicap settings)
+    display/            (leaderboard display config)
+    settings/           (numHoles, startingHole, endingHole, teeId, teeName)
+    participants/
+      {participantId}/
+        type/           (user | guest)
+        userId/         (null if guest)
+        displayName/
+        handicap/
+        scores/         (hole index → score)
+        teamId/         (null if individual format)
+
+games/
+  {gameId}/
+    meta/               (name, date, status, createdBy)
+    course/             (snapshot)
+    format/             (snapshot — game-exclusive formats allowed)
+    settings/
+    participants/       (same structure as events, max 4)
+
+soloRounds/
+  {soloRoundId}/
+    (existing structure — review for alignment with new participant model)
+
+codes/
+  {code}/               (e.g. "LG-4X9K")
+    type/               (league | series | event | game)
+    targetId/           (leagueId, seriesId, eventId, or gameId)
+    status/             (active | expired)
+    createdAt/
+    expiresAt/          (null for leagues)
+
+courses/
+  (existing structure — unchanged)
+
+formats/
+  (existing structure — unchanged)
+```
+
+### Key Data Design Decisions
+- **Course and format data is snapshotted** onto each event/game at creation time. Changing a course or format later won't alter historical records. Like a receipt.
+- **Standings are stored, not calculated on the fly.** Recalculated and saved whenever scores change. Keeps leaderboard fast.
+- **Everything has nullable parent references.** `leagueId`, `seriesId`, `seasonId` can all be null, enabling standalone use without duplicating logic.
+- **Single codes node** handles all join codes across all types. One lookup, smart routing.
+
+---
+
+## 9. User Roles & Permissions
 
 | Role | Who | Capabilities |
 |---|---|---|
 | **Super Admin** | App owner only (one account) | Manages global courses, seeds default formats, full access |
-| **Regular User** | Any signed-in user | Can create/manage their own leagues, events, solo rounds. Can create custom formats (stored on their profile). Cannot manage other users' data. |
+| **League Commissioner** | Any user who creates a league | Manages their league, seasons, points config, membership, can regenerate league code |
+| **Series Organizer** | Any user who creates a series | Manages their series and its events |
+| **Event Host** | Any user who creates an event or game | Manages scoring for that activity |
+| **Member/Participant** | Any signed-in user | Joins leagues, participates in events, views leaderboards |
+| **Guest** | No account required | Participates in games/events when added by name |
 
-> **Future state:** A "format catalog" where users can publish their custom formats for others to discover.
-
-> **Not yet built:** Game and Series concepts (see Section 7).
-
----
-
-## 6. Taxonomy (Planned — Partially Built)
-
-| Type | Description | Status |
-|---|---|---|
-| **League** | Season-long, recurring events. Assigns points by finishing position. | ✅ Built |
-| **Series** | Links multiple events together without full league structure. | 🔲 Not started |
-| **Event** | One round, multiple foursomes. | ✅ Built |
-| **Game** | One round, one foursome or less. | 🔲 Not started |
-| **Solo Round** | One round, one golfer. | ✅ Built |
+> **Future state:** Format catalog where users publish custom formats for others to discover.
 
 ---
 
-## 7. Feature Status
+## 10. Format Management
+
+- Default/seeded formats managed by Super Admin
+- Users can create custom formats stored on their profile
+- Some formats are exclusive to Games (not available for Events)
+- **Future:** Conversational AI interface for building formats via chat
+- **Future:** Format catalog for discovering and publishing formats
+
+---
+
+## 11. Feature Status
 
 | Feature | Status | Notes |
 |---|---|---|
 | Email/password auth | ✅ Done | |
 | Course management (admin) | ✅ Done | Manual entry only |
-| Format management (admin) | ✅ Done | Pre-seeded defaults + user-created formats planned |
-| Solo round | ✅ Done | |
-| Event creation | ✅ Done | |
-| League creation | ✅ Done | |
+| Format management (admin) | ✅ Done | Pre-seeded defaults |
+| Solo round | ✅ Done | May need alignment with new participant model |
+| Event creation | ✅ Done | Needs refactor for new data structure |
+| League creation | ✅ Done (basic) | Needs full rebuild per new structure |
 | Live leaderboard | ✅ Done | |
-| Series concept | 🔲 Not started | Link events without full league structure |
-| Game concept | 🔲 Not started | Single foursome or less |
-| Conversational format builder | 🔲 Not started | Chat-based UI to build a format |
-| Robust format management | 🔲 In progress | Expanding what formats can define |
-| Course integration (external) | 🔲 Not started | Eliminate manual course entry |
+| New taxonomy data structure | 🔲 In progress | Designed — see Sections 7 & 8 |
+| Unified codes system | 🔲 Not started | Replaces old leagueCodes + eventCodes nodes |
+| Guest participants | 🔲 Not started | |
+| Series concept | 🔲 Not started | |
+| Game concept | 🔲 Not started | |
+| Robust format management | 🔲 Not started | |
+| Conversational format builder | 🔲 Not started | |
+| Course integration (external) | 🔲 Not started | Eliminate manual entry |
 | GPS / distance feature | 🔲 Not started | |
-| Mobile app (iOS/Android) | 🔲 Not started | Currently web-only |
-| Format catalog | 🔲 Future state | Users publish formats for others |
+| Mobile app (iOS/Android) | 🔲 Not started | Capacitor is the planned approach |
+| Format catalog | 🔲 Future state | |
 
 ---
 
-## 8. Key Utility Files
+## 12. Key Utility Files
 
 ### `utils/scoring.js` — ACTIVE
-- `calculateStablefordPoints(score, par)` — Returns points for a single hole
-- `calculateTeamStats(team, coursePars, format)` — Returns total, holes completed, to-par (or Stableford points) for a team
+- `calculateStablefordPoints(score, par)` — Returns Stableford points for a single hole
+- `calculateTeamStats(team, coursePars, format)` — Returns total, holes completed, to-par or Stableford points for a team
 
-### `utils/helpers.js` — LEGACY / CANDIDATE FOR DELETION
-- `getDeviceId()` — Generates/retrieves a device ID from localStorage
-- `formatNames` / `formatDescriptions` — Hardcoded format labels from before Format Management UI existed. Check if still imported anywhere before deleting.
+### `utils/helpers.js` — ACTIVE (trimmed)
+- `getDeviceId()` — Generates/retrieves a device ID from localStorage. Used in `App.jsx`.
+- Previously contained hardcoded format names/descriptions — removed when Format Management UI was built.
 
 ---
 
-## 9. Development Workflow
+## 13. Development Workflow
 
 1. Work in **VSCode** locally
 2. Run app with `npm run dev` (Vite)
@@ -132,10 +306,11 @@ src/
 
 ---
 
-## 10. Important Context for AI Sessions
+## 14. Important Context for AI Sessions
 
 - The developer does **not** have a CS background — use plain language and give step-by-step instructions, not general task lists.
 - Explain any new terms briefly when introduced.
 - When showing code changes, be specific about **which file** and **where** in the file the change goes.
-- There are no established data-fetching patterns yet — feel free to suggest one if relevant to the task.
-- The app is a **React/Vite** app, sometimes referred to as a "React/Jive app" by the developer — these are the same thing.
+- The product philosophy (Section 2) should inform every feature decision — configurability underneath, simplicity on the surface.
+- The app is a **React/Vite** app, sometimes referred to as "React/Jive" by the developer — these are the same thing.
+- All Firebase data was wiped in Feb 2026 — existing data follows the new structure going forward.

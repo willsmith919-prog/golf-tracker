@@ -22,37 +22,40 @@ export default function EventForm({
   showRoundOptions = true,
   submitLabel = 'Submit',
   onSubmit,
-  feedback
+  feedback,
+  preFillEvent = null
 }) {
+  const mergedData = { ...initialData, ...(preFillEvent || {}) };
+  
   const [formData, setFormData] = useState({
-    name: initialData.name || '',
-    courseId: initialData.courseId || '',
-    selectedCourseId: initialData.selectedCourseId || initialData.courseId || '',
-    selectedTeeId: initialData.selectedTeeId || initialData.teeId || '',
-    courseName: initialData.courseName || '',
-    coursePars: initialData.coursePars || [],
-    courseYardages: initialData.courseYardages || [],
-    courseStrokeIndexes: initialData.courseStrokeIndexes || [],
-    teeId: initialData.teeId || '',
-    teeName: initialData.teeName || '',
-    date: initialData.date || new Date().toISOString().split('T')[0],
-    time: initialData.time || '',
-    format: initialData.format || 'scramble',
-    formatId: initialData.formatId || '',
-    formatName: initialData.formatName || '',
-    scoringMethod: initialData.scoringMethod || 'stroke',
-    teamSize: initialData.teamSize || 2,
-    handicap: initialData.handicap || { enabled: false, allowance: 100 },
-    stablefordPoints: initialData.stablefordPoints || null,
-    competition: initialData.competition || { structure: 'full_field' },
-    startingHole: initialData.startingHole || 1,
-    numHoles: initialData.numHoles || 18,
-    display: initialData.display || {
-      showGross: true, showNet: true, primarySort: 'net',
-      showRelativeToPar: true, showHoleByHole: true, showStrokeHoles: true,
-      showMulligansRemaining: false, showMatchStatus: false, showRoundRobinGrid: false
-    }
-  });
+      name: mergedData.name || '',
+      courseId: mergedData.courseId || '',
+      selectedCourseId: mergedData.selectedCourseId || mergedData.courseId || '',
+      selectedTeeId: mergedData.selectedTeeId || mergedData.teeId || '',
+      courseName: mergedData.courseName || '',
+      coursePars: mergedData.coursePars || [],
+      courseYardages: mergedData.courseYardages || [],
+      courseStrokeIndexes: mergedData.courseStrokeIndexes || [],
+      teeId: mergedData.teeId || '',
+      teeName: mergedData.teeName || '',
+      date: mergedData.date || new Date().toISOString().split('T')[0],
+      time: mergedData.time || '',
+      format: mergedData.format || 'scramble',
+      formatId: mergedData.formatId || '',
+      formatName: mergedData.formatName || '',
+      scoringMethod: mergedData.scoringMethod || 'stroke',
+      teamSize: mergedData.teamSize || 2,
+      handicap: mergedData.handicap || { enabled: false, allowance: 100 },
+      stablefordPoints: mergedData.stablefordPoints || null,
+      competition: mergedData.competition || { structure: 'full_field' },
+      startingHole: mergedData.startingHole || 1,
+      numHoles: mergedData.numHoles || 18,
+      display: mergedData.display || {
+        showGross: true, showNet: true, primarySort: 'net',
+        showRelativeToPar: true, showHoleByHole: true, showStrokeHoles: true,
+        showMulligansRemaining: false, showMatchStatus: false, showRoundRobinGrid: false
+      }
+    });
 
   const selectedCourseId = formData.selectedCourseId || '';
   const selectedTeeId = formData.selectedTeeId || '';

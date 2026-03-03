@@ -1,5 +1,7 @@
 import { ref, set, get } from 'firebase/database';
+import { createCode } from '../../utils/codes';
 import { database } from '../../firebase';
+
 
 export default function CreateLeagueView({
   currentUser,
@@ -30,7 +32,7 @@ export default function CreateLeagueView({
 
     try {
       const leagueId = 'league-' + Date.now();
-      const code = await generateLeagueCode();
+      const code = await createCode('league', leagueId);
 
       const leagueData = {
         meta: {
@@ -41,13 +43,13 @@ export default function CreateLeagueView({
           createdAt: Date.now()
         },
         members: {
-          [currentUser.uid]: {
-            displayName: userProfile.displayName,
-            role: 'commissioner',
-            handicap: userProfile.handicap || null,
-            joinedAt: Date.now()
-          }
-        },
+        [currentUser.uid]: {
+          displayName: userProfile?.displayName || currentUser.email || 'Unknown',
+          role: 'commissioner',
+          handicap: userProfile?.handicap || null,
+          joinedAt: Date.now()
+        }
+      },
         seasons: {
           'season-2026': {
             name: newLeague.seasonName,
@@ -60,8 +62,7 @@ export default function CreateLeagueView({
       };
 
       await set(ref(database, `leagues/${leagueId}`), leagueData);
-      await set(ref(database, `leagueCodes/${code}`), leagueId);
-      await set(ref(database, `users/${currentUser.uid}/leagues/${leagueId}`), {
+      await set(ref(database, `users/${currentUser.uid}/leagueMemberships/${leagueId}`), {
         role: 'commissioner',
         joinedAt: Date.now()
       });

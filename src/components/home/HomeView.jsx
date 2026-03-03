@@ -1,5 +1,5 @@
 import { signOut } from 'firebase/auth';
-import { ref, get, set } from 'firebase/database';
+import { lookupCode } from '../../utils/codes';
 import { useEffect } from 'react';
 import { auth, database } from '../../firebase';
 
@@ -39,58 +39,46 @@ export default function HomeView({
     });
   const hasEventHistory = userEvents.some(e => e.status === 'completed');
 
-  const joinEvent = async () => {
-    if (!joinCode) {
-      setFeedback('Please enter an event code');
+  const handleCodeEntry = async () => {
+    if (!joinCode.trim()) {
+      setFeedback('Please enter a code');
       setTimeout(() => setFeedback(''), 2000);
       return;
     }
 
     try {
-      const codeSnapshot = await get(ref(database, `eventCodes/${joinCode}`));
-      if (!codeSnapshot.exists()) {
-        setFeedback('Event not found. Check your code.');
+      const result = await lookupCode(joinCode.trim());
+
+      if (!result) {
+        setFeedback('Code not found. Check and try again.');
         setTimeout(() => setFeedback(''), 3000);
         return;
       }
 
-      const eventId = codeSnapshot.val();
-      const eventSnapshot = await get(ref(database, `events/${eventId}`));
-      
-      if (!eventSnapshot.exists()) {
-        setFeedback('Event not found.');
-        setTimeout(() => setFeedback(''), 3000);
+      if (result.status === 'expired') {
+        setView('expired-code');
         return;
       }
 
-      const event = eventSnapshot.val();
-
-      // Check if the user is already in this event
-      const alreadyJoined = event.players && event.players[currentUser.uid];
-
-      if (!alreadyJoined) {
-        // Add user to the event's players node
-        await set(ref(database, `events/${eventId}/players/${currentUser.uid}`), {
-          displayName: userProfile?.displayName || currentUser.displayName || 'Unknown',
-          joinedAt: Date.now(),
-          role: 'player',
-          handicap: userProfile?.handicap || null
-        });
-
-        // Add event reference to user's profile
-        await set(ref(database, `users/${currentUser.uid}/events/${eventId}`), {
-          role: 'player',
-          joinedAt: Date.now()
-        });
-      }
-
-      setCurrentEvent({ id: eventId, ...event });
-      setJoinCode('');
-      setView('event-lobby');
       setFeedback('');
+
+      // Route to the right place based on code type
+      if (result.type === 'league') {
+        setView('join-league-confirm');
+      } else if (result.type === 'series') {
+        setView('join-series-confirm');
+      } else if (result.type === 'event') {
+        setView('join-event-confirm');
+      } else if (result.type === 'game') {
+        setView('join-game-confirm');
+      } else {
+        setFeedback('Unknown code type.');
+        setTimeout(() => setFeedback(''), 3000);
+      }
+
     } catch (error) {
-      console.error('Error joining event:', error);
-      setFeedback('Error joining event. Please try again.');
+      console.error('Error looking up code:', error);
+      setFeedback('Something went wrong. Please try again.');
       setTimeout(() => setFeedback(''), 3000);
     }
   };
@@ -181,29 +169,6 @@ export default function HomeView({
           </div>
         )}
 
-        {/* CREATE / JOIN LEAGUE */}
-        <div className="mb-6">
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setView('create-league')}
-              className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
-            >
-              <div className="text-center">
-                <div className="text-3xl mb-2">🏆</div>
-                <div className="font-bold text-gray-900">Create League</div>
-              </div>
-            </button>
-            <button
-              onClick={() => setView('join-league')}
-              className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
-            >
-              <div className="text-center">
-                <div className="text-3xl mb-2">🤝</div>
-                <div className="font-bold text-gray-900">Join League</div>
-              </div>
-            </button>
-          </div>
-        </div>
 
         {/* ============================================ */}
         {/* MY EVENTS — mirrors the My Leagues pattern   */}
@@ -256,9 +221,47 @@ export default function HomeView({
           </div>
         )}
 
-        {/* CREATE / JOIN EVENT — same 2-column layout as leagues */}
+        {/* ENTER A CODE */}
         <div className="mb-6">
+          <h2 className="text-white text-lg font-semibold mb-3">JOIN</h2>
+          <div className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl">
+            <p className="text-sm text-gray-600 mb-3">Have a code? Enter it to join a league, series, event, or game.</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={joinCode}
+                onChange={e => setJoinCode(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && handleCodeEntry()}
+                placeholder="e.g. LG-4X9K"
+                className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                maxLength={7}
+              />
+              <button
+                onClick={handleCodeEntry}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+              >
+                Go
+              </button>
+            </div>
+            {feedback && (
+              <p className="text-red-500 text-sm mt-2">{feedback}</p>
+            )}
+          </div>
+        </div>
+
+        {/* CREATE */}
+        <div className="mb-6">
+          <h2 className="text-white text-lg font-semibold mb-3">CREATE</h2>
           <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={() => setView('create-league')}
+              className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
+            >
+              <div className="text-center">
+                <div className="text-3xl mb-2">🏆</div>
+                <div className="font-bold text-gray-900">Create League</div>
+              </div>
+            </button>
             <button
               onClick={() => setView('create-event')}
               className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
@@ -266,18 +269,6 @@ export default function HomeView({
               <div className="text-center">
                 <div className="text-3xl mb-2">📋</div>
                 <div className="font-bold text-gray-900">Create Event</div>
-              </div>
-            </button>
-            <button
-              onClick={() => {
-                /* Show a small join-event modal/inline, or navigate to a join view */
-                setView('join-event');
-              }}
-              className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
-            >
-              <div className="text-center">
-                <div className="text-3xl mb-2">🏌️</div>
-                <div className="font-bold text-gray-900">Join Event</div>
               </div>
             </button>
           </div>

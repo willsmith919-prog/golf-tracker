@@ -1,4 +1,5 @@
 import { ref, get, set } from 'firebase/database';
+import { createCode } from '../../utils/codes';
 import { database } from '../../firebase';
 import EventForm from '../shared/EventForm.jsx';
 
@@ -15,7 +16,9 @@ export default function CreateEventView({
   setView,
   setCurrentEvent,
   setCurrentLeague,
-  generateEventCode
+  generateEventCode,
+  preFillEvent,
+  setPreFillEvent,
 }) {
 
   const handleCreate = async (formData, validationError) => {
@@ -28,7 +31,7 @@ export default function CreateEventView({
 
     try {
       const eventId = 'event-' + Date.now();
-      const eventCode = await generateEventCode(formData.courseId);
+const eventCode = await createCode('event', eventId);
 
       const eventStartingHole = formData.startingHole || 1;
       const eventNumHoles = formData.numHoles || 18;
@@ -84,8 +87,6 @@ export default function CreateEventView({
 
       // Write event to Firebase
       await set(ref(database, `events/${eventId}`), eventData);
-      // Write event code so others can join
-      await set(ref(database, `eventCodes/${eventCode}`), eventId);
       // Write event reference under the creator's user profile
       await set(ref(database, `users/${currentUser.uid}/events/${eventId}`), {
         role: 'host',
@@ -159,6 +160,7 @@ export default function CreateEventView({
             submitLabel="Create Event"
             onSubmit={handleCreate}
             feedback={feedback}
+            preFillEvent={preFillEvent}
           />
         </div>
       </div>

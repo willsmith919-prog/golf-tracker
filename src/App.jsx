@@ -11,12 +11,15 @@ import SignupView from './components/auth/SignupView.jsx';
 import HomeView from './components/home/HomeView.jsx';
 import CreateLeagueView from './components/leagues/CreateLeagueView.jsx';
 import JoinLeagueView from './components/leagues/JoinLeagueView.jsx';
+import JoinLeagueConfirmView from './components/leagues/JoinLeagueConfirm.jsx';
 import LeagueDashboardView from './components/leagues/LeagueDashboardView.jsx';
 import CreateEventView from './components/events/CreateEventView.jsx';
+import JoinEventConfirmView from './components/events/JoinEventConfirm.jsx';
 import EventLobbyView from './components/events/EventLobbyView.jsx';
 import JoinEventView from './components/events/JoinEventView.jsx';
 import EventDetailsView from './components/events/EventDetailsView.jsx';
 import EditEventView from './components/events/EditEventView.jsx';
+import ExpiredCodeView from './components/shared/ExpiredCodeView.jsx';
 import ScoringView from './components/scoring/ScoringView.jsx';
 import ManageCoursesView from './components/admin/ManageCoursesView.jsx';
 import AddEditCourseView from './components/admin/AddEditCourseView.jsx';
@@ -67,7 +70,7 @@ function App() {
 
   const loadUserLeagues = async (userId) => {
     try {
-      const userSnapshot = await get(ref(database, `users/${userId}/leagues`));
+      const userSnapshot = await get(ref(database, `users/${userId}/leagueMemberships`));
       const userLeagues = userSnapshot.val() || {};
       
       const leaguesData = [];
@@ -225,6 +228,7 @@ function App() {
   const [leagueCode, setLeagueCode] = useState('');
   const [creatingEventForLeague, setCreatingEventForLeague] = useState(null);
   const [editingEvent, setEditingEvent] = useState(null);
+  const [preFillEvent, setPreFillEvent] = useState(null);
   const [editForm, setEditForm] = useState(null);
   const [leagueEvents, setLeagueEvents] = useState([]);
   const [eventRegistrations, setEventRegistrations] = useState({});
@@ -528,6 +532,36 @@ function App() {
     );
   }
 
+  if (view === 'expired-code') {
+    return (
+      <ExpiredCodeView
+        joinCode={joinCode}
+        setView={setView}
+        setNewLeague={setNewLeague}
+        setCreatingEventForLeague={setCreatingEventForLeague}
+        onCreateSimilar={(prefillData) => {
+          setPreFillEvent(prefillData);
+          setCreatingEventForLeague(null);
+          setView('create-event');
+        }}
+      />
+    );
+  }
+
+  if (view === 'join-league-confirm') {
+    return (
+      <JoinLeagueConfirmView
+        currentUser={currentUser}
+        userProfile={userProfile}
+        joinCode={joinCode}
+        setView={setView}
+        setCurrentLeague={setCurrentLeague}
+        setUserLeagues={setUserLeagues}
+        loadUserLeagues={loadUserLeagues}
+      />
+    );
+  }
+
   if (view === 'league-dashboard' && currentLeague) {
     return (
       <LeagueDashboardView
@@ -545,24 +579,26 @@ function App() {
   }
 
   if (view === 'create-event') {
-      return (
-        <CreateEventView
-          currentUser={currentUser}
-          userProfile={userProfile}
-          currentLeague={currentLeague}
-          globalCourses={globalCourses}
-          formats={formats}
-          creatingEventForLeague={creatingEventForLeague}
-          setCreatingEventForLeague={setCreatingEventForLeague}
-          feedback={feedback}
-          setFeedback={setFeedback}
-          setView={setView}
-          setCurrentEvent={setCurrentEvent}
-          setCurrentLeague={setCurrentLeague}
-          generateEventCode={generateEventCode}
-        />
-      );
-    }
+    return (
+      <CreateEventView
+        currentUser={currentUser}
+        userProfile={userProfile}
+        currentLeague={currentLeague}
+        globalCourses={globalCourses}
+        formats={formats}
+        creatingEventForLeague={creatingEventForLeague}
+        setCreatingEventForLeague={setCreatingEventForLeague}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        setCurrentEvent={setCurrentEvent}
+        setCurrentLeague={setCurrentLeague}
+        generateEventCode={generateEventCode}
+        preFillEvent={preFillEvent}
+        setPreFillEvent={setPreFillEvent}
+      />
+    );
+  }
 
   if (view === 'join-event') {
     return (
@@ -574,6 +610,18 @@ function App() {
       />
     );
   }
+
+  if (view === 'join-event-confirm') {
+  return (
+    <JoinEventConfirmView
+      currentUser={currentUser}
+      userProfile={userProfile}
+      joinCode={joinCode}
+      setView={setView}
+      setCurrentEvent={setCurrentEvent}
+    />
+  );
+}
 
   if (view === 'event-lobby' && currentEvent) {
     return (
