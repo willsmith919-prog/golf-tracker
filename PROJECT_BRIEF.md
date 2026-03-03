@@ -47,11 +47,15 @@ src/
 │   ├── auth/        # Login, signup, auth guards
 │   ├── backups/     # Backup-related components
 │   ├── events/      # Event creation and management
+│   │   └── JoinEventConfirm.jsx  # NEW — unified code join flow for events
 │   ├── home/        # Landing/home screen
 │   ├── leagues/     # League management
+│   │   └── JoinLeagueConfirm.jsx # NEW — unified code join flow for leagues
 │   ├── scoring/     # Live scoring and leaderboard
 │   └── shared/      # Reusable UI components
+│       └── ExpiredCodeView.jsx   # NEW — expired code screen (league + event)
 ├── utils/
+│   ├── codes.js     # NEW — unified code generation and lookup (ACTIVE)
 │   ├── scoring.js   # Stableford + team score calculation (ACTIVE)
 │   └── helpers.js   # getDeviceId() only — used in App.jsx (ACTIVE, trimmed)
 ├── App.css          # Note: padding on #root was removed (was Vite boilerplate causing mobile layout issues)
@@ -110,6 +114,8 @@ Guest participants are a deliberate growth mechanic — a great live scoring exp
 
 ## 7. Codes System
 
+✅ **FULLY BUILT** — March 2026
+
 A single unified code system handles joining everything. One "Enter a Code" input on the home screen routes the user to the right place automatically — no need to navigate to Join League, Join Series, Join Event, or Join Game separately.
 
 ### Code Format
@@ -131,9 +137,15 @@ Prefix identifies the type, suffix is randomly generated. Four characters each.
 | Event | When event is completed or cancelled |
 | Game | When game is completed or cancelled |
 
-**Expired code behavior:** Rather than showing a dead-end error, the app shows what the thing *was* (name, date, location) and offers a read-only view of the final leaderboard. The leaderboard is a permanent record.
+**Expired code behavior:** Rather than showing a dead-end error, the app shows what the thing *was* (name, date, location) and offers a read-only view of the final leaderboard. For events, a "Create Similar Event" button pre-fills the creation form with the same course, tee, and format. For leagues, an explanation is shown with a "Create New League" button.
 
 **League code regeneration:** A commissioner can invalidate their current League code and generate a new one at any time (e.g. if a code was shared somewhere it shouldn't have been). The old code immediately stops working. The league and its members are unaffected.
+
+### Key Files
+- `src/utils/codes.js` — `generateCode()`, `createCode()`, `lookupCode()`
+- `src/components/leagues/JoinLeagueConfirm.jsx` — league join confirmation screen
+- `src/components/events/JoinEventConfirm.jsx` — event join confirmation screen
+- `src/components/shared/ExpiredCodeView.jsx` — expired code screen for leagues and events
 
 ### Firebase Structure
 ```
@@ -150,25 +162,25 @@ codes/
 
 ## 8. Firebase Realtime Database — Full Structure
 
-> **Note:** All existing Firebase data is test data and was wiped for this redesign (Feb 2026).
+> **Note:** Firebase data was wiped March 2026. All data follows the new structure going forward.
 
 ```
 users/
   {userId}/
     profile/            (name, email, handicap, avatarUrl, createdAt)
-    leagueMemberships/  (leagueId → role: commissioner | member)
+    leagueMemberships/  (leagueId → { role: commissioner | member, joinedAt })
+    events/             (eventId → { role: host | player, joinedAt })
 
 leagues/
   {leagueId}/
-    meta/               (name, description, commissionerId, createdAt)
-    settings/           (notification prefs, defaults)
-    members/            (userId → { role, joinedAt })
+    meta/               (name, description, commissionerId, code, createdAt)
+    members/            (userId → { displayName, role, handicap, joinedAt })
     seasons/
       {seasonId}/
-        meta/           (name, startDate, endDate, status)
-        pointsConfig/   (finishing spots → points, participation points, side event points)
-        eventRefs/      (eventId → true)
-        seriesRefs/     (seriesId → true)
+        name/
+        status/         (active | completed)
+        pointSystem/    (finishing place → points value)
+        events/         (array of eventIds)
         standings/      (userId → totalPoints — recalculated on score change)
 
 series/
@@ -182,22 +194,14 @@ series/
 
 events/
   {eventId}/
-    meta/               (name, date, status, createdBy)
-    leagueId/           (null if standalone)
-    seriesId/           (null if standalone)
-    seasonId/           (null if standalone)
-    course/             (snapshot: courseId, name, pars, yardages, strokeIndexes)
-    format/             (snapshot: formatId, name, scoringMethod, handicap settings)
-    display/            (leaderboard display config)
-    settings/           (numHoles, startingHole, endingHole, teeId, teeName)
-    participants/
-      {participantId}/
-        type/           (user | guest)
-        userId/         (null if guest)
-        displayName/
-        handicap/
-        scores/         (hole index → score)
-        teamId/         (null if individual format)
+    meta/               (name, date, status, createdBy, courseId, courseName,
+                         coursePars, courseYardages, courseStrokeIndexes,
+                         teeId, teeName, format, formatId, formatName,
+                         scoringMethod, teamSize, handicap, stablefordPoints,
+                         competition, display, numHoles, startingHole,
+                         endingHole, leagueId, seasonId, eventCode, createdAt)
+    players/
+      {userId}/         (displayName, joinedAt, role: host | player, handicap)
 
 games/
   {gameId}/
@@ -209,7 +213,7 @@ games/
 
 soloRounds/
   {soloRoundId}/
-    (existing structure — review for alignment with new participant model)
+    (existing structure — may need alignment with new participant model)
 
 codes/
   {code}/               (e.g. "LG-4X9K")
@@ -231,10 +235,46 @@ formats/
 - **Standings are stored, not calculated on the fly.** Recalculated and saved whenever scores change. Keeps leaderboard fast.
 - **Everything has nullable parent references.** `leagueId`, `seriesId`, `seasonId` can all be null, enabling standalone use without duplicating logic.
 - **Single codes node** handles all join codes across all types. One lookup, smart routing.
+- **User memberships** stored under `users/{userId}/leagueMemberships/` and `users/{userId}/events/` — not under a generic `leagues` node.
 
 ---
 
-## 9. User Roles & Permissions
+## 9. Firebase Security Rules (Current)
+
+```json
+{
+  "rules": {
+    "codes": {
+      ".read": true,
+      ".write": "auth !== null"
+    },
+    "courses": {
+      ".read": true,
+      ".write": false
+    },
+    "formats": {
+      ".read": true,
+      ".write": false
+    },
+    "leagues": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "events": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    },
+    "users": {
+      ".read": "auth !== null",
+      ".write": "auth !== null"
+    }
+  }
+}
+```
+
+---
+
+## 10. User Roles & Permissions
 
 | Role | Who | Capabilities |
 |---|---|---|
@@ -249,7 +289,7 @@ formats/
 
 ---
 
-## 10. Format Management
+## 11. Format Management
 
 - Default/seeded formats managed by Super Admin
 - Users can create custom formats stored on their profile
@@ -259,7 +299,7 @@ formats/
 
 ---
 
-## 11. Feature Status
+## 12. Feature Status
 
 | Feature | Status | Notes |
 |---|---|---|
@@ -267,12 +307,13 @@ formats/
 | Course management (admin) | ✅ Done | Manual entry only |
 | Format management (admin) | ✅ Done | Pre-seeded defaults |
 | Solo round | ✅ Done | May need alignment with new participant model |
-| Event creation | ✅ Done | Needs refactor for new data structure |
-| League creation | ✅ Done (basic) | Needs full rebuild per new structure |
+| Event creation | ✅ Done | Uses new codes system |
+| League creation | ✅ Done (basic) | Uses new codes system — dashboard needs rebuild |
 | Live leaderboard | ✅ Done | |
-| New taxonomy data structure | 🔲 In progress | Designed — see Sections 7 & 8 |
-| Unified codes system | 🔲 Not started | Replaces old leagueCodes + eventCodes nodes |
+| Unified codes system | ✅ Done | Replaces old leagueCodes + eventCodes nodes |
+| New taxonomy data structure | ✅ Done | Implemented — see Sections 7 & 8 |
 | Guest participants | 🔲 Not started | |
+| League dashboard rebuild | 🔲 Not started | Current dashboard predates new data structure |
 | Series concept | 🔲 Not started | |
 | Game concept | 🔲 Not started | |
 | Robust format management | 🔲 Not started | |
@@ -284,7 +325,12 @@ formats/
 
 ---
 
-## 12. Key Utility Files
+## 13. Key Utility Files
+
+### `utils/codes.js` — ACTIVE (new)
+- `generateCode(type)` — Generates a unique code for a given type (league, series, event, game)
+- `createCode(type, targetId, expiresAt)` — Generates a code and saves it to Firebase `codes/` node
+- `lookupCode(code)` — Looks up a code in Firebase and returns its data, or null if not found
 
 ### `utils/scoring.js` — ACTIVE
 - `calculateStablefordPoints(score, par)` — Returns Stableford points for a single hole
@@ -292,11 +338,10 @@ formats/
 
 ### `utils/helpers.js` — ACTIVE (trimmed)
 - `getDeviceId()` — Generates/retrieves a device ID from localStorage. Used in `App.jsx`.
-- Previously contained hardcoded format names/descriptions — removed when Format Management UI was built.
 
 ---
 
-## 13. Development Workflow
+## 14. Development Workflow
 
 1. Work in **VSCode** locally
 2. Run app with `npm run dev` (Vite)
@@ -306,11 +351,12 @@ formats/
 
 ---
 
-## 14. Important Context for AI Sessions
+## 15. Important Context for AI Sessions
 
 - The developer does **not** have a CS background — use plain language and give step-by-step instructions, not general task lists.
 - Explain any new terms briefly when introduced.
 - When showing code changes, be specific about **which file** and **where** in the file the change goes.
 - The product philosophy (Section 2) should inform every feature decision — configurability underneath, simplicity on the surface.
 - The app is a **React/Vite** app, sometimes referred to as "React/Jive" by the developer — these are the same thing.
-- All Firebase data was wiped in Feb 2026 — existing data follows the new structure going forward.
+- Firebase data was wiped in March 2026 — all data follows the new structure going forward.
+- Super Admin email is `willsmith919@gmail.com` — checked in `isAdmin()` function in App.jsx.
