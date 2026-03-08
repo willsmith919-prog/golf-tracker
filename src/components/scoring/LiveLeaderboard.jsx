@@ -2,15 +2,18 @@ import { useState } from 'react';
 
 // ============================================================
 // LIVE LEADERBOARD COMPONENT
-// Shows real-time scores for all players in an active event.
+// Shows real-time scores for all players/teams in an active event.
 //
 // This component does NOT set up its own Firebase listener —
 // it receives the already-live `currentEvent` from EventLobbyView,
 // which already has an onValue listener that updates whenever
-// any player's scores change.
+// any scores change.
+//
+// Supports both team formats (reads from currentEvent.teams)
+// and individual formats (reads from currentEvent.players).
 //
 // Props:
-//   currentEvent  — the full event object (meta + players)
+//   currentEvent  — the full event object (meta + players + teams)
 //   currentUser   — the logged-in user (for highlighting "you")
 //   setSelectedTeam / setView — for navigating to scoring
 // ============================================================
@@ -21,17 +24,21 @@ export default function LiveLeaderboard({
   setSelectedTeam,
   setView
 }) {
-  const [expandedPlayer, setExpandedPlayer] = useState(null);
+  const [expandedEntry, setExpandedEntry] = useState(null);
 
   const meta = currentEvent?.meta || {};
   const players = currentEvent?.players || {};
+  const teams = currentEvent?.teams || {};
   const coursePars = meta.coursePars || [];
   const display = meta.display || {};
   const numHoles = meta.numHoles || 18;
   const startingHole = meta.startingHole || 1;
+  const teamSize = meta.teamSize || 1;
+
+  // Is this a team format?
+  const isTeamFormat = teamSize > 1 && Object.keys(teams).length > 0;
 
   // ==================== HOLE ORDER ====================
-  // Same logic as ScoringView — builds the play order array
   const buildHoleOrder = () => {
     const holes = [];
     for (let i = 0; i < numHoles; i++) {
@@ -45,32 +52,23 @@ export default function LiveLeaderboard({
   const second9 = numHoles === 18 ? holeOrder.slice(9, 18) : [];
 
   // ==================== HANDICAP CALCULATIONS ====================
-  // If handicap is enabled, calculate each player's "course handicap"
-  // and which holes they get strokes on.
-
   const handicapEnabled = meta.handicap?.enabled || false;
   const handicapAllowance = meta.handicap?.allowance || 100;
   const courseStrokeIndexes = meta.courseStrokeIndexes || [];
 
   const getPlayerCourseHandicap = (playerHandicap) => {
     if (!handicapEnabled || playerHandicap == null) return 0;
-    // Course handicap = handicap index × (allowance / 100), rounded
     return Math.round(playerHandicap * (handicapAllowance / 100));
   };
 
-  // Returns an object like { 1: 1, 5: 1, 12: 2 } meaning
-  // "hole 1 gets 1 stroke, hole 5 gets 1 stroke, hole 12 gets 2 strokes"
   const getStrokeHoles = (courseHandicap) => {
     if (!handicapEnabled || courseHandicap <= 0 || courseStrokeIndexes.length === 0) return {};
     const strokes = {};
-    // For each stroke, assign it to the hole with that stroke index
     for (let s = 1; s <= courseHandicap; s++) {
-      // Stroke index values are 1-18. The hole with SI=1 gets the first stroke, etc.
-      // If handicap > 18, we wrap around (hole with SI=1 gets a second stroke, etc.)
       const targetSI = ((s - 1) % 18) + 1;
       const holeIndex = courseStrokeIndexes.indexOf(targetSI);
       if (holeIndex !== -1) {
-        const holeNum = holeIndex + 1; // holes are 1-indexed
+        const holeNum = holeIndex + 1;
         strokes[holeNum] = (strokes[holeNum] || 0) + 1;
       }
     }
@@ -84,97 +82,159 @@ export default function LiveLeaderboard({
   };
 
   // ==================== BUILD LEADERBOARD DATA ====================
+  // Builds a unified array of "entries" — each entry is either a team or an individual player.
 
-  const leaderboardData = Object.entries(players).map(([uid, player]) => {
-    const stats = player.stats || {};
-    const holesPlayed = stats.holesPlayed || 0;
-    const totalScore = stats.totalScore || 0;
-    const toPar = stats.toPar || 0;
+  let leaderboardData = [];
 
-    // Calculate net scores if handicap is enabled
-    const courseHandicap = getPlayerCourseHandicap(player.handicap);
-    const strokeHoles = getStrokeHoles(courseHandicap);
+  if (isTeamFormat) {
+    // ---- TEAM FORMAT ----
+    leaderboardData = Object.entries(teams).map(([teamId, team]) => {
+      const stats = team.stats || {};
+      const holesPlayed = stats.holesPlayed || 0;
+      const totalScore = stats.totalScore || 0;
+      const toPar = stats.toPar || 0;
 
-    let netTotal = 0;
-    let netToPar = 0;
-    let parForPlayed = 0;
+      // Resolve member names from the players node
+      const memberNames = Object.keys(team.members || {}).map(uid =>
+        players[uid]?.displayName || 'Unknown'
+      );
 
-    if (handicapEnabled && holesPlayed > 0) {
-      // Calculate net total from individual hole scores
-      for (const holeNum of holeOrder) {
-        const holeScore = player.scores?.[holeNum] || player.holes?.[holeNum]?.score;
-        if (holeScore) {
-          netTotal += getNetScore(holeScore, holeNum, strokeHoles);
-          parForPlayed += coursePars[holeNum - 1] || 0;
+      // Check if the current user is on this team
+      const isMyTeam = team.members && team.members[currentUser?.uid];
+
+      // For handicap: use average of team members' handicaps (common in scramble)
+      const memberHandicaps = Object.keys(team.members || {})
+        .map(uid => players[uid]?.handicap)
+        .filter(h => h != null);
+      const avgHandicap = memberHandicaps.length > 0
+        ? memberHandicaps.reduce((sum, h) => sum + h, 0) / memberHandicaps.length
+        : null;
+
+      const courseHandicap = getPlayerCourseHandicap(avgHandicap);
+      const strokeHoles = getStrokeHoles(courseHandicap);
+
+      let netTotal = 0;
+      let netToPar = 0;
+      let parForPlayed = 0;
+
+      if (handicapEnabled && holesPlayed > 0) {
+        for (const holeNum of holeOrder) {
+          const holeScore = team.scores?.[holeNum] || team.holes?.[holeNum]?.score;
+          if (holeScore) {
+            netTotal += getNetScore(holeScore, holeNum, strokeHoles);
+            parForPlayed += coursePars[holeNum - 1] || 0;
+          }
         }
+        netToPar = netTotal - parForPlayed;
       }
-      netToPar = netTotal - parForPlayed;
-    }
 
-    return {
-      uid,
-      displayName: player.displayName || 'Unknown',
-      role: player.role,
-      handicap: player.handicap,
-      courseHandicap,
-      strokeHoles,
-      currentHole: player.currentHole || startingHole,
-      holesPlayed,
-      totalScore,
-      toPar,
-      netTotal,
-      netToPar,
-      scores: player.scores || {},
-      holes: player.holes || {},
-      stablefordPoints: stats.stablefordPoints || 0
-    };
-  });
+      return {
+        id: teamId,
+        displayName: team.name || 'Unnamed Team',
+        subtitle: memberNames.join(' & '),
+        isMyEntry: isMyTeam,
+        role: null,
+        handicap: avgHandicap,
+        courseHandicap,
+        strokeHoles,
+        currentHole: team.currentHole || startingHole,
+        holesPlayed,
+        totalScore,
+        toPar,
+        netTotal,
+        netToPar,
+        scores: team.scores || {},
+        holes: team.holes || {},
+        stablefordPoints: stats.stablefordPoints || 0
+      };
+    });
+  } else {
+    // ---- INDIVIDUAL FORMAT ----
+    leaderboardData = Object.entries(players).map(([uid, player]) => {
+      const stats = player.stats || {};
+      const holesPlayed = stats.holesPlayed || 0;
+      const totalScore = stats.totalScore || 0;
+      const toPar = stats.toPar || 0;
+
+      const courseHandicap = getPlayerCourseHandicap(player.handicap);
+      const strokeHoles = getStrokeHoles(courseHandicap);
+
+      let netTotal = 0;
+      let netToPar = 0;
+      let parForPlayed = 0;
+
+      if (handicapEnabled && holesPlayed > 0) {
+        for (const holeNum of holeOrder) {
+          const holeScore = player.scores?.[holeNum] || player.holes?.[holeNum]?.score;
+          if (holeScore) {
+            netTotal += getNetScore(holeScore, holeNum, strokeHoles);
+            parForPlayed += coursePars[holeNum - 1] || 0;
+          }
+        }
+        netToPar = netTotal - parForPlayed;
+      }
+
+      return {
+        id: uid,
+        displayName: player.displayName || 'Unknown',
+        subtitle: null,
+        isMyEntry: uid === currentUser?.uid,
+        role: player.role,
+        handicap: player.handicap,
+        courseHandicap,
+        strokeHoles,
+        currentHole: player.currentHole || startingHole,
+        holesPlayed,
+        totalScore,
+        toPar,
+        netTotal,
+        netToPar,
+        scores: player.scores || {},
+        holes: player.holes || {},
+        stablefordPoints: stats.stablefordPoints || 0
+      };
+    });
+  }
 
   // ==================== SORTING ====================
-  // Sort based on the event's primarySort setting
-
   const primarySort = display.primarySort || 'gross';
 
   leaderboardData.sort((a, b) => {
-    // Players with 0 holes played go to the bottom
     if (a.holesPlayed === 0 && b.holesPlayed > 0) return 1;
     if (b.holesPlayed === 0 && a.holesPlayed > 0) return -1;
     if (a.holesPlayed === 0 && b.holesPlayed === 0) return 0;
 
     if (meta.scoringMethod === 'stableford') {
-      // Stableford: higher is better
       return b.stablefordPoints - a.stablefordPoints;
     }
 
     if (primarySort === 'net' && handicapEnabled) {
-      // Net stroke play: lower net is better
       if (a.netToPar !== b.netToPar) return a.netToPar - b.netToPar;
-      return a.toPar - b.toPar; // tiebreak with gross
+      return a.toPar - b.toPar;
     }
 
-    // Gross stroke play: lower is better
     if (a.toPar !== b.toPar) return a.toPar - b.toPar;
     return a.totalScore - b.totalScore;
   });
 
   // Assign positions (handling ties)
   let position = 1;
-  leaderboardData.forEach((player, index) => {
-    if (index === 0 || player.holesPlayed === 0) {
-      player.position = player.holesPlayed === 0 ? '-' : position;
+  leaderboardData.forEach((entry, index) => {
+    if (index === 0 || entry.holesPlayed === 0) {
+      entry.position = entry.holesPlayed === 0 ? '-' : position;
     } else {
       const prev = leaderboardData[index - 1];
       const sameScore = primarySort === 'net' && handicapEnabled
-        ? player.netToPar === prev.netToPar
-        : player.toPar === prev.toPar;
+        ? entry.netToPar === prev.netToPar
+        : entry.toPar === prev.toPar;
 
       if (sameScore && prev.holesPlayed > 0) {
-        player.position = prev.position; // tied
+        entry.position = prev.position;
       } else {
-        player.position = index + 1;
+        entry.position = index + 1;
       }
     }
-    position = (typeof player.position === 'number' ? player.position : position) + 1;
+    position = (typeof entry.position === 'number' ? entry.position : position) + 1;
   });
 
   // ==================== DISPLAY HELPERS ====================
@@ -202,9 +262,9 @@ export default function LiveLeaderboard({
     return Math.round((holesPlayed / numHoles) * 100);
   };
 
-  // ==================== EXPANDED PLAYER DETAIL ====================
+  // ==================== EXPANDED DETAIL ====================
 
-  const renderPlayerDetail = (player) => {
+  const renderEntryDetail = (entry) => {
     const renderHoleRow = (holes, label) => (
       <div className="mb-3">
         <div className="text-xs font-semibold text-gray-500 mb-1">{label}</div>
@@ -232,7 +292,7 @@ export default function LiveLeaderboard({
               <tr>
                 <td className="p-1 text-gray-500">Score</td>
                 {holes.map(h => {
-                  const score = player.scores[h] || player.holes[h]?.score;
+                  const score = entry.scores[h] || entry.holes[h]?.score;
                   const par = coursePars[h - 1];
                   return (
                     <td key={h} className={`text-center p-1 rounded ${getScoreColor(score, par)}`}>
@@ -242,20 +302,19 @@ export default function LiveLeaderboard({
                 })}
                 <td className="text-center p-1 font-bold text-gray-900">
                   {holes.reduce((sum, h) => {
-                    const s = player.scores[h] || player.holes[h]?.score || 0;
+                    const s = entry.scores[h] || entry.holes[h]?.score || 0;
                     return sum + s;
                   }, 0) || '-'}
                 </td>
               </tr>
-              {/* Net score row if handicap enabled */}
               {handicapEnabled && display.showNet !== false && (
                 <tr className="border-t border-gray-100">
                   <td className="p-1 text-gray-500">Net</td>
                   {holes.map(h => {
-                    const score = player.scores[h] || player.holes[h]?.score;
+                    const score = entry.scores[h] || entry.holes[h]?.score;
                     const par = coursePars[h - 1];
-                    const net = score ? getNetScore(score, h, player.strokeHoles) : null;
-                    const hasStroke = player.strokeHoles[h] > 0;
+                    const net = score ? getNetScore(score, h, entry.strokeHoles) : null;
+                    const hasStroke = entry.strokeHoles[h] > 0;
                     return (
                       <td key={h} className={`text-center p-1 rounded ${net ? getScoreColor(net, par) : ''}`}>
                         {net || '-'}
@@ -267,8 +326,8 @@ export default function LiveLeaderboard({
                   })}
                   <td className="text-center p-1 font-bold text-gray-900">
                     {holes.reduce((sum, h) => {
-                      const s = player.scores[h] || player.holes[h]?.score;
-                      return sum + (s ? getNetScore(s, h, player.strokeHoles) : 0);
+                      const s = entry.scores[h] || entry.holes[h]?.score;
+                      return sum + (s ? getNetScore(s, h, entry.strokeHoles) : 0);
                     }, 0) || '-'}
                   </td>
                 </tr>
@@ -291,16 +350,16 @@ export default function LiveLeaderboard({
         {/* Stats summary */}
         <div className="flex gap-4 text-xs text-gray-500 mt-2">
           {display.showGross !== false && (
-            <span>Gross: {player.totalScore}</span>
+            <span>Gross: {entry.totalScore}</span>
           )}
           {handicapEnabled && display.showNet !== false && (
-            <span>Net: {player.netTotal}</span>
+            <span>Net: {entry.netTotal}</span>
           )}
-          {player.handicap != null && handicapEnabled && (
-            <span>HCP: {player.courseHandicap}</span>
+          {entry.handicap != null && handicapEnabled && (
+            <span>HCP: {entry.courseHandicap}</span>
           )}
           {meta.scoringMethod === 'stableford' && (
-            <span>Points: {player.stablefordPoints}</span>
+            <span>Points: {entry.stablefordPoints}</span>
           )}
         </div>
       </div>
@@ -313,7 +372,9 @@ export default function LiveLeaderboard({
     return (
       <div className="text-center py-12">
         <div className="text-4xl mb-3">🏌️</div>
-        <p className="text-gray-600">No players in this event yet.</p>
+        <p className="text-gray-600">
+          {isTeamFormat ? 'No teams in this event yet.' : 'No players in this event yet.'}
+        </p>
       </div>
     );
   }
@@ -338,7 +399,7 @@ export default function LiveLeaderboard({
       {/* Column headers */}
       <div className="grid grid-cols-[32px_1fr_60px_60px_48px] items-center px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
         <div>#</div>
-        <div>Player</div>
+        <div>{isTeamFormat ? 'Team' : 'Player'}</div>
         {display.showRelativeToPar !== false ? (
           <div className="text-center">
             {primarySort === 'net' && handicapEnabled ? 'Net' : 'To Par'}
@@ -354,73 +415,76 @@ export default function LiveLeaderboard({
         <div className="text-center">Thru</div>
       </div>
 
-      {/* Player rows */}
+      {/* Leaderboard rows */}
       <div className="space-y-2">
-        {leaderboardData.map((player) => {
-          const isExpanded = expandedPlayer === player.uid;
-          const isYou = player.uid === currentUser?.uid;
+        {leaderboardData.map((entry) => {
+          const isExpanded = expandedEntry === entry.id;
 
           return (
             <div
-              key={player.uid}
+              key={entry.id}
               className={`rounded-xl transition-all ${
-                isYou ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50 border border-gray-100'
+                entry.isMyEntry ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50 border border-gray-100'
               }`}
             >
               {/* Main row — tappable */}
               <button
-                onClick={() => setExpandedPlayer(isExpanded ? null : player.uid)}
+                onClick={() => setExpandedEntry(isExpanded ? null : entry.id)}
                 className="w-full grid grid-cols-[32px_1fr_60px_60px_48px] items-center px-3 py-3 text-left"
               >
                 {/* Position */}
                 <div className={`text-lg font-bold ${
-                  player.position === 1 ? 'text-yellow-500' :
-                  player.position === 2 ? 'text-gray-400' :
-                  player.position === 3 ? 'text-amber-600' :
+                  entry.position === 1 ? 'text-yellow-500' :
+                  entry.position === 2 ? 'text-gray-400' :
+                  entry.position === 3 ? 'text-amber-600' :
                   'text-gray-500'
                 }`}>
-                  {player.position}
+                  {entry.position}
                 </div>
 
-                {/* Name + progress */}
+                {/* Name + subtitle + progress */}
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
                     <span className="font-semibold text-gray-900 truncate">
-                      {player.displayName}
+                      {entry.displayName}
                     </span>
-                    {isYou && (
+                    {entry.isMyEntry && (
                       <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full shrink-0">
-                        You
+                        {isTeamFormat ? 'Your Team' : 'You'}
                       </span>
                     )}
-                    {player.role === 'host' && (
+                    {!isTeamFormat && entry.role === 'host' && (
                       <span className="text-[10px] bg-yellow-100 text-yellow-600 px-1.5 py-0.5 rounded-full shrink-0">
                         Host
                       </span>
                     )}
                   </div>
+                  {/* Subtitle: team member names for team format */}
+                  {isTeamFormat && entry.subtitle && (
+                    <div className="text-xs text-gray-500 truncate">{entry.subtitle}</div>
+                  )}
                   {/* Progress bar */}
                   <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden w-full max-w-[120px]">
                     <div
                       className={`h-full rounded-full transition-all ${
-                        player.holesPlayed === numHoles ? 'bg-green-500' : 'bg-blue-500'
+                        entry.holesPlayed === numHoles ? 'bg-green-500' : 'bg-blue-500'
                       }`}
-                      style={{ width: `${getProgressPercent(player.holesPlayed)}%` }}
+                      style={{ width: `${getProgressPercent(entry.holesPlayed)}%` }}
                     />
                   </div>
                 </div>
 
                 {/* Primary score */}
                 <div className="text-center">
-                  {player.holesPlayed > 0 ? (
+                  {entry.holesPlayed > 0 ? (
                     <span className={`text-lg font-bold ${
                       display.showRelativeToPar !== false
-                        ? getToParColor(primarySort === 'net' && handicapEnabled ? player.netToPar : player.toPar)
+                        ? getToParColor(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
                         : 'text-gray-900'
                     }`}>
                       {display.showRelativeToPar !== false
-                        ? formatToPar(primarySort === 'net' && handicapEnabled ? player.netToPar : player.toPar)
-                        : (primarySort === 'net' && handicapEnabled ? player.netTotal : player.totalScore)
+                        ? formatToPar(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
+                        : (primarySort === 'net' && handicapEnabled ? entry.netTotal : entry.totalScore)
                       }
                     </span>
                   ) : (
@@ -431,13 +495,13 @@ export default function LiveLeaderboard({
                 {/* Secondary score (only if handicap shows both) */}
                 {handicapEnabled && display.showNet !== false && display.showGross !== false && (
                   <div className="text-center">
-                    {player.holesPlayed > 0 ? (
+                    {entry.holesPlayed > 0 ? (
                       <span className={`text-sm ${
-                        getToParColor(primarySort === 'net' ? player.toPar : player.netToPar)
+                        getToParColor(primarySort === 'net' ? entry.toPar : entry.netToPar)
                       } opacity-70`}>
                         {display.showRelativeToPar !== false
-                          ? formatToPar(primarySort === 'net' ? player.toPar : player.netToPar)
-                          : (primarySort === 'net' ? player.totalScore : player.netTotal)
+                          ? formatToPar(primarySort === 'net' ? entry.toPar : entry.netToPar)
+                          : (primarySort === 'net' ? entry.totalScore : entry.netTotal)
                         }
                       </span>
                     ) : (
@@ -448,17 +512,17 @@ export default function LiveLeaderboard({
 
                 {/* Thru */}
                 <div className="text-center text-sm text-gray-600">
-                  {player.holesPlayed === 0
+                  {entry.holesPlayed === 0
                     ? '-'
-                    : player.holesPlayed === numHoles
+                    : entry.holesPlayed === numHoles
                     ? 'F'
-                    : player.holesPlayed
+                    : entry.holesPlayed
                   }
                 </div>
               </button>
 
               {/* Expanded detail — hole-by-hole scorecard */}
-              {isExpanded && renderPlayerDetail(player)}
+              {isExpanded && renderEntryDetail(entry)}
             </div>
           );
         })}

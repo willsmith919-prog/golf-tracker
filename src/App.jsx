@@ -660,6 +660,7 @@ function App() {
         setCurrentEvent={setCurrentEvent}
         selectedTeam={selectedTeam}
         setSelectedTeam={setSelectedTeam}
+        currentUser={currentUser}
         feedback={feedback}
         setFeedback={setFeedback}
         setView={setView}

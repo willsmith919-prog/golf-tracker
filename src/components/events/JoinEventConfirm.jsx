@@ -62,10 +62,10 @@ export default function JoinEventConfirm({
     try {
       // Add user to event players
       await set(ref(database, `events/${eventId}/players/${currentUser.uid}`), {
-        displayName: userProfile?.displayName || currentUser.email || 'Unknown',
+        displayName: userProfile?.profile?.displayName || currentUser.email || 'Unknown',
         joinedAt: Date.now(),
         role: 'player',
-        handicap: userProfile?.handicap || null,
+        handicap: userProfile?.profile?.handicap || null,
       });
 
       // Add event reference to user's profile

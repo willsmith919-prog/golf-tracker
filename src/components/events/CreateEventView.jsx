@@ -77,10 +77,10 @@ const eventCode = await createCode('event', eventId);
         },
         players: {
           [currentUser.uid]: {
-            displayName: userProfile?.displayName || 'Unknown',
+            displayName: userProfile?.profile?.displayName || 'Unknown',
             joinedAt: Date.now(),
             role: 'host',
-            handicap: userProfile?.handicap || null
+            handicap: userProfile?.profile?.handicap || null
           }
         }
       };

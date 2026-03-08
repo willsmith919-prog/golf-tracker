@@ -1,15 +1,22 @@
 import { useState, useEffect } from 'react';
-import { ref, get, set } from 'firebase/database';
+import { ref, get, set, remove } from 'firebase/database';
 import { database } from '../../firebase';
 import { ChevronLeftIcon, ChevronRightIcon } from '../icons';
 
 // ============================================================
 // UNIFIED SCORING VIEW
-// Handles both solo rounds and team event scoring.
+// Handles solo rounds, individual event scoring, AND team event scoring.
 // 
 // Mode is determined by which props are passed in:
 //   - Solo mode:  currentSoloRound + setCurrentSoloRound + user
-//   - Team mode:  currentEvent + setCurrentEvent + selectedTeam + setSelectedTeam
+//   - Event mode: currentEvent + setCurrentEvent + selectedTeam + setSelectedTeam + currentUser
+//
+// In event mode, selectedTeam can be either:
+//   - A team ID (like "team-1234") for team formats → reads/writes to events/{id}/teams/{teamId}
+//   - A user ID for individual formats → reads/writes to events/{id}/players/{userId}
+//
+// The component detects which mode by checking if selectedTeam exists
+// in currentEvent.teams (team format) or currentEvent.players (individual).
 //
 // Supports wrap-around hole order: an 18-hole round starting on
 // hole 10 plays 10→18 then 1→9, with the scorecard displayed
@@ -21,11 +28,12 @@ export default function ScoringView({
   currentSoloRound = null,
   setCurrentSoloRound = null,
   user = null,
-  // --- Team mode props ---
+  // --- Event mode props ---
   currentEvent = null,
   setCurrentEvent = null,
   selectedTeam = null,
   setSelectedTeam = null,
+  currentUser = null,
   // --- Shared props ---
   feedback = '',
   setFeedback = () => {},
@@ -35,8 +43,42 @@ export default function ScoringView({
   // ==================== MODE DETECTION ====================
   const isSolo = !!currentSoloRound;
 
+  // ==================== TEAM vs INDIVIDUAL DETECTION ====================
+  // In event mode, figure out if we're scoring for a team or an individual.
+  // If selectedTeam is found in currentEvent.teams, it's a team format.
+  // Otherwise, fall back to the old individual player path.
+
+  const isTeamFormat = !isSolo && currentEvent?.teams && currentEvent.teams[selectedTeam];
+
+  // The data source: either a team object or an individual player object
+  const scoringUnit = isSolo
+    ? null
+    : isTeamFormat
+      ? currentEvent.teams[selectedTeam]
+      : currentEvent?.players?.[selectedTeam] || null;
+
+  // The Firebase path prefix for saving scores
+  const scoringBasePath = !isSolo
+    ? isTeamFormat
+      ? `events/${currentEvent.id}/teams/${selectedTeam}`
+      : `events/${currentEvent.id}/players/${selectedTeam}`
+    : null;
+
+  // Display name for the header
+  const scoringDisplayName = isSolo
+    ? null
+    : isTeamFormat
+      ? (scoringUnit?.name || 'Team')
+      : (scoringUnit?.displayName || 'Player');
+
+  // Build list of team member names for display (team format only)
+  const teamMemberNames = isTeamFormat
+    ? Object.keys(scoringUnit?.members || {}).map(uid =>
+        currentEvent.players?.[uid]?.displayName || 'Unknown'
+      )
+    : [];
+
   // ==================== DATA EXTRACTION ====================
-  const team = !isSolo ? currentEvent?.players?.[selectedTeam] : null;
 
   const coursePars = isSolo
     ? currentSoloRound.coursePars
@@ -72,19 +114,12 @@ export default function ScoringView({
 
   const currentHole = isSolo
     ? currentSoloRound.currentHole
-    : team?.currentHole || startingHole;
+    : scoringUnit?.currentHole || startingHole;
 
   // ==================== HOLE ORDER ====================
-  // Build an array of hole numbers in the order they're played.
-  // For start=1, 18 holes:  [1, 2, 3, ..., 18]
-  // For start=10, 18 holes: [10, 11, ..., 18, 1, 2, ..., 9]
-  // For start=10, 9 holes:  [10, 11, ..., 18]
-  // For start=1, 9 holes:   [1, 2, ..., 9]
-
   const buildHoleOrder = () => {
     const holes = [];
     for (let i = 0; i < numHoles; i++) {
-      // Wrap around: (startingHole - 1 + i) mod 18 gives 0-17, then +1 for 1-18
       const holeNum = ((startingHole - 1 + i) % 18) + 1;
       holes.push(holeNum);
     }
@@ -93,7 +128,6 @@ export default function ScoringView({
 
   const holeOrder = buildHoleOrder();
 
-  // Get next/previous hole in play order (returns null if at the end/start)
   const getNextHole = (current) => {
     const idx = holeOrder.indexOf(current);
     if (idx === -1 || idx === holeOrder.length - 1) return null;
@@ -106,17 +140,12 @@ export default function ScoringView({
     return holeOrder[idx - 1];
   };
 
-  // Is this the first/last hole in the play order?
   const isFirstHole = holeOrder[0] === currentHole;
   const isLastHole = holeOrder[holeOrder.length - 1] === currentHole;
 
-  // Split holeOrder into two halves for the scorecard display.
-  // For 18 holes: first 9 shown as "OUT", last 9 as "IN"
-  // For 9 holes: just one section
   const first9 = numHoles === 18 ? holeOrder.slice(0, 9) : holeOrder;
   const second9 = numHoles === 18 ? holeOrder.slice(9, 18) : [];
 
-  // Labels for scorecard sections
   const first9Label = numHoles === 9
     ? (startingHole === 1 ? 'Front 9' : 'Back 9')
     : 'OUT';
@@ -124,11 +153,13 @@ export default function ScoringView({
 
   // ==================== NOT FOUND STATES ====================
 
-  if (!isSolo && !team) {
+  if (!isSolo && !scoringUnit) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
         <div className="text-white text-center">
-          <p className="text-xl mb-4">Player not found in this event</p>
+          <p className="text-xl mb-4">
+            {isTeamFormat ? 'Team not found in this event' : 'Player not found in this event'}
+          </p>
           <button onClick={() => setView('event-lobby')} className="bg-white text-blue-900 px-6 py-3 rounded-xl font-semibold">
             Back to Lobby
           </button>
@@ -161,11 +192,11 @@ export default function ScoringView({
     if (isSolo) {
       return currentSoloRound.holes[hole] || null;
     }
-    if (team.holes && team.holes[hole]) {
-      return team.holes[hole];
+    if (scoringUnit.holes && scoringUnit.holes[hole]) {
+      return scoringUnit.holes[hole];
     }
-    if (team.scores && team.scores[hole]) {
-      return { score: team.scores[hole], putts: null, fairway: null, gir: null, notes: '' };
+    if (scoringUnit.scores && scoringUnit.scores[hole]) {
+      return { score: scoringUnit.scores[hole], putts: null, fairway: null, gir: null, notes: '' };
     }
     return null;
   };
@@ -236,7 +267,6 @@ export default function ScoringView({
     let greensInRegulation = 0;
     let holesPlayed = 0;
 
-    // Only count holes that are part of this round
     for (const holeNum of holeOrder) {
       const hole = (holeNum === justSavedHole) ? justSavedData : getHoleData(holeNum);
       if (hole && hole.score) {
@@ -258,7 +288,6 @@ export default function ScoringView({
       }
     }
 
-    // Calculate par for holes played (in play order)
     const playedHoleNums = holeOrder.slice(0, holesPlayed);
     const parTotal = playedHoleNums.reduce((sum, h) => sum + (coursePars[h - 1] || 0), 0);
     const toPar = totalScore - parTotal;
@@ -281,7 +310,6 @@ export default function ScoringView({
     setCurrentScore(score);
 
     if (isSolo) {
-      // Solo mode: continue to fairway/putts flow
       if (currentPar < 4) {
         setCurrentFairway(null);
       }
@@ -290,7 +318,7 @@ export default function ScoringView({
         saveHoleData(score, null, 1);
       }
     } else {
-      // Event mode: save immediately with just the score
+      // Event mode (both team and individual): save immediately with just the score
       saveHoleData(score, null, null);
     }
   };
@@ -348,17 +376,19 @@ export default function ScoringView({
         }
 
       } else {
+        // ===== EVENT MODE (team or individual) =====
+        // scoringBasePath is either events/{id}/teams/{teamId} or events/{id}/players/{userId}
         await set(
-          ref(database, `events/${currentEvent.id}/players/${selectedTeam}/holes/${currentHole}`),
+          ref(database, `${scoringBasePath}/holes/${currentHole}`),
           holeEntry
         );
         await set(
-          ref(database, `events/${currentEvent.id}/players/${selectedTeam}/scores/${currentHole}`),
+          ref(database, `${scoringBasePath}/scores/${currentHole}`),
           parseInt(score)
         );
         const updatedStats = calculateStats(currentHole, holeEntry);
         await set(
-          ref(database, `events/${currentEvent.id}/players/${selectedTeam}/stats`),
+          ref(database, `${scoringBasePath}/stats`),
           updatedStats
         );
 
@@ -366,7 +396,7 @@ export default function ScoringView({
           const next = getNextHole(currentHole);
           if (next) {
             await set(
-              ref(database, `events/${currentEvent.id}/players/${selectedTeam}/currentHole`),
+              ref(database, `${scoringBasePath}/currentHole`),
               next
             );
           }
@@ -385,7 +415,6 @@ export default function ScoringView({
   // ==================== NAVIGATION ====================
 
   const goToHole = (hole) => {
-    // Only allow navigation to holes in the play order
     if (!holeOrder.includes(hole)) return;
 
     if (isSolo) {
@@ -394,7 +423,7 @@ export default function ScoringView({
       setCurrentSoloRound(updatedRound);
     } else {
       set(
-        ref(database, `events/${currentEvent.id}/players/${selectedTeam}/currentHole`),
+        ref(database, `${scoringBasePath}/currentHole`),
         hole
       ).then(async () => {
         const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
@@ -420,10 +449,18 @@ export default function ScoringView({
     }
   };
 
-  const handleBack = () => {
+const handleBack = async () => {
     if (isSolo) {
       setView('home');
     } else {
+      // Clear the scoring lock if this is a team format
+      if (isTeamFormat) {
+        try {
+          await remove(ref(database, `${scoringBasePath}/scoringLockedBy`));
+        } catch (err) {
+          console.error('Error clearing scoring lock:', err);
+        }
+      }
       setSelectedTeam(null);
       setView('event-lobby');
     }
@@ -528,9 +565,14 @@ export default function ScoringView({
             <h2 className="text-xl font-bold text-gray-900 mb-4">{courseName}</h2>
           ) : (
             <>
-              <h1 className="text-2xl font-bold text-gray-900 mb-2">
-                {team.displayName || 'Player'}
+              <h1 className="text-2xl font-bold text-gray-900 mb-1">
+                {scoringDisplayName}
               </h1>
+              {isTeamFormat && teamMemberNames.length > 0 && (
+                <div className="text-sm text-gray-500 mb-1">
+                  {teamMemberNames.join(' & ')}
+                </div>
+              )}
               <div className="text-sm text-gray-600 mb-4">{courseName}</div>
             </>
           )}
