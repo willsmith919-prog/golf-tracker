@@ -71,6 +71,11 @@ export default function ScoringView({
       ? (scoringUnit?.name || 'Team')
       : (scoringUnit?.displayName || 'Player');
 
+  // ==================== MULLIGAN DETECTION ====================
+  const usesMulligans = !isSolo && currentEvent?.meta?.handicap?.enabled && currentEvent?.meta?.handicap?.applicationMethod === 'mulligans';
+  const mulligansTotal = !isSolo ? (scoringUnit?.mulligansTotal || 0) : 0;
+  const mulligansRemaining = !isSolo ? (scoringUnit?.mulligansRemaining ?? mulligansTotal) : 0;
+
   // Build list of team member names for display (team format only)
   const teamMemberNames = isTeamFormat
     ? Object.keys(scoringUnit?.members || {}).map(uid =>
@@ -185,6 +190,7 @@ export default function ScoringView({
   const [currentScore, setCurrentScore] = useState(null);
   const [currentFairway, setCurrentFairway] = useState(null);
   const [notes, setNotes] = useState('');
+  const [confirmingMulligan, setConfirmingMulligan] = useState(false);
 
   // ==================== HOLE DATA ACCESS ====================
 
@@ -218,6 +224,7 @@ export default function ScoringView({
       setCurrentFairway(null);
       setNotes('');
     }
+    setConfirmingMulligan(false);
   }, [currentHole]);
 
   useEffect(() => {
@@ -449,6 +456,39 @@ export default function ScoringView({
     }
   };
 
+  // ==================== MULLIGAN ====================
+
+  const useMulligan = async () => {
+    if (mulligansRemaining <= 0) {
+      setFeedback('No mulligans remaining');
+      setTimeout(() => setFeedback(''), 2000);
+      return;
+    }
+
+    try {
+      const newRemaining = mulligansRemaining - 1;
+      await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
+
+      // Log the mulligan usage on this hole
+      const mulliganLog = scoringUnit?.mulliganLog || {};
+      const holeLog = mulliganLog[currentHole] || 0;
+      await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeLog + 1);
+
+      // Refresh event data
+      const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
+      const updatedEvent = eventSnapshot.val();
+      setCurrentEvent({ id: currentEvent.id, ...updatedEvent });
+
+      setFeedback(`Mulligan used! ${newRemaining} remaining`);
+      setTimeout(() => setFeedback(''), 2000);
+      setConfirmingMulligan(false);
+    } catch (error) {
+      console.error('Error using mulligan:', error);
+      setFeedback('Error using mulligan');
+      setTimeout(() => setFeedback(''), 2000);
+    }
+  };
+
 const handleBack = async () => {
     if (isSolo) {
       setView('home');
@@ -520,6 +560,7 @@ const handleBack = async () => {
               {holes.map(h => {
                 const hole = getHoleData(h);
                 const par = coursePars[h - 1];
+                const holeMulligans = !isSolo ? (scoringUnit?.mulliganLog?.[h] || 0) : 0;
                 return (
                   <td
                     key={h}
@@ -528,6 +569,7 @@ const handleBack = async () => {
                   >
                     {hole?.score || '-'}
                     {isSolo && hole?.gir && <span className="text-green-600 text-xs">●</span>}
+                    {holeMulligans > 0 && <span className="text-purple-500 text-xs">{'🎟️'.repeat(holeMulligans)}</span>}
                   </td>
                 );
               })}
@@ -577,7 +619,7 @@ const handleBack = async () => {
             </>
           )}
 
-          <div className={`grid ${isSolo ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2'} gap-4`}>
+          <div className={`grid ${isSolo ? 'grid-cols-2 md:grid-cols-4' : usesMulligans ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
             <div className="text-center">
               <div className="text-sm text-gray-600">Score</div>
               <div className="text-3xl font-bold text-gray-900">{stats.totalScore || 0}</div>
@@ -591,6 +633,15 @@ const handleBack = async () => {
                 {stats.toPar > 0 ? '+' : ''}{stats.toPar || 0}
               </div>
             </div>
+            {usesMulligans && (
+              <div className="text-center">
+                <div className="text-sm text-gray-600">Mulligans</div>
+                <div className={`text-3xl font-bold ${mulligansRemaining > 0 ? 'text-purple-700' : 'text-gray-400'}`}>
+                  {mulligansRemaining}
+                </div>
+                <div className="text-sm text-gray-600">of {mulligansTotal}</div>
+              </div>
+            )}
             {isSolo && (
               <>
                 <div className="text-center">
@@ -710,7 +761,108 @@ const handleBack = async () => {
               </div>
             </div>
           )}
+          {/* Mulligan Button — event mode only, when format uses mulligans */}
+          {usesMulligans && mulligansRemaining > 0 && !confirmingMulligan && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <button
+                onClick={() => setConfirmingMulligan(true)}
+                className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 py-3 rounded-xl font-semibold transition-all"
+              >
+                🎟️ Use Mulligan ({mulligansRemaining} left)
+              </button>
+              {(scoringUnit?.mulliganLog?.[currentHole] || 0) > 0 && (
+                <button
+                  onClick={async () => {
+                    if (!confirm('Undo a mulligan on this hole?')) return;
+                    try {
+                      const holeCount = scoringUnit.mulliganLog[currentHole];
+                      const newRemaining = mulligansRemaining + 1;
+                      await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
+                      if (holeCount <= 1) {
+                        await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
+                      } else {
+                        await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
+                      }
+                      const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
+                      setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
+                      setFeedback(`Mulligan restored! ${newRemaining} remaining`);
+                      setTimeout(() => setFeedback(''), 2000);
+                    } catch (error) {
+                      console.error('Error undoing mulligan:', error);
+                      setFeedback('Error undoing mulligan');
+                      setTimeout(() => setFeedback(''), 2000);
+                    }
+                  }}
+                  className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
+                >
+                  ↩ Undo mulligan on this hole ({scoringUnit.mulliganLog[currentHole]} used)
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* Mulligan Confirmation */}
+          {usesMulligans && confirmingMulligan && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <p className="text-center text-sm text-gray-700 mb-3">
+                Use a mulligan on Hole {currentHole}?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={useMulligan}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-semibold transition-all"
+                >
+                  ✓ Confirm Mulligan
+                </button>
+                <button
+                  onClick={() => setConfirmingMulligan(false)}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-semibold transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* No mulligans left indicator */}
+          {usesMulligans && mulligansRemaining === 0 && (
+            <div className="mt-4 pt-4 border-t border-gray-200">
+              <div className="text-center text-sm text-gray-400 font-semibold">
+                🎟️ No mulligans remaining
+              </div>
+              {(scoringUnit?.mulliganLog?.[currentHole] || 0) > 0 && (
+                <button
+                  onClick={async () => {
+                    if (!confirm('Undo a mulligan on this hole?')) return;
+                    try {
+                      const holeCount = scoringUnit.mulliganLog[currentHole];
+                      const newRemaining = mulligansRemaining + 1;
+                      await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
+                      if (holeCount <= 1) {
+                        await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
+                      } else {
+                        await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
+                      }
+                      const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
+                      setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
+                      setFeedback(`Mulligan restored! ${newRemaining} remaining`);
+                      setTimeout(() => setFeedback(''), 2000);
+                    } catch (error) {
+                      console.error('Error undoing mulligan:', error);
+                      setFeedback('Error undoing mulligan');
+                      setTimeout(() => setFeedback(''), 2000);
+                    }
+                  }}
+                  className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
+                >
+                  ↩ Undo mulligan on this hole ({scoringUnit.mulliganLog[currentHole]} used)
+                </button>
+              )}
+            </div>
+          )}
         </div>
+
+        {/* Notes — solo only */}
 
         {/* Notes — solo only */}
         {isSolo && (
@@ -740,7 +892,9 @@ const handleBack = async () => {
           {second9.length > 0 && renderScorecardSection(second9, second9Label)}
 
           <div className="mt-4 text-sm text-gray-600 text-center">
-            {isSolo && '● = Green in Regulation · '}Tap any hole to edit
+            {isSolo && '● = Green in Regulation · '}
+            {usesMulligans && '🎟️ = Mulligan used · '}
+            Tap any hole to edit
           </div>
         </div>
       </div>

@@ -35,8 +35,9 @@ export default function LiveLeaderboard({
   const startingHole = meta.startingHole || 1;
   const teamSize = meta.teamSize || 1;
 
-  // Is this a team format?
+  // Is this a team format? Is format using Mulligans?
   const isTeamFormat = teamSize > 1 && Object.keys(teams).length > 0;
+  const usesMulligans = meta.handicap?.enabled && meta.handicap?.applicationMethod === 'mulligans';
 
   // ==================== HOLE ORDER ====================
   const buildHoleOrder = () => {
@@ -145,7 +146,10 @@ export default function LiveLeaderboard({
         netToPar,
         scores: team.scores || {},
         holes: team.holes || {},
-        stablefordPoints: stats.stablefordPoints || 0
+        stablefordPoints: stats.stablefordPoints || 0,
+        mulligansTotal: team.mulligansTotal || 0,
+        mulligansRemaining: team.mulligansRemaining ?? (team.mulligansTotal || 0),
+        mulliganLog: team.mulliganLog || {}
       };
     });
   } else {
@@ -191,7 +195,10 @@ export default function LiveLeaderboard({
         netToPar,
         scores: player.scores || {},
         holes: player.holes || {},
-        stablefordPoints: stats.stablefordPoints || 0
+        stablefordPoints: stats.stablefordPoints || 0,
+        mulligansTotal: player.mulligansTotal || 0,
+        mulligansRemaining: player.mulligansRemaining ?? (player.mulligansTotal || 0),
+        mulliganLog: player.mulliganLog || {}
       };
     });
   }
@@ -297,6 +304,9 @@ export default function LiveLeaderboard({
                   return (
                     <td key={h} className={`text-center p-1 rounded ${getScoreColor(score, par)}`}>
                       {score || '-'}
+                      {usesMulligans && (entry.mulliganLog[h] || 0) > 0 && (
+                        <span className="text-purple-500 text-[8px]">{'🎟️'.repeat(entry.mulliganLog[h])}</span>
+                      )}
                     </td>
                   );
                 })}
@@ -360,6 +370,9 @@ export default function LiveLeaderboard({
           )}
           {meta.scoringMethod === 'stableford' && (
             <span>Points: {entry.stablefordPoints}</span>
+          )}
+          {usesMulligans && entry.mulligansTotal > 0 && (
+            <span>Mulligans: {entry.mulligansRemaining}/{entry.mulligansTotal}</span>
           )}
         </div>
       </div>
@@ -463,6 +476,12 @@ export default function LiveLeaderboard({
                   {isTeamFormat && entry.subtitle && (
                     <div className="text-xs text-gray-500 truncate">{entry.subtitle}</div>
                   )}
+                  {/* Mulligans remaining badge */}
+                  {usesMulligans && entry.mulligansTotal > 0 && (
+                    <div className="text-[10px] text-purple-600 font-semibold">
+                      🎟️ {entry.mulligansRemaining}/{entry.mulligansTotal} mulligans
+                    </div>
+                  )}
                   {/* Progress bar */}
                   <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden w-full max-w-[120px]">
                     <div
@@ -542,6 +561,11 @@ export default function LiveLeaderboard({
           </span>
         )}
         <span>F = Finished</span>
+        {usesMulligans && (
+          <span className="flex items-center gap-1">
+            <span className="text-purple-500">🎟️</span> Mulligan
+          </span>
+        )}
       </div>
     </div>
   );

@@ -47,7 +47,8 @@ src/
 │   ├── auth/        # Login, signup, auth guards
 │   ├── backups/     # Backup-related components
 │   ├── events/      # Event creation and management
-│   │   └── JoinEventConfirm.jsx  # NEW — unified code join flow for events
+│   │   ├── JoinEventConfirm.jsx  # Unified code join flow for events
+│   │   └── TeamManager.jsx       # NEW — host assigns players into teams (team formats only)
 │   ├── home/        # Landing/home screen
 │   ├── leagues/     # League management
 │   │   └── JoinLeagueConfirm.jsx # NEW — unified code join flow for leagues
@@ -202,6 +203,16 @@ events/
                          endingHole, leagueId, seasonId, eventCode, createdAt)
     players/
       {userId}/         (displayName, joinedAt, role: host | player, handicap)
+    teams/              # NEW — only used for team formats (teamSize > 1)
+      {teamId}/
+        name/           ("Team 1", or custom name like "Team Tiger")
+        members/        (userId → true)
+        scores/         ({ 1: 4, 2: 5, ... } — hole-by-hole scores)
+        holes/          ({ 1: { score: 4, putts: null, fairway: null, gir: null, notes: '' }, ... })
+        stats/          ({ totalScore, toPar, holesPlayed, stablefordPoints, ... })
+        currentHole/    (the hole the team is currently on)
+        scoringLockedBy/ (userId of whichever teammate is actively scoring, or null)
+        createdAt/
 
 games/
   {gameId}/
@@ -236,6 +247,8 @@ formats/
 - **Everything has nullable parent references.** `leagueId`, `seriesId`, `seasonId` can all be null, enabling standalone use without duplicating logic.
 - **Single codes node** handles all join codes across all types. One lookup, smart routing.
 - **User memberships** stored under `users/{userId}/leagueMemberships/` and `users/{userId}/events/` — not under a generic `leagues` node.
+- **Teams are separate from players.** Players join an event individually (stored in `players/`). For team formats, the host groups them into teams (stored in `teams/`). Scores are written to the team node, not the player node. Individual formats ignore the `teams/` node entirely.
+- **User profile data is nested** under `users/{userId}/profile/` (displayName, email, handicap). Code accessing profile data must use `userProfile.profile.displayName`, not `userProfile.displayName`.
 
 ---
 
@@ -309,9 +322,11 @@ formats/
 | Solo round | ✅ Done | May need alignment with new participant model |
 | Event creation | ✅ Done | Uses new codes system |
 | League creation | ✅ Done (basic) | Uses new codes system — dashboard needs rebuild |
-| Live leaderboard | ✅ Done | |
+| Live leaderboard | ✅ Done | Supports both team and individual formats |
 | Unified codes system | ✅ Done | Replaces old leagueCodes + eventCodes nodes |
 | New taxonomy data structure | ✅ Done | Implemented — see Sections 7 & 8 |
+| Team scoring (events) | ✅ Done | Host assigns players to teams, scores saved per team, scoring lock prevents simultaneous entry. See Section 16. |
+| Event deletion | ✅ Done | Host can delete open events from lobby. Cleans up event, code, and player references. |
 | Guest participants | 🔲 Not started | |
 | League dashboard rebuild | 🔲 Not started | Current dashboard predates new data structure |
 | Series concept | 🔲 Not started | |
@@ -360,3 +375,36 @@ formats/
 - The app is a **React/Vite** app, sometimes referred to as "React/Jive" by the developer — these are the same thing.
 - Firebase data was wiped in March 2026 — all data follows the new structure going forward.
 - Super Admin email is `willsmith919@gmail.com` — checked in `isAdmin()` function in App.jsx.
+
+---
+
+## 16. Team Scoring System
+
+✅ **FULLY BUILT** — March 2026
+
+Team scoring is driven entirely by the format's `teamSize` field. When `teamSize > 1`, the event uses team scoring. When `teamSize === 1`, it's individual scoring and the team system is invisible.
+
+### How It Works
+
+1. **Event creation** — The selected format's `teamSize` is saved to `meta.teamSize`. This drives all team behavior.
+2. **Players join individually** — Players join via event code as normal and appear in the `players/` node.
+3. **Host assigns teams** — A "Teams" tab appears in the lobby (team formats only). The host can manually create teams and assign players, or use "Auto-Assign" to randomly shuffle players into teams. Each player can only be on one team. Teams can be renamed.
+4. **Start validation** — The event cannot start until all players are assigned to a team.
+5. **Scoring** — When a player taps "Enter Team Scores", the app finds their team and writes scores to `events/{id}/teams/{teamId}/`. Both team members can score, but only one at a time (controlled by `scoringLockedBy`).
+6. **Leaderboard** — Shows team names with member names underneath. Reads from `teams/` node. Sorting, positioning, and expanded hole-by-hole detail all work identically to individual mode.
+
+### Scoring Lock
+
+Prevents two teammates from entering scores simultaneously. It's a manual lock (not a listener) to avoid performance issues:
+- **Set** when the user clicks "Enter Team Scores" in the lobby (one Firebase write)
+- **Cleared** when the user clicks "Back to Lobby" from the scoring view (one Firebase write)
+- If a teammate tries to enter scores while locked, they see a message like "Will is currently entering scores for your team"
+
+### Key Files
+- `src/components/events/TeamManager.jsx` — host UI for creating/assigning/renaming teams
+- `src/components/events/EventLobbyView.jsx` — Teams tab, scoring lock set, start validation
+- `src/components/scoring/ScoringView.jsx` — reads/writes to teams/ or players/ based on format, clears lock on exit
+- `src/components/scoring/LiveLeaderboard.jsx` — shows teams or players based on format
+
+### Important: userProfile Path
+User profile data is nested in Firebase: `users/{userId}/profile/displayName`, not `users/{userId}/displayName`. All code that reads from `userProfile` must use `userProfile.profile.displayName` and `userProfile.profile.handicap`. This was a bug source — if new code reads user data, double-check the path.
