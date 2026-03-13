@@ -13,6 +13,7 @@ import CreateLeagueView from './components/leagues/CreateLeagueView.jsx';
 import JoinLeagueView from './components/leagues/JoinLeagueView.jsx';
 import JoinLeagueConfirmView from './components/leagues/JoinLeagueConfirm.jsx';
 import LeagueDashboardView from './components/leagues/LeagueDashboardView.jsx';
+import EditLeagueView from './components/leagues/EditLeagueView.jsx';
 import CreateEventView from './components/events/CreateEventView.jsx';
 import JoinEventConfirmView from './components/events/JoinEventConfirm.jsx';
 import EventLobbyView from './components/events/EventLobbyView.jsx';
@@ -220,10 +221,18 @@ function App() {
   const [userLeagues, setUserLeagues] = useState([]);
   const [currentLeague, setCurrentLeague] = useState(null);
   const [newLeague, setNewLeague] = useState({
-    name: '',
-    description: '',
-    seasonName: '2026 Season',
-    pointSystem: { 1: 20, 2: 16, 3: 13, 4: 10, 5: 8 }
+  name: '',
+  description: '',
+  seasonName: '2026 Season',
+  seasonStartDate: '',
+  seasonEndDate: '',
+  pointSystem: {
+    1: 25, 2: 20, 3: 16, 4: 13, 5: 10,
+    6: 8, 7: 6, 8: 5, 9: 4, 10: 3,
+    11: 2, 12: 1
+  },
+  participationPoints: 5,
+  dropLowest: 2
   });
   const [leagueCode, setLeagueCode] = useState('');
   const [creatingEventForLeague, setCreatingEventForLeague] = useState(null);
@@ -563,20 +572,35 @@ function App() {
   }
 
   if (view === 'league-dashboard' && currentLeague) {
-    return (
-      <LeagueDashboardView
-        currentUser={currentUser}
-        currentLeague={currentLeague}
-        setCurrentLeague={setCurrentLeague}
-        leagueEvents={leagueEvents}
-        feedback={feedback}
-        setFeedback={setFeedback}
-        setView={setView}
-        setCreatingEventForLeague={setCreatingEventForLeague}
-        setEditingEvent={setEditingEvent}
-      />
+     return (
+       <LeagueDashboardView
+         currentUser={currentUser}
+         userProfile={userProfile}
+         currentLeague={currentLeague}
+         setCurrentLeague={setCurrentLeague}
+         leagueEvents={leagueEvents}
+         feedback={feedback}
+         setFeedback={setFeedback}
+         setView={setView}
+         setCreatingEventForLeague={setCreatingEventForLeague}
+         setEditingEvent={setEditingEvent}
+         setCurrentEvent={setCurrentEvent}
+       />
     );
-  }
+   }
+
+  if (view === 'edit-league' && currentLeague) {
+     return (
+       <EditLeagueView
+         currentUser={currentUser}
+         currentLeague={currentLeague}
+         setCurrentLeague={setCurrentLeague}
+         setView={setView}
+         feedback={feedback}
+         setFeedback={setFeedback}
+       />
+     );
+   }
 
   if (view === 'create-event') {
     return (

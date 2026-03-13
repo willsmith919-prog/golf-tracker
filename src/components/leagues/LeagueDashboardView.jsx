@@ -8,6 +8,7 @@ import {
 
 export default function LeagueDashboardView({
   currentUser,
+  userProfile,
   currentLeague,
   setCurrentLeague,
   leagueEvents,
@@ -15,7 +16,8 @@ export default function LeagueDashboardView({
   setFeedback,
   setView,
   setCreatingEventForLeague,
-  setEditingEvent
+  setEditingEvent,
+  setCurrentEvent
 }) {
   const isCommissioner = currentLeague.userRole === 'commissioner';
   const members = Object.entries(currentLeague.members || {}).map(([uid, data]) => ({
@@ -24,6 +26,64 @@ export default function LeagueDashboardView({
   }));
   const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
 
+  // Split events into upcoming, live, and past
+  const upcomingEvents = leagueEvents.filter(e => e.meta.status === 'open' || e.meta.status === 'draft');
+  const liveEvents = leagueEvents.filter(e => e.meta.status === 'active');
+  const pastEvents = leagueEvents
+    .filter(e => e.meta.status === 'completed')
+    .sort((a, b) => new Date(b.meta.date) - new Date(a.meta.date)); // most recent first
+
+  // Check if the current user is registered for a given event
+  const isRegistered = (event) => {
+    return event.players && event.players[currentUser.uid];
+  };
+
+  // Register the current user for an event, then navigate to lobby
+  const handleRegisterAndView = async (event) => {
+    try {
+      const displayName = userProfile?.profile?.displayName || userProfile?.displayName || currentUser.email || 'Unknown';
+      const handicap = userProfile?.profile?.handicap || userProfile?.handicap || null;
+
+      await set(ref(database, `events/${event.id}/players/${currentUser.uid}`), {
+        displayName: displayName,
+        role: 'player',
+        handicap: handicap,
+        joinedAt: Date.now()
+      });
+
+      // Also write to user's events list
+      await set(ref(database, `users/${currentUser.uid}/events/${event.id}`), {
+        role: 'player',
+        joinedAt: Date.now()
+      });
+
+      // Refresh the event data and navigate to lobby
+      const snapshot = await get(ref(database, `events/${event.id}`));
+      const updatedEvent = snapshot.val();
+      setCurrentEvent({ id: event.id, ...updatedEvent });
+      setView('event-lobby');
+    } catch (error) {
+      console.error('Error registering for event:', error);
+      setFeedback('Error registering. Please try again.');
+      setTimeout(() => setFeedback(''), 3000);
+    }
+  };
+
+  // Navigate to lobby for an event the user is already part of
+  const handleViewLobby = async (event) => {
+    // Refresh event data to get latest
+    try {
+      const snapshot = await get(ref(database, `events/${event.id}`));
+      const updatedEvent = snapshot.val();
+      setCurrentEvent({ id: event.id, ...updatedEvent });
+      setView('event-lobby');
+    } catch (error) {
+      console.error('Error loading event:', error);
+      setFeedback('Error loading event. Please try again.');
+      setTimeout(() => setFeedback(''), 3000);
+    }
+  };
+
   const handleRemoveMember = async (memberUid, memberName) => {
     if (!confirm(`Remove ${memberName} from the league?`)) {
       return;
@@ -31,7 +91,7 @@ export default function LeagueDashboardView({
 
     try {
       await remove(ref(database, `leagues/${currentLeague.id}/members/${memberUid}`));
-      await remove(ref(database, `users/${memberUid}/leagues/${currentLeague.id}`));
+      await remove(ref(database, `users/${memberUid}/leagueMemberships/${memberUid}`));
 
       const leagueSnapshot = await get(ref(database, `leagues/${currentLeague.id}`));
       const updatedLeague = leagueSnapshot.val();
@@ -62,9 +122,11 @@ export default function LeagueDashboardView({
         await set(ref(database, `leagues/${currentLeague.id}/seasons/${seasonId}/events`), updatedEvents);
       }
 
+      // Clean up the event code from the unified codes system
       const eventSnapshot = await get(ref(database, `events/${eventId}/meta/eventCode`));
       if (eventSnapshot.exists()) {
-        await remove(ref(database, `eventCodes/${eventSnapshot.val()}`));
+        const eventCode = eventSnapshot.val();
+        await remove(ref(database, `codes/${eventCode}`));
       }
 
       await remove(ref(database, `events/${eventId}`));
@@ -82,6 +144,124 @@ export default function LeagueDashboardView({
     }
   };
 
+  // Helper to get player count for an event
+  const getPlayerCount = (event) => {
+    return Object.keys(event.players || {}).length;
+  };
+
+  // Helper to format date nicely
+  const formatDate = (dateStr) => {
+    const date = new Date(dateStr);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    if (date.toDateString() === today.toDateString()) return 'Today';
+    if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow';
+    
+    return date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  };
+
+  // Render a single event card
+  const renderEventCard = (event, section) => {
+    const playerCount = getPlayerCount(event);
+    const registered = isRegistered(event);
+
+    return (
+      <div key={event.id} className="p-4 bg-gray-50 rounded-xl">
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            {/* Event name + live indicator */}
+            <div className="flex items-center gap-2">
+              <div className="font-semibold text-gray-900">{event.meta.name}</div>
+              {section === 'live' && (
+                <span className="bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full animate-pulse">
+                  LIVE
+                </span>
+              )}
+              {section === 'past' && (
+                <span className="bg-gray-400 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                  FINAL
+                </span>
+              )}
+            </div>
+
+            {/* Course + format */}
+            <div className="text-sm text-gray-600 mt-1">
+              {event.meta.courseName}
+              {event.meta.formatName && ` · ${event.meta.formatName}`}
+              {!event.meta.formatName && event.meta.format && ` · ${event.meta.format}`}
+            </div>
+
+            {/* Date + time */}
+            <div className="text-sm text-gray-600">
+              {formatDate(event.meta.date)}
+              {event.meta.time && ` · ${event.meta.time}`}
+            </div>
+
+            {/* Player count */}
+            <div className="text-xs text-gray-500 mt-1">
+              {playerCount} player{playerCount !== 1 ? 's' : ''} registered
+              {section === 'upcoming' && registered && (
+                <span className="text-green-600 font-semibold ml-2">✓ You're in</span>
+              )}
+            </div>
+          </div>
+
+          {/* Action buttons */}
+          <div className="flex flex-col items-end gap-2 ml-3">
+            {section === 'upcoming' && (
+              <>
+                {registered ? (
+                  <button
+                    onClick={() => handleViewLobby(event)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold whitespace-nowrap"
+                  >
+                    View Lobby
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleRegisterAndView(event)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-semibold whitespace-nowrap"
+                  >
+                    Register
+                  </button>
+                )}
+              </>
+            )}
+
+            {section === 'live' && (
+              <button
+                onClick={() => handleViewLobby(event)}
+                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-semibold whitespace-nowrap"
+              >
+                View Live
+              </button>
+            )}
+
+            {section === 'past' && (
+              <button
+                onClick={() => handleViewLobby(event)}
+                className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 text-sm font-semibold whitespace-nowrap"
+              >
+                View Results
+              </button>
+            )}
+
+            {isCommissioner && section === 'upcoming' && (
+              <button
+                onClick={() => handleDeleteEvent(event.id, event.meta.name)}
+                className="text-red-500 hover:text-red-600 text-xs font-semibold"
+              >
+                Delete
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
       <div className="max-w-2xl mx-auto">
@@ -89,7 +269,21 @@ export default function LeagueDashboardView({
 
         {/* Header */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{currentLeague.meta.name}</h1>
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-3xl font-bold text-gray-900">{currentLeague.meta.name}</h1>
+            {isCommissioner && (
+              <button
+                onClick={() => setView('edit-league')}
+                className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors"
+                title="League Settings"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="3"></circle>
+                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+              </button>
+            )}
+          </div>
           {currentLeague.meta.description && (
             <p className="text-gray-600 mb-4">{currentLeague.meta.description}</p>
           )}
@@ -141,7 +335,7 @@ export default function LeagueDashboardView({
           </div>
         </div>
 
-        {/* Events */}
+        {/* ===== EVENTS SECTION ===== */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-xl font-bold text-gray-900">Events</h2>
@@ -164,60 +358,8 @@ export default function LeagueDashboardView({
             )}
           </div>
 
-          {leagueEvents.length > 0 ? (
-            <div className="space-y-3">
-              {leagueEvents.map((event) => {
-                const formatNames = {
-                  scramble: "2-Man Scramble",
-                  shamble: "2-Man Shamble",
-                  bestball: "2-Man Best Ball",
-                  stableford: "Individual Stableford"
-                };
-                
-                return (
-                  <div key={event.id} className="p-4 bg-gray-50 rounded-xl">
-                    <div className="flex items-center justify-between">
-                      <div className="flex-1">
-                        <div className="font-semibold text-gray-900">{event.meta.name}</div>
-                        <div className="text-sm text-gray-600">
-                          {event.meta.courseName} · {formatNames[event.meta.format] || event.meta.format}
-                        </div>
-                        <div className="text-sm text-gray-600">
-                          {new Date(event.meta.date).toLocaleDateString()}
-                          {event.meta.time && ` · ${event.meta.time}`}
-                        </div>
-                        <div className="text-xs text-gray-500 mt-1">
-                          Status: {event.meta.status === 'draft' ? '📝 Draft' : event.meta.status === 'locked' ? '🔒 Locked' : '✅ Active'}
-                          {event.meta.status === 'draft' && ' · Registration Open'}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {event.meta.status === 'draft' && (
-                          <button
-                            onClick={() => {
-                              setEditingEvent(event);
-                              setView('event-details');
-                            }}
-                            className="text-blue-600 hover:text-blue-700 text-sm font-semibold"
-                          >
-                            View
-                          </button>
-                        )}
-                        {isCommissioner && (
-                          <button
-                            onClick={() => handleDeleteEvent(event.id, event.meta.name)}
-                            className="text-red-600 hover:text-red-700 text-sm font-semibold"
-                          >
-                            Delete
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
+          {leagueEvents.length === 0 ? (
+            // No events at all
             <div className="text-center py-8">
               <CalendarIcon className="mx-auto mb-3 text-gray-400" />
               <p className="text-gray-600 mb-4">No events yet</p>
@@ -236,6 +378,46 @@ export default function LeagueDashboardView({
                 >
                   Create First Event
                 </button>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-6">
+
+              {/* Live Events */}
+              {liveEvents.length > 0 && (
+                <div>
+                  <div className="text-sm font-semibold text-red-600 uppercase tracking-wide mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                    In Progress
+                  </div>
+                  <div className="space-y-3">
+                    {liveEvents.map(event => renderEventCard(event, 'live'))}
+                  </div>
+                </div>
+              )}
+
+              {/* Upcoming Events */}
+              {upcomingEvents.length > 0 && (
+                <div>
+                  <div className="text-sm font-semibold text-blue-600 uppercase tracking-wide mb-2">
+                    Upcoming
+                  </div>
+                  <div className="space-y-3">
+                    {upcomingEvents.map(event => renderEventCard(event, 'upcoming'))}
+                  </div>
+                </div>
+              )}
+
+              {/* Past Events */}
+              {pastEvents.length > 0 && (
+                <div>
+                  <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Completed
+                  </div>
+                  <div className="space-y-3">
+                    {pastEvents.map(event => renderEventCard(event, 'past'))}
+                  </div>
+                </div>
               )}
             </div>
           )}

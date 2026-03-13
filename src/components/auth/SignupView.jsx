@@ -26,7 +26,7 @@ export default function SignupView({
       const userCredential = await createUserWithEmailAndPassword(auth, signupEmail, signupPassword);
       const user = userCredential.user;
 
-      await set(ref(database, `users/${user.uid}`), {
+      await set(ref(database, `users/${user.uid}/profile`), {
         email: signupEmail,
         displayName: signupDisplayName,
         handicap: signupHandicap ? parseFloat(signupHandicap) : null,
