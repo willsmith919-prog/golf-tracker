@@ -29,6 +29,7 @@ import RoundsHistoryView from './components/scoring/RoundsHistoryView.jsx';
 import SoloScorecardView from './components/scoring/SoloScorecardView.jsx';
 import ManageFormatsView from './components/admin/ManageFormatsView.jsx';
 import AddEditFormatView from './components/admin/AddEditFormatView.jsx';
+import EventHistoryView from './components/events/EventHistoryView.jsx';
 
 function App() {
   // ==================== HELPER FUNCTIONS ====================
@@ -762,6 +763,16 @@ function App() {
         setFeedback={setFeedback}
         setView={setView}
         loadFormats={loadFormats}
+      />
+    );
+  }
+
+  if (view === 'event-history') {
+    return (
+      <EventHistoryView
+        userEvents={userEvents}
+        setView={setView}
+        setCurrentEvent={setCurrentEvent}
       />
     );
   }

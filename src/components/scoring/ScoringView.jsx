@@ -191,6 +191,8 @@ export default function ScoringView({
   const [currentFairway, setCurrentFairway] = useState(null);
   const [notes, setNotes] = useState('');
   const [confirmingMulligan, setConfirmingMulligan] = useState(false);
+  const [showCustomScore, setShowCustomScore] = useState(false);
+  const [trackStats, setTrackStats] = useState(false);
 
   // ==================== HOLE DATA ACCESS ====================
 
@@ -225,6 +227,7 @@ export default function ScoringView({
       setNotes('');
     }
     setConfirmingMulligan(false);
+    setShowCustomScore(false);
   }, [currentHole]);
 
   useEffect(() => {
@@ -314,19 +317,46 @@ export default function ScoringView({
   // ==================== HANDLERS ====================
 
   const handleScoreSelect = (score) => {
+    // If this is the Triple+ button, open custom score mode
+    if (score === currentPar + 3) {
+      setShowCustomScore(true);
+      setCurrentScore(currentPar + 3);
+      return;
+    }
+    setShowCustomScore(false);
     setCurrentScore(score);
 
-    if (isSolo) {
+    // Determine if we should go through the stat-tracking flow
+    // (fairway → putts → save) or save immediately
+    const useStatFlow = isSolo || trackStats;
+
+    if (useStatFlow) {
       if (currentPar < 4) {
         setCurrentFairway(null);
       }
       if (currentPar === 3 && score === 1) {
+        // Hole-in-one on par 3: skip fairway/putts
         setCurrentFairway(null);
         saveHoleData(score, null, 1);
       }
+      // Otherwise, wait for fairway/putts selections before saving
     } else {
-      // Event mode (both team and individual): save immediately with just the score
+      // Event mode without stat tracking: save immediately with just the score
       saveHoleData(score, null, null);
+    }
+  };
+
+  const handleCustomScoreConfirm = () => {
+    if (!currentScore || currentScore < 1) return;
+    setShowCustomScore(false);
+    const useStatFlow = isSolo || trackStats;
+    if (useStatFlow) {
+      if (currentPar < 4) {
+        setCurrentFairway(null);
+      }
+      // Wait for fairway/putts before saving
+    } else {
+      saveHoleData(currentScore, null, null);
     }
   };
 
@@ -515,8 +545,9 @@ const handleBack = async () => {
     { label: 'Birdie', value: currentPar - 1, color: 'bg-green-500 hover:bg-green-600' },
     { label: 'Par', value: currentPar, color: 'bg-gray-400 hover:bg-gray-500' },
     { label: 'Bogey', value: currentPar + 1, color: 'bg-orange-400 hover:bg-orange-500' },
-    { label: 'Double', value: currentPar + 2, color: 'bg-red-500 hover:bg-red-600' }
-  ];
+    { label: 'Double', value: currentPar + 2, color: 'bg-red-500 hover:bg-red-600' },
+    { label: 'Triple+', value: currentPar + 3, color: 'bg-red-800 hover:bg-red-900' }
+  ].filter(btn => btn.value >= 1);
 
   const fairwayButtons = [
     { label: 'Left', value: 'left', color: 'bg-orange-400 hover:bg-orange-500' },
@@ -568,7 +599,7 @@ const handleBack = async () => {
                     onClick={() => goToHole(h)}
                   >
                     {hole?.score || '-'}
-                    {isSolo && hole?.gir && <span className="text-green-600 text-xs">●</span>}
+                    {(isSolo || trackStats) && hole?.gir && <span className="text-green-600 text-xs">●</span>}
                     {holeMulligans > 0 && <span className="text-purple-500 text-xs">{'🎟️'.repeat(holeMulligans)}</span>}
                   </td>
                 );
@@ -619,7 +650,7 @@ const handleBack = async () => {
             </>
           )}
 
-          <div className={`grid ${isSolo ? 'grid-cols-2 md:grid-cols-4' : usesMulligans ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
+          <div className={`grid ${(isSolo || trackStats) ? 'grid-cols-2 md:grid-cols-4' : usesMulligans ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
             <div className="text-center">
               <div className="text-sm text-gray-600">Score</div>
               <div className="text-3xl font-bold text-gray-900">{stats.totalScore || 0}</div>
@@ -642,7 +673,7 @@ const handleBack = async () => {
                 <div className="text-sm text-gray-600">of {mulligansTotal}</div>
               </div>
             )}
-            {isSolo && (
+            {(isSolo || trackStats) && (
               <>
                 <div className="text-center">
                   <div className="text-sm text-gray-600">
@@ -668,6 +699,28 @@ const handleBack = async () => {
               </>
             )}
           </div>
+
+          {/* Track Stats Toggle — event mode only (individual, non-team) */}
+          {!isSolo && !isTeamFormat && (
+            <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
+              <div>
+                <div className="text-sm font-semibold text-gray-700">Track Stats</div>
+                <div className="text-xs text-gray-500">Fairways, putts, GIR</div>
+              </div>
+              <button
+                onClick={() => setTrackStats(!trackStats)}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                  trackStats ? 'bg-green-500' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    trackStats ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Current Hole */}
@@ -704,26 +757,71 @@ const handleBack = async () => {
           {/* Score Entry */}
           <div className="mb-4">
             <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Score</h3>
-            <div className="grid grid-cols-5 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {quickScoreButtons.map(btn => (
                 <button
                   key={btn.label}
                   onClick={() => handleScoreSelect(btn.value)}
                   className={`${
-                    currentScore === btn.value
+                    currentScore === btn.value && !(showCustomScore && btn.label === 'Triple+')
                       ? 'ring-4 ring-blue-400'
                       : ''
-                  } ${btn.color} text-white py-4 rounded-xl font-semibold shadow-lg transition-all`}
+                  } ${showCustomScore && btn.label === 'Triple+' ? 'ring-4 ring-blue-400' : ''} ${btn.color} text-white py-4 rounded-xl font-semibold shadow-lg transition-all`}
                 >
                   <div className="text-sm">{btn.label}</div>
-                  <div className="text-2xl font-bold">{btn.value}</div>
+                  <div className="text-2xl font-bold">{btn.label === 'Triple+' ? `${btn.value}+` : btn.value}</div>
                 </button>
               ))}
             </div>
+
+            {/* Custom Score Adjuster — shown when Triple+ is tapped */}
+            {showCustomScore && (
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <div className="text-center text-sm text-gray-600 mb-3">Adjust Score</div>
+                <div className="flex items-center justify-center gap-4">
+                  <button
+                    onClick={() => setCurrentScore(Math.max(currentPar + 3, currentScore - 1))}
+                    disabled={currentScore <= currentPar + 3}
+                    className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed w-14 h-14 rounded-xl text-2xl font-bold"
+                  >
+                    −
+                  </button>
+                  <div className="text-5xl font-bold text-gray-900 w-20 text-center">{currentScore}</div>
+                  <button
+                    onClick={() => setCurrentScore(Math.min(15, currentScore + 1))}
+                    disabled={currentScore >= 15}
+                    className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed w-14 h-14 rounded-xl text-2xl font-bold"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="text-center text-xs text-gray-400 mt-1">
+                  +{currentScore - currentPar} over par
+                </div>
+                <button
+                  onClick={() => {
+                    const useStatFlow = isSolo || trackStats;
+                    if (useStatFlow) {
+                      // Continue to fairway/putts flow like other scores
+                      if (currentPar < 4) {
+                        setCurrentFairway(null);
+                      }
+                      setShowCustomScore(false);
+                    } else {
+                      saveHoleData(currentScore, null, null);
+                      setShowCustomScore(false);
+                    }
+                  }}
+                  className="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold transition-all"
+                >
+                  Confirm Score: {currentScore}
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Fairway Entry — solo only */}
-          {isSolo && currentScore && currentPar >= 4 && (
+          {/* Fairway Entry — solo or when tracking stats */}
+          {(isSolo || trackStats) && currentScore && !showCustomScore && currentPar >= 4 && (
             <div className="mb-4">
               <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Fairway</h3>
               <div className="grid grid-cols-4 gap-3">
@@ -744,8 +842,8 @@ const handleBack = async () => {
             </div>
           )}
 
-          {/* Putts Entry — solo only */}
-          {isSolo && currentScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
+          {/* Putts Entry — solo or when tracking stats */}
+          {(isSolo || trackStats) && currentScore && !showCustomScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Putts</h3>
               <div className="grid grid-cols-4 gap-3">
@@ -892,7 +990,7 @@ const handleBack = async () => {
           {second9.length > 0 && renderScorecardSection(second9, second9Label)}
 
           <div className="mt-4 text-sm text-gray-600 text-center">
-            {isSolo && '● = Green in Regulation · '}
+            {(isSolo || trackStats) && '● = Green in Regulation · '}
             {usesMulligans && '🎟️ = Mulligan used · '}
             Tap any hole to edit
           </div>

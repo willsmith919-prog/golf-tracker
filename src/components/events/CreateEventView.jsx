@@ -54,6 +54,8 @@ const eventCode = await createCode('event', eventId);
           courseStrokeIndexes: formData.courseStrokeIndexes || [],
           teeId: formData.teeId,
           teeName: formData.teeName,
+          courseSlope: formData.teeSlope ? parseFloat(formData.teeSlope) : null,
+          courseRating: formData.teeRating ? parseFloat(formData.teeRating) : null,
           format: formData.format,
           formatId: formData.formatId || null,
           formatName: formData.formatName || '',

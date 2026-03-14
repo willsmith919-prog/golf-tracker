@@ -57,9 +57,30 @@ export default function LiveLeaderboard({
   const handicapAllowance = meta.handicap?.allowance || 100;
   const courseStrokeIndexes = meta.courseStrokeIndexes || [];
 
+  // Course slope and rating — needed for proper USGA handicap formula
+  // Course Handicap = (Handicap Index × Slope / 113) + (Course Rating − Par)
+  // If slope/rating aren't on the event (older events), falls back to simple calculation
+  const courseSlope = meta.courseSlope || null;
+  const courseRating = meta.courseRating || null;
+  const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
+
   const getPlayerCourseHandicap = (playerHandicap) => {
     if (!handicapEnabled || playerHandicap == null) return 0;
-    return Math.round(playerHandicap * (handicapAllowance / 100));
+
+    let courseHandicap;
+    if (courseSlope && courseRating) {
+      // Proper USGA formula:
+      // Course Handicap = (Handicap Index × Slope Rating / 113) + (Course Rating − Par)
+      courseHandicap = (playerHandicap * courseSlope / 113) + (courseRating - coursePar);
+    } else {
+      // Fallback for events that don't have slope/rating saved
+      courseHandicap = playerHandicap;
+    }
+
+    // Apply the allowance percentage (e.g. 80% for some formats)
+    courseHandicap = courseHandicap * (handicapAllowance / 100);
+
+    return Math.round(courseHandicap);
   };
 
   const getStrokeHoles = (courseHandicap) => {
@@ -280,9 +301,22 @@ export default function LiveLeaderboard({
             <thead>
               <tr className="border-b border-gray-200">
                 <th className="text-left p-1 w-12">Hole</th>
-                {holes.map(h => (
-                  <th key={h} className="text-center p-1 min-w-[28px]">{h}</th>
-                ))}
+                {holes.map(h => {
+                  const strokeCount = entry.strokeHoles[h] || 0;
+                  return (
+                    <th key={h} className="text-center p-1 min-w-[28px]">
+                      <div>{h}</div>
+                      {/* Stroke dots under hole number — visible before scores come in */}
+                      {handicapEnabled && display.showStrokeHoles !== false && strokeCount > 0 && (
+                        <div className="flex justify-center gap-0.5 mt-0.5">
+                          {Array.from({ length: strokeCount }).map((_, i) => (
+                            <span key={i} className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          ))}
+                        </div>
+                      )}
+                    </th>
+                  );
+                })}
                 <th className="text-center p-1 min-w-[32px] font-bold">Tot</th>
               </tr>
             </thead>
@@ -324,12 +358,16 @@ export default function LiveLeaderboard({
                     const score = entry.scores[h] || entry.holes[h]?.score;
                     const par = coursePars[h - 1];
                     const net = score ? getNetScore(score, h, entry.strokeHoles) : null;
-                    const hasStroke = entry.strokeHoles[h] > 0;
+                    const strokeCount = entry.strokeHoles[h] || 0;
                     return (
                       <td key={h} className={`text-center p-1 rounded ${net ? getScoreColor(net, par) : ''}`}>
                         {net || '-'}
-                        {hasStroke && display.showStrokeHoles !== false && (
-                          <span className="text-blue-500 text-[8px] align-super">•</span>
+                        {strokeCount > 0 && display.showStrokeHoles !== false && (
+                          <div className="flex justify-center gap-0.5 mt-0.5">
+                            {Array.from({ length: strokeCount }).map((_, i) => (
+                              <span key={i} className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            ))}
+                          </div>
                         )}
                       </td>
                     );
@@ -557,7 +595,11 @@ export default function LiveLeaderboard({
         </span>
         {handicapEnabled && display.showStrokeHoles !== false && (
           <span className="flex items-center gap-1">
-            <span className="text-blue-500">•</span> Stroke hole
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span> = 1 stroke
+            <span className="ml-1 inline-flex gap-0.5">
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+            </span> = 2 strokes
           </span>
         )}
         <span>F = Finished</span>
