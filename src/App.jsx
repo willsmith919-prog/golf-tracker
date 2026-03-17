@@ -17,7 +17,6 @@ import EditLeagueView from './components/leagues/EditLeagueView.jsx';
 import CreateEventView from './components/events/CreateEventView.jsx';
 import JoinEventConfirmView from './components/events/JoinEventConfirm.jsx';
 import EventLobbyView from './components/events/EventLobbyView.jsx';
-import JoinEventView from './components/events/JoinEventView.jsx';
 import EventDetailsView from './components/events/EventDetailsView.jsx';
 import EditEventView from './components/events/EditEventView.jsx';
 import ExpiredCodeView from './components/shared/ExpiredCodeView.jsx';
@@ -482,6 +481,7 @@ function App() {
         authLoading2={authLoading2}
         setAuthLoading2={setAuthLoading2}
         setView={setView}
+        setUserProfile={setUserProfile}
       />
     );
   }
@@ -621,17 +621,6 @@ function App() {
         generateEventCode={generateEventCode}
         preFillEvent={preFillEvent}
         setPreFillEvent={setPreFillEvent}
-      />
-    );
-  }
-
-  if (view === 'join-event') {
-    return (
-      <JoinEventView
-        currentUser={currentUser}
-        userProfile={userProfile}
-        setView={setView}
-        setCurrentEvent={setCurrentEvent}
       />
     );
   }

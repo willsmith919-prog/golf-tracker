@@ -1,5 +1,5 @@
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { ref, set } from 'firebase/database';
+import { ref, set, get } from 'firebase/database';
 import { auth, database } from '../../firebase';
 
 export default function SignupView({
@@ -15,7 +15,8 @@ export default function SignupView({
   setAuthError,
   authLoading2,
   setAuthLoading2,
-  setView
+  setView,
+  setUserProfile
 }) {
   const handleSignup = async (e) => {
     e.preventDefault();
@@ -32,6 +33,10 @@ export default function SignupView({
         handicap: signupHandicap ? parseFloat(signupHandicap) : null,
         createdAt: Date.now()
       });
+
+      // Re-read the full user node so userProfile is ready before navigating
+      const profileSnapshot = await get(ref(database, `users/${user.uid}`));
+      setUserProfile(profileSnapshot.val());
 
     } catch (err) {
       console.error('Signup error:', err);
