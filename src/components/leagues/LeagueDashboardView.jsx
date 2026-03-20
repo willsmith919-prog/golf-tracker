@@ -231,12 +231,23 @@ export default function LeagueDashboardView({
             )}
 
             {section === 'live' && (
-              <button
-                onClick={() => handleViewLobby(event)}
-                className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-semibold whitespace-nowrap"
-              >
-                View Live
-              </button>
+              <>
+                {registered ? (
+                  <button
+                    onClick={() => handleViewLobby(event)}
+                    className="bg-red-600 text-white px-4 py-2 rounded-lg hover:bg-red-700 text-sm font-semibold whitespace-nowrap"
+                  >
+                    View Live
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => handleRegisterAndView(event)}
+                    className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 text-sm font-semibold whitespace-nowrap"
+                  >
+                    Join & View
+                  </button>
+                )}
+              </>
             )}
 
             {section === 'past' && (

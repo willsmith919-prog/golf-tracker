@@ -189,6 +189,7 @@ export default function ScoringView({
   // ==================== LOCAL STATE ====================
   const [currentScore, setCurrentScore] = useState(null);
   const [currentFairway, setCurrentFairway] = useState(null);
+  const [currentPutts, setCurrentPutts] = useState(null);
   const [notes, setNotes] = useState('');
   const [confirmingMulligan, setConfirmingMulligan] = useState(false);
   const [showCustomScore, setShowCustomScore] = useState(false);
@@ -252,10 +253,12 @@ export default function ScoringView({
     if (holeData) {
       setCurrentScore(holeData.score);
       setCurrentFairway(holeData.fairway);
+      setCurrentPutts(holeData.putts);
       setNotes(holeData.notes || '');
     } else {
       setCurrentScore(null);
       setCurrentFairway(null);
+      setCurrentPutts(null);
       setNotes('');
     }
     setConfirmingMulligan(false);
@@ -347,48 +350,38 @@ export default function ScoringView({
   };
 
   // ==================== HANDLERS ====================
+  // NEW FLOW: Score selection never auto-saves. User must explicitly
+  // confirm with "Save & Next". This prevents accidental double-taps
+  // from scoring the wrong hole.
+
+  // Whether we're in the full stat-tracking flow (fairway → putts → confirm)
+  const useStatFlow = isSolo || trackStats;
 
   const handleScoreSelect = (score) => {
     // If this is the Triple+ button, open custom score mode
     if (score === currentPar + 3) {
       setShowCustomScore(true);
       setCurrentScore(currentPar + 3);
+      setCurrentPutts(null);
       return;
     }
     setShowCustomScore(false);
     setCurrentScore(score);
+    setCurrentPutts(null);
 
-    // Determine if we should go through the stat-tracking flow
-    // (fairway → putts → save) or save immediately
-    const useStatFlow = isSolo || trackStats;
-
-    if (useStatFlow) {
-      if (currentPar < 4) {
-        setCurrentFairway(null);
-      }
-      if (currentPar === 3 && score === 1) {
-        // Hole-in-one on par 3: skip fairway/putts
-        setCurrentFairway(null);
-        saveHoleData(score, null, 1);
-      }
-      // Otherwise, wait for fairway/putts selections before saving
-    } else {
-      // Event mode without stat tracking: save immediately with just the score
-      saveHoleData(score, null, null);
+    // For stat tracking: reset fairway on par 3s (no fairway needed)
+    if (useStatFlow && currentPar < 4) {
+      setCurrentFairway(null);
     }
   };
 
   const handleCustomScoreConfirm = () => {
     if (!currentScore || currentScore < 1) return;
     setShowCustomScore(false);
-    const useStatFlow = isSolo || trackStats;
-    if (useStatFlow) {
-      if (currentPar < 4) {
-        setCurrentFairway(null);
-      }
-      // Wait for fairway/putts before saving
-    } else {
-      saveHoleData(currentScore, null, null);
+    setCurrentPutts(null);
+    // For stat tracking: reset fairway on par 3s
+    if (useStatFlow && currentPar < 4) {
+      setCurrentFairway(null);
     }
   };
 
@@ -397,8 +390,43 @@ export default function ScoringView({
   };
 
   const handlePuttsSelect = (putts) => {
+    // Just select the putts — don't save yet. User confirms with Save & Next.
     const finalPutts = putts === '3+' ? 3 : putts;
-    saveHoleData(currentScore, currentFairway, finalPutts);
+    setCurrentPutts(finalPutts);
+  };
+
+  // Determine if we have everything needed to save
+  const isReadyToSave = (() => {
+    if (!currentScore) return false;
+    if (!useStatFlow) return true; // No stats needed, score alone is enough
+    // Hole-in-one on par 3: no fairway or putts needed
+    if (currentPar === 3 && currentScore === 1) return true;
+    // Par 4+: need fairway AND putts
+    if (currentPar >= 4 && !currentFairway) return false;
+    // Need putts (unless no putt options exist for this score)
+    const opts = getPuttOptions(currentPar, currentScore);
+    if (opts.length > 0 && currentPutts === null) return false;
+    return true;
+  })();
+
+  // Save and advance to next hole
+  const handleConfirmAndNext = () => {
+    if (!isReadyToSave) return;
+
+    const finalPutts = useStatFlow
+      ? (currentPar === 3 && currentScore === 1 ? 1 : currentPutts)
+      : null;
+    const finalFairway = useStatFlow ? currentFairway : null;
+
+    saveHoleData(currentScore, finalFairway, finalPutts);
+  };
+
+  // Clear current selection without saving
+  const handleClearScore = () => {
+    setCurrentScore(null);
+    setCurrentFairway(null);
+    setCurrentPutts(null);
+    setShowCustomScore(false);
   };
 
   // ==================== SAVE ====================
@@ -802,6 +830,107 @@ const handleBack = async () => {
             </button>
           </div>
 
+          {/* Mulligan — shown ABOVE score entry so it's logged before scoring */}
+          {usesMulligans && !confirmingMulligan && (
+            <div className="mb-4 pb-4 border-b border-gray-200">
+              {mulligansRemaining > 0 ? (
+                <>
+                  <button
+                    onClick={() => setConfirmingMulligan(true)}
+                    className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 py-2.5 rounded-xl font-semibold transition-all text-sm"
+                  >
+                    🎟️ Use Mulligan ({mulligansRemaining} left)
+                  </button>
+                  {(scoringUnit?.mulliganLog?.[currentHole] || 0) > 0 && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Undo a mulligan on this hole?')) return;
+                        try {
+                          const holeCount = scoringUnit.mulliganLog[currentHole];
+                          const newRemaining = mulligansRemaining + 1;
+                          await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
+                          if (holeCount <= 1) {
+                            await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
+                          } else {
+                            await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
+                          }
+                          const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
+                          setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
+                          setFeedback(`Mulligan restored! ${newRemaining} remaining`);
+                          setTimeout(() => setFeedback(''), 2000);
+                        } catch (error) {
+                          console.error('Error undoing mulligan:', error);
+                          setFeedback('Error undoing mulligan');
+                          setTimeout(() => setFeedback(''), 2000);
+                        }
+                      }}
+                      className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
+                    >
+                      ↩ Undo mulligan on this hole ({scoringUnit.mulliganLog[currentHole]} used)
+                    </button>
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="text-center text-sm text-gray-400 font-semibold">
+                    🎟️ No mulligans remaining
+                  </div>
+                  {(scoringUnit?.mulliganLog?.[currentHole] || 0) > 0 && (
+                    <button
+                      onClick={async () => {
+                        if (!confirm('Undo a mulligan on this hole?')) return;
+                        try {
+                          const holeCount = scoringUnit.mulliganLog[currentHole];
+                          const newRemaining = mulligansRemaining + 1;
+                          await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
+                          if (holeCount <= 1) {
+                            await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
+                          } else {
+                            await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
+                          }
+                          const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
+                          setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
+                          setFeedback(`Mulligan restored! ${newRemaining} remaining`);
+                          setTimeout(() => setFeedback(''), 2000);
+                        } catch (error) {
+                          console.error('Error undoing mulligan:', error);
+                          setFeedback('Error undoing mulligan');
+                          setTimeout(() => setFeedback(''), 2000);
+                        }
+                      }}
+                      className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
+                    >
+                      ↩ Undo mulligan on this hole ({scoringUnit.mulliganLog[currentHole]} used)
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Mulligan Confirmation */}
+          {usesMulligans && confirmingMulligan && (
+            <div className="mb-4 pb-4 border-b border-gray-200">
+              <p className="text-center text-sm text-gray-700 mb-3">
+                Use a mulligan on Hole {currentHole}?
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={useMulligan}
+                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-semibold transition-all"
+                >
+                  ✓ Confirm Mulligan
+                </button>
+                <button
+                  onClick={() => setConfirmingMulligan(false)}
+                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-semibold transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Score Entry */}
           <div className="mb-4">
             <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Score</h3>
@@ -848,16 +977,12 @@ const handleBack = async () => {
                 </div>
                 <button
                   onClick={() => {
-                    const useStatFlow = isSolo || trackStats;
-                    if (useStatFlow) {
-                      // Continue to fairway/putts flow like other scores
-                      if (currentPar < 4) {
-                        setCurrentFairway(null);
-                      }
-                      setShowCustomScore(false);
-                    } else {
-                      saveHoleData(currentScore, null, null);
-                      setShowCustomScore(false);
+                    // Just close the custom adjuster — the Save & Next button
+                    // below will handle the actual save
+                    setShowCustomScore(false);
+                    setCurrentPutts(null);
+                    if (useStatFlow && currentPar < 4) {
+                      setCurrentFairway(null);
                     }
                   }}
                   className="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold transition-all"
@@ -869,7 +994,7 @@ const handleBack = async () => {
           </div>
 
           {/* Fairway Entry — solo or when tracking stats */}
-          {(isSolo || trackStats) && currentScore && !showCustomScore && currentPar >= 4 && (
+          {useStatFlow && currentScore && !showCustomScore && currentPar >= 4 && (
             <div className="mb-4">
               <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Fairway</h3>
               <div className="grid grid-cols-4 gap-3">
@@ -891,121 +1016,73 @@ const handleBack = async () => {
           )}
 
           {/* Putts Entry — solo or when tracking stats */}
-          {(isSolo || trackStats) && currentScore && !showCustomScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
+          {useStatFlow && currentScore && !showCustomScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
             <div className="mb-4">
               <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Putts</h3>
               <div className="grid grid-cols-4 gap-3">
-                {puttOptions.map(putts => (
-                  <button
-                    key={putts}
-                    onClick={() => handlePuttsSelect(putts)}
-                    className="bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all"
-                  >
-                    {putts}
-                  </button>
-                ))}
+                {puttOptions.map(putts => {
+                  const puttVal = putts === '3+' ? 3 : putts;
+                  return (
+                    <button
+                      key={putts}
+                      onClick={() => handlePuttsSelect(putts)}
+                      className={`${
+                        currentPutts === puttVal ? 'ring-4 ring-blue-400' : ''
+                      } bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                    >
+                      {putts}
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}
-          {/* Mulligan Button — event mode only, when format uses mulligans */}
-          {usesMulligans && mulligansRemaining > 0 && !confirmingMulligan && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <button
-                onClick={() => setConfirmingMulligan(true)}
-                className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 py-3 rounded-xl font-semibold transition-all"
-              >
-                🎟️ Use Mulligan ({mulligansRemaining} left)
-              </button>
-              {(scoringUnit?.mulliganLog?.[currentHole] || 0) > 0 && (
-                <button
-                  onClick={async () => {
-                    if (!confirm('Undo a mulligan on this hole?')) return;
-                    try {
-                      const holeCount = scoringUnit.mulliganLog[currentHole];
-                      const newRemaining = mulligansRemaining + 1;
-                      await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
-                      if (holeCount <= 1) {
-                        await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
-                      } else {
-                        await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
-                      }
-                      const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
-                      setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
-                      setFeedback(`Mulligan restored! ${newRemaining} remaining`);
-                      setTimeout(() => setFeedback(''), 2000);
-                    } catch (error) {
-                      console.error('Error undoing mulligan:', error);
-                      setFeedback('Error undoing mulligan');
-                      setTimeout(() => setFeedback(''), 2000);
-                    }
-                  }}
-                  className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
-                >
-                  ↩ Undo mulligan on this hole ({scoringUnit.mulliganLog[currentHole]} used)
-                </button>
-              )}
-            </div>
-          )}
 
-          {/* Mulligan Confirmation */}
-          {usesMulligans && confirmingMulligan && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <p className="text-center text-sm text-gray-700 mb-3">
-                Use a mulligan on Hole {currentHole}?
-              </p>
+          {/* ============================================================
+              SAVE & NEXT / CLEAR CONFIRMATION BAR
+              Shows whenever a score is selected. Prevents accidental
+              double-taps from scoring the wrong hole.
+             ============================================================ */}
+          {currentScore && !showCustomScore && (
+            <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+              <div className="text-center mb-3">
+                <div className="text-sm text-gray-600">
+                  Hole {currentHole} — Selected:
+                </div>
+                <div className="text-2xl font-bold text-gray-900">
+                  {currentScore} ({currentScore < currentPar ? currentScore - currentPar : currentScore === currentPar ? 'E' : '+' + (currentScore - currentPar)})
+                  {useStatFlow && currentFairway && ` · ${currentFairway === 'hit' ? 'FW' : currentFairway.charAt(0).toUpperCase() + currentFairway.slice(1)}`}
+                  {useStatFlow && currentPutts !== null && ` · ${currentPutts}P`}
+                </div>
+                {!isReadyToSave && useStatFlow && (
+                  <div className="text-xs text-amber-600 mt-1">
+                    {currentPar >= 4 && !currentFairway ? 'Select fairway →' : 'Select putts →'}
+                  </div>
+                )}
+              </div>
               <div className="flex gap-3">
                 <button
-                  onClick={useMulligan}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-semibold transition-all"
+                  onClick={handleConfirmAndNext}
+                  disabled={!isReadyToSave}
+                  className={`flex-1 py-3 rounded-xl font-semibold text-lg transition-all ${
+                    isReadyToSave
+                      ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg'
+                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                  }`}
                 >
-                  ✓ Confirm Mulligan
+                  ✓ Save & Next
                 </button>
                 <button
-                  onClick={() => setConfirmingMulligan(false)}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-semibold transition-all"
+                  onClick={handleClearScore}
+                  className="px-5 py-3 rounded-xl font-semibold bg-gray-200 hover:bg-gray-300 text-gray-700 transition-all"
                 >
-                  Cancel
+                  Clear
                 </button>
               </div>
             </div>
           )}
 
-          {/* No mulligans left indicator */}
-          {usesMulligans && mulligansRemaining === 0 && (
-            <div className="mt-4 pt-4 border-t border-gray-200">
-              <div className="text-center text-sm text-gray-400 font-semibold">
-                🎟️ No mulligans remaining
-              </div>
-              {(scoringUnit?.mulliganLog?.[currentHole] || 0) > 0 && (
-                <button
-                  onClick={async () => {
-                    if (!confirm('Undo a mulligan on this hole?')) return;
-                    try {
-                      const holeCount = scoringUnit.mulliganLog[currentHole];
-                      const newRemaining = mulligansRemaining + 1;
-                      await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
-                      if (holeCount <= 1) {
-                        await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
-                      } else {
-                        await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
-                      }
-                      const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
-                      setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
-                      setFeedback(`Mulligan restored! ${newRemaining} remaining`);
-                      setTimeout(() => setFeedback(''), 2000);
-                    } catch (error) {
-                      console.error('Error undoing mulligan:', error);
-                      setFeedback('Error undoing mulligan');
-                      setTimeout(() => setFeedback(''), 2000);
-                    }
-                  }}
-                  className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
-                >
-                  ↩ Undo mulligan on this hole ({scoringUnit.mulliganLog[currentHole]} used)
-                </button>
-              )}
-            </div>
-          )}
+          {/* Mulligans are now shown above the score entry */}
         </div>
 
         {/* Notes — solo only */}

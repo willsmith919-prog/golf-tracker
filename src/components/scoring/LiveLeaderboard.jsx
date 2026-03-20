@@ -25,6 +25,8 @@ export default function LiveLeaderboard({
   setView
 }) {
   const [expandedEntry, setExpandedEntry] = useState(null);
+  const [throughHole, setThroughHole] = useState(null); // null = show all (default live view)
+  const [showAllHoles, setShowAllHoles] = useState(false); // expands the full hole picker
 
   const meta = currentEvent?.meta || {};
   const players = currentEvent?.players || {};
@@ -224,6 +226,71 @@ export default function LiveLeaderboard({
     });
   }
 
+  // ==================== DETECT CURRENT USER'S PROGRESS ====================
+  // Find how many holes the current user (or their team) has completed.
+  // Used to offer a smart "Through Hole X" shortcut.
+  const myEntry = leaderboardData.find(e => e.isMyEntry);
+  const myHolesPlayed = myEntry?.holesPlayed || 0;
+  // The last hole the user has completed in the hole order
+  const myThroughHole = myHolesPlayed > 0 && myHolesPlayed <= holeOrder.length
+    ? holeOrder[myHolesPlayed - 1]
+    : null;
+
+  // ==================== "THROUGH HOLE X" FILTER ====================
+  // When throughHole is set, recalculate each entry's scores using only
+  // holes up to that point in the hole order. This lets users compare
+  // how everyone stood at the same point in the round.
+  //
+  // Example: Team A finished all 18, Team B is on hole 6. Setting
+  // throughHole to 6 shows both teams' scores through hole 6 only.
+
+  if (throughHole !== null) {
+    // Which holes are included? Everything in holeOrder up to and including throughHole
+    const throughIndex = holeOrder.indexOf(throughHole);
+    const includedHoles = throughIndex >= 0 ? holeOrder.slice(0, throughIndex + 1) : holeOrder;
+
+    leaderboardData = leaderboardData.map(entry => {
+      let filteredScore = 0;
+      let filteredPar = 0;
+      let filteredHolesPlayed = 0;
+      let filteredNetTotal = 0;
+      let filteredStableford = 0;
+
+      for (const holeNum of includedHoles) {
+        const holeScore = entry.scores[holeNum] || entry.holes[holeNum]?.score;
+        if (holeScore) {
+          filteredHolesPlayed++;
+          filteredScore += holeScore;
+          const par = coursePars[holeNum - 1] || 0;
+          filteredPar += par;
+
+          if (handicapEnabled) {
+            filteredNetTotal += getNetScore(holeScore, holeNum, entry.strokeHoles);
+          }
+
+          if (meta.scoringMethod === 'stableford') {
+            const diff = holeScore - par;
+            if (diff <= -3) filteredStableford += 5;
+            else if (diff === -2) filteredStableford += 4;
+            else if (diff === -1) filteredStableford += 3;
+            else if (diff === 0) filteredStableford += 2;
+            else if (diff === 1) filteredStableford += 1;
+          }
+        }
+      }
+
+      return {
+        ...entry,
+        totalScore: filteredScore,
+        toPar: filteredScore - filteredPar,
+        holesPlayed: filteredHolesPlayed,
+        netTotal: filteredNetTotal,
+        netToPar: filteredNetTotal - filteredPar,
+        stablefordPoints: filteredStableford
+      };
+    });
+  }
+
   // ==================== SORTING ====================
   const primarySort = display.primarySort || 'gross';
 
@@ -287,7 +354,8 @@ export default function LiveLeaderboard({
   };
 
   const getProgressPercent = (holesPlayed) => {
-    return Math.round((holesPlayed / numHoles) * 100);
+    const total = throughHole !== null ? (holeOrder.indexOf(throughHole) + 1) : numHoles;
+    return Math.round((holesPlayed / total) * 100);
   };
 
   // ==================== EXPANDED DETAIL ====================
@@ -447,6 +515,79 @@ export default function LiveLeaderboard({
         </div>
       </div>
 
+      {/* "Through Hole" Filter — smart default based on user's progress */}
+      <div className="mb-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <span className="text-xs font-semibold text-gray-500">Compare:</span>
+
+          {/* All button — always shown */}
+          <button
+            onClick={() => { setThroughHole(null); setShowAllHoles(false); }}
+            className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors ${
+              throughHole === null
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            All Holes
+          </button>
+
+          {/* Smart "Through Hole X" — based on user's current progress */}
+          {myThroughHole !== null && myHolesPlayed < numHoles && (
+            <button
+              onClick={() => { setThroughHole(myThroughHole); setShowAllHoles(false); }}
+              className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors ${
+                throughHole === myThroughHole
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
+              }`}
+            >
+              Thru {myHolesPlayed} ({myThroughHole})
+            </button>
+          )}
+
+          {/* Expand/collapse for custom hole selection */}
+          <button
+            onClick={() => setShowAllHoles(!showAllHoles)}
+            className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors ${
+              showAllHoles
+                ? 'bg-gray-300 text-gray-700'
+                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+            }`}
+          >
+            {showAllHoles ? 'Hide ▲' : 'By Hole ▼'}
+          </button>
+        </div>
+
+        {/* Expanded hole picker — all holes in order */}
+        {showAllHoles && (
+          <div className="flex gap-1.5 overflow-x-auto pb-1 mt-2">
+            {holeOrder.map((h) => (
+              <button
+                key={h}
+                onClick={() => setThroughHole(throughHole === h ? null : h)}
+                className={`flex-shrink-0 w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
+                  throughHole === h
+                    ? 'bg-blue-600 text-white'
+                    : h === myThroughHole
+                    ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {h}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Active filter indicator */}
+        {throughHole !== null && (
+          <div className="text-xs text-blue-600 mt-1.5 font-medium">
+            Showing scores through Hole {throughHole} ({holeOrder.indexOf(throughHole) + 1} of {numHoles} holes)
+          </div>
+        )}
+      </div>
+
       {/* Column headers */}
       <div className="grid grid-cols-[32px_1fr_60px_60px_48px] items-center px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
         <div>#</div>
@@ -569,7 +710,9 @@ export default function LiveLeaderboard({
 
                 {/* Thru */}
                 <div className="text-center text-sm text-gray-600">
-                  {entry.holesPlayed === 0
+                  {throughHole !== null
+                    ? (entry.holesPlayed === 0 ? '-' : entry.holesPlayed)
+                    : entry.holesPlayed === 0
                     ? '-'
                     : entry.holesPlayed === numHoles
                     ? 'F'

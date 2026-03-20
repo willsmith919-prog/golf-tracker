@@ -94,22 +94,28 @@ export default function EventLobbyView({
   const startEvent = async () => {
     if (!isHost) return;
 
-    if (players.length < 2) {
-      setFeedback('Need at least 2 players to start');
-      setTimeout(() => setFeedback(''), 3000);
-      return;
-    }
-
-    // For team formats, validate teams are set up
+    // For team formats, just need at least one team with members ready to play.
+    // Other players can join and be assigned to teams after the event starts.
     if (isTeamFormat) {
       const teamCount = Object.keys(teams).length;
       if (teamCount === 0) {
-        setFeedback('Create teams before starting the event (use the Teams tab)');
+        setFeedback('Create at least one team before starting (use the Teams tab)');
         setTimeout(() => setFeedback(''), 3000);
         return;
       }
-      if (!allPlayersAssigned()) {
-        setFeedback('All players must be assigned to a team before starting');
+      // Check that at least one team has members assigned
+      const teamsWithMembers = Object.values(teams).filter(
+        t => t.members && Object.keys(t.members).length > 0
+      );
+      if (teamsWithMembers.length === 0) {
+        setFeedback('Assign players to at least one team before starting');
+        setTimeout(() => setFeedback(''), 3000);
+        return;
+      }
+    } else {
+      // Individual format: need at least 2 players
+      if (players.length < 2) {
+        setFeedback('Need at least 2 players to start');
         setTimeout(() => setFeedback(''), 3000);
         return;
       }
@@ -152,8 +158,9 @@ export default function EventLobbyView({
     }
     setView('scoring');
   };
-  // Show tabs only when event is active or completed (leaderboard has data to show)
-  const showTabs = eventStatus === 'active' || eventStatus === 'completed';
+  // Show tabs for all event statuses — leaderboard may have early scores,
+  // and the teams/players tabs should always be reachable
+  const showTabs = eventStatus === 'open' || eventStatus === 'active' || eventStatus === 'completed';
 
   // For open events with team format, show a teams tab
   const showTeamsTab = isTeamFormat && (eventStatus === 'open' || eventStatus === 'active' || eventStatus === 'completed');
@@ -170,7 +177,7 @@ export default function EventLobbyView({
           <div className="flex items-center justify-between mb-2">
             <h1 className="text-3xl font-bold text-gray-900">{currentEvent.meta.name}</h1>
             <div className="flex items-center gap-2">
-              {isHost && eventStatus === 'open' && (
+              {isHost && (eventStatus === 'open' || eventStatus === 'active') && (
                 <button
                   onClick={() => setView('edit-event')}
                   className="px-3 py-1 rounded-full text-xs font-semibold bg-gray-200 text-gray-700 hover:bg-gray-300 transition-all"
@@ -315,14 +322,14 @@ export default function EventLobbyView({
         {/* ==================== TEAMS TAB ==================== */}
         {activeTab === 'teams' && (
           <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-            {isHost && eventStatus === 'open' ? (
+            {isHost && (eventStatus === 'open' || eventStatus === 'active') ? (
               <TeamManager
                 currentEvent={currentEvent}
                 currentUser={currentUser}
                 setFeedback={setFeedback}
               />
             ) : (
-              // Non-hosts (or when event is active) see a read-only team list
+              // Non-hosts (or when event is completed) see a read-only team list
               <div>
                 <h2 className="text-lg font-bold text-gray-900 mb-4">Teams</h2>
                 {Object.entries(teams).length === 0 ? (
@@ -495,8 +502,8 @@ export default function EventLobbyView({
               )}
             </div>
 
-            {/* Host Controls — only shown to the host when event is still open */}
-            {isHost && eventStatus === 'open' && (
+            {/* Host Controls — shown when event is open or active */}
+            {isHost && (eventStatus === 'open' || eventStatus === 'active') && (
               <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
                 <h2 className="text-lg font-bold text-gray-900 mb-3">Host Controls</h2>
 
@@ -600,29 +607,42 @@ export default function EventLobbyView({
                   </div>
                 )}
 
-                <p className="text-sm text-gray-600 mb-4">
-                  {isTeamFormat
-                    ? players.length < 2
-                      ? 'Need at least 2 players to start.'
-                      : !allPlayersAssigned()
-                      ? 'Assign all players to teams (use the Teams tab), then start.'
-                      : 'All players are assigned to teams. Ready to start!'
-                    : players.length < 2
-                    ? 'Once all players have joined, start the event to begin scoring. (Need at least 2 players)'
-                    : 'Once all players have joined, start the event to begin scoring.'
-                  }
-                </p>
-                <button
-                  onClick={startEvent}
-                  disabled={players.length < 2 || (isTeamFormat && !allPlayersAssigned())}
-                  className={`w-full py-4 rounded-xl font-semibold text-lg shadow-lg transition-all ${
-                    players.length >= 2 && (!isTeamFormat || allPlayersAssigned())
-                      ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  Start Event
-                </button>
+                {/* Start Event — only when still open */}
+                {eventStatus === 'open' && (() => {
+                  // Determine if we're ready to start
+                  const teamsWithMembers = Object.values(teams).filter(
+                    t => t.members && Object.keys(t.members).length > 0
+                  ).length;
+                  const canStart = isTeamFormat
+                    ? teamsWithMembers > 0
+                    : players.length >= 2;
+
+                  return (
+                    <>
+                      <p className="text-sm text-gray-600 mb-4">
+                        {isTeamFormat
+                          ? teamsWithMembers === 0
+                            ? 'Create a team and assign players to get started (use the Teams tab).'
+                            : `${teamsWithMembers} team${teamsWithMembers !== 1 ? 's' : ''} ready. You can start now — more players can join and be assigned to teams later.`
+                          : players.length < 2
+                          ? 'Need at least 2 players to start.'
+                          : 'Ready to start! More players can still join after the event begins.'
+                        }
+                      </p>
+                      <button
+                        onClick={startEvent}
+                        disabled={!canStart}
+                        className={`w-full py-4 rounded-xl font-semibold text-lg shadow-lg transition-all ${
+                          canStart
+                            ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white'
+                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                        }`}
+                      >
+                        Start Event
+                      </button>
+                    </>
+                  );
+                })()}
               </div>
             )}
 
