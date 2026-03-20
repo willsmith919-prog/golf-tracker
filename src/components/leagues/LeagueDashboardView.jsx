@@ -27,7 +27,7 @@ export default function LeagueDashboardView({
   const activeSeason = Object.values(currentLeague.seasons || {}).find(s => s.status === 'active');
 
   // Split events into upcoming, live, and past
-  const upcomingEvents = leagueEvents.filter(e => e.meta.status === 'open' || e.meta.status === 'draft');
+  const upcomingEvents = leagueEvents.filter(e => e.meta.status === 'open');
   const liveEvents = leagueEvents.filter(e => e.meta.status === 'active');
   const pastEvents = leagueEvents
     .filter(e => e.meta.status === 'completed')

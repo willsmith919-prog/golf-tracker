@@ -491,6 +491,7 @@ function App() {
       <HomeView
         currentUser={currentUser}
         userProfile={userProfile}
+        setUserProfile={setUserProfile}
         userLeagues={userLeagues}
         userEvents={userEvents}
         setUserEvents={setUserEvents}

@@ -23,9 +23,21 @@ export default function EventForm({
   submitLabel = 'Submit',
   onSubmit,
   feedback,
-  preFillEvent = null
+  preFillEvent = null,
+  leaguePointsConfig = null
 }) {
   const mergedData = { ...initialData, ...(preFillEvent || {}) };
+
+  // Build the initial league points config from the league's defaults (if creating from a league)
+  // or from the existing event data (if editing). Preserves teamPointDistribution if already set.
+  const initialLeaguePoints = leaguePointsConfig
+    ? {
+        enabled: true,
+        positions: { ...(leaguePointsConfig.positions || {}) },
+        participationPoints: leaguePointsConfig.participationPoints ?? 5,
+        teamPointDistribution: leaguePointsConfig.teamPointDistribution || 'full'
+      }
+    : null;
   
   const [formData, setFormData] = useState({
       name: mergedData.name || '',
@@ -54,7 +66,8 @@ export default function EventForm({
         showGross: true, showNet: true, primarySort: 'net',
         showRelativeToPar: true, showHoleByHole: true, showStrokeHoles: true,
         showMulligansRemaining: false, showMatchStatus: false, showRoundRobinGrid: false
-      }
+      },
+      leaguePoints: initialLeaguePoints
     });
 
   const selectedCourseId = formData.selectedCourseId || '';
@@ -282,6 +295,133 @@ export default function EventForm({
               />
             )}
           </div>
+        </div>
+      )}
+
+      {/* ===== LEAGUE POINTS — only shown when creating from a league ===== */}
+      {formData.leaguePoints && (
+        <div className="border-2 border-purple-200 bg-purple-50 rounded-xl p-5">
+          <label className="block text-sm font-semibold text-gray-700 mb-1">🏆 League Points</label>
+          <p className="text-sm text-gray-500 mb-4">
+            Points awarded to players based on finishing position. Pre-filled from league defaults — adjust for this event if needed.
+          </p>
+
+          {/* Point Positions */}
+          <div className="bg-white rounded-lg p-4 mb-4">
+            <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Points by Finishing Position</div>
+            <div className="space-y-2">
+              {Object.keys(formData.leaguePoints.positions)
+                .sort((a, b) => Number(a) - Number(b))
+                .map((place) => {
+                  const n = Number(place);
+                  const s = ['th', 'st', 'nd', 'rd'];
+                  const v = n % 100;
+                  const ord = n + (s[(v - 20) % 10] || s[v] || s[0]);
+                  return (
+                    <div key={place} className="flex items-center gap-3">
+                      <div className="w-16 text-sm font-medium text-gray-600">{ord}</div>
+                      <input
+                        type="number"
+                        min="0"
+                        value={formData.leaguePoints.positions[place]}
+                        onChange={(e) => {
+                          const updated = { ...formData.leaguePoints.positions, [place]: parseInt(e.target.value) || 0 };
+                          setFormData({ ...formData, leaguePoints: { ...formData.leaguePoints, positions: updated } });
+                        }}
+                        className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-center"
+                      />
+                      <span className="text-xs text-gray-400">pts</span>
+                    </div>
+                  );
+                })}
+            </div>
+            <div className="flex items-center gap-3 mt-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const positions = formData.leaguePoints.positions;
+                  const nextPlace = Object.keys(positions).length + 1;
+                  const updated = { ...positions, [nextPlace]: 0 };
+                  setFormData({ ...formData, leaguePoints: { ...formData.leaguePoints, positions: updated } });
+                }}
+                className="text-purple-600 hover:text-purple-700 text-sm font-semibold"
+              >
+                + Add Position
+              </button>
+              {Object.keys(formData.leaguePoints.positions).length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const positions = { ...formData.leaguePoints.positions };
+                    delete positions[Object.keys(positions).length];
+                    setFormData({ ...formData, leaguePoints: { ...formData.leaguePoints, positions } });
+                  }}
+                  className="text-red-500 hover:text-red-600 text-sm font-semibold"
+                >
+                  − Remove Last
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Participation Points */}
+          <div className="bg-white rounded-lg p-4 mb-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-sm font-medium text-gray-700">Participation Points</div>
+                <div className="text-xs text-gray-500">Flat points every player earns just for playing</div>
+              </div>
+              <input
+                type="number"
+                min="0"
+                value={formData.leaguePoints.participationPoints}
+                onChange={(e) => setFormData({
+                  ...formData,
+                  leaguePoints: { ...formData.leaguePoints, participationPoints: parseInt(e.target.value) || 0 }
+                })}
+                className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-center"
+              />
+            </div>
+          </div>
+
+          {/* Team Point Distribution — only shown when format has teamSize > 1 */}
+          {formData.teamSize > 1 && (
+            <div className="bg-white rounded-lg p-4">
+              <div className="text-sm font-medium text-gray-700 mb-1">Team Point Distribution</div>
+              <p className="text-xs text-gray-500 mb-3">
+                When a team finishes in a given place, how are the league points distributed to individual members?
+              </p>
+              <div className="flex gap-3">
+                {[
+                  { value: 'full', label: 'Full Points Each', desc: `Each member gets all ${Object.values(formData.leaguePoints.positions)[0] || 0} pts for 1st` },
+                  { value: 'split', label: 'Split Evenly', desc: `Each member gets ${Math.round((Object.values(formData.leaguePoints.positions)[0] || 0) / (formData.teamSize || 2) * 10) / 10} pts for 1st` }
+                ].map(option => (
+                  <label
+                    key={option.value}
+                    className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-colors text-center ${
+                      formData.leaguePoints.teamPointDistribution === option.value
+                        ? 'border-purple-500 bg-purple-50 font-semibold'
+                        : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="teamPointDist"
+                      value={option.value}
+                      checked={formData.leaguePoints.teamPointDistribution === option.value}
+                      onChange={() => setFormData({
+                        ...formData,
+                        leaguePoints: { ...formData.leaguePoints, teamPointDistribution: option.value }
+                      })}
+                      className="sr-only"
+                    />
+                    <div className="text-sm">{option.label}</div>
+                    <div className="text-xs text-gray-500 mt-1">{option.desc}</div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -1,11 +1,13 @@
 import { signOut } from 'firebase/auth';
+import { ref, get, set, update } from 'firebase/database';
 import { lookupCode } from '../../utils/codes';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { auth, database } from '../../firebase';
 
 export default function HomeView({
   currentUser,
   userProfile,
+  setUserProfile,
   userLeagues,
   userEvents = [],
   setUserEvents,
@@ -19,6 +21,72 @@ export default function HomeView({
   setCurrentLeague,
   setCurrentEvent
 }) {
+  // ==================== EDIT PROFILE STATE ====================
+  // Controls whether the inline profile editor is open, and holds
+  // the form values while the user is editing.
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [editDisplayName, setEditDisplayName] = useState('');
+  const [editHandicap, setEditHandicap] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState('');
+
+  // When the user opens the editor, pre-fill with current values
+  const openProfileEditor = () => {
+    setEditDisplayName(userProfile?.profile?.displayName || '');
+    setEditHandicap(userProfile?.profile?.handicap != null ? String(userProfile.profile.handicap) : '');
+    setProfileFeedback('');
+    setEditingProfile(true);
+  };
+
+  // Save profile changes to Firebase, then update local state
+  const saveProfile = async () => {
+    const trimmedName = editDisplayName.trim();
+    if (!trimmedName) {
+      setProfileFeedback('Display name cannot be empty.');
+      return;
+    }
+
+    setSavingProfile(true);
+    try {
+      const newHandicap = editHandicap.trim() ? parseFloat(editHandicap) : null;
+
+      // 1. Update the user's profile node in Firebase
+      await update(ref(database, `users/${currentUser.uid}/profile`), {
+        displayName: trimmedName,
+        handicap: newHandicap,
+      });
+
+      // 2. Re-read the full user node so userProfile is fresh everywhere
+      const profileSnapshot = await get(ref(database, `users/${currentUser.uid}`));
+      setUserProfile(profileSnapshot.val());
+
+      // 3. Update displayName in any league memberships this user belongs to.
+      //    League member lists read displayName from leagues/{id}/members/{uid},
+      //    so we need to keep those in sync when the user changes their name.
+      if (userLeagues && userLeagues.length > 0) {
+        const leagueUpdates = userLeagues.map(league =>
+          update(ref(database, `leagues/${league.id}/members/${currentUser.uid}`), {
+            displayName: trimmedName,
+            handicap: newHandicap,
+          })
+        );
+        await Promise.all(leagueUpdates);
+      }
+
+      setProfileFeedback('Profile updated!');
+      setTimeout(() => {
+        setEditingProfile(false);
+        setProfileFeedback('');
+      }, 1200);
+
+    } catch (err) {
+      console.error('Error updating profile:', err);
+      setProfileFeedback('Failed to save. Please try again.');
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
   // Refresh events every time HomeView is shown
   useEffect(() => {
     if (currentUser?.uid && loadUserEvents) {
@@ -90,7 +158,16 @@ export default function HomeView({
           <div>
             <h1 className="text-3xl font-bold text-white" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
             {userProfile && (
-              <p className="text-white/80">Welcome, {userProfile.displayName}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-white/80">Welcome, {userProfile?.profile?.displayName || 'Golfer'}</p>
+                <button
+                  onClick={openProfileEditor}
+                  className="text-white/50 hover:text-white text-xs"
+                  title="Edit profile"
+                >
+                  ✏️
+                </button>
+              </div>
             )}
           </div>
           <button
@@ -103,6 +180,65 @@ export default function HomeView({
             Logout
           </button>
         </div>
+
+        {/* ============================================ */}
+        {/* EDIT PROFILE — inline editor                 */}
+        {/* Opens when the user taps the ✏️ pencil next  */}
+        {/* to their name. Saves displayName & handicap  */}
+        {/* to Firebase and syncs league member records.  */}
+        {/* ============================================ */}
+        {editingProfile && (
+          <div className="mb-6 bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-bold text-gray-900">Edit Profile</h2>
+              <button
+                onClick={() => setEditingProfile(false)}
+                className="text-gray-400 hover:text-gray-600 text-sm"
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Display Name</label>
+                <input
+                  type="text"
+                  value={editDisplayName}
+                  onChange={(e) => setEditDisplayName(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                  placeholder="How you appear to others"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-1">Handicap Index</label>
+                <input
+                  type="number"
+                  step="0.1"
+                  value={editHandicap}
+                  onChange={(e) => setEditHandicap(e.target.value)}
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                  placeholder="e.g. 12.4"
+                />
+              </div>
+
+              {profileFeedback && (
+                <p className={`text-sm ${profileFeedback.includes('updated') ? 'text-green-600' : 'text-red-500'}`}>
+                  {profileFeedback}
+                </p>
+              )}
+
+              <button
+                onClick={saveProfile}
+                disabled={savingProfile}
+                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 rounded-xl font-semibold transition-all"
+              >
+                {savingProfile ? 'Saving...' : 'Save Changes'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ADMIN SECTION */}
         {isAdmin() && (

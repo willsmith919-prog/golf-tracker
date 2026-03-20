@@ -64,8 +64,15 @@ export default function JoinLeagueConfirm({
   const handleJoin = async () => {
     setJoining(true);
     try {
-      // Add user to league members
+      // ============================================================
+      // FIX: Include displayName and handicap when adding user to
+      // league members — matches the pattern used in JoinEventConfirm.
+      // Without these, the members list shows blank lines because
+      // there's no name to display.
+      // ============================================================
       await set(ref(database, `leagues/${leagueId}/members/${currentUser.uid}`), {
+        displayName: userProfile?.profile?.displayName || currentUser.email || 'Unknown',
+        handicap: userProfile?.profile?.handicap || null,
         role: 'member',
         joinedAt: Date.now(),
       });

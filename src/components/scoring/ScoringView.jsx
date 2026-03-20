@@ -192,7 +192,39 @@ export default function ScoringView({
   const [notes, setNotes] = useState('');
   const [confirmingMulligan, setConfirmingMulligan] = useState(false);
   const [showCustomScore, setShowCustomScore] = useState(false);
-  const [trackStats, setTrackStats] = useState(false);
+
+  // ============================================================
+  // FIX #3: trackStats is now initialized from the player's saved
+  // preference in Firebase. When the user toggles it, we write
+  // the new value to Firebase so it survives navigation (e.g.
+  // going to the Live Leaderboard and back).
+  //
+  // For individual event mode: reads/writes events/{id}/players/{uid}/trackStats
+  // For team mode: not shown (team mode doesn't show the toggle)
+  // For solo mode: always tracks stats, this toggle isn't used
+  // ============================================================
+  const savedTrackStats = !isSolo && !isTeamFormat
+    ? (currentEvent?.players?.[selectedTeam]?.trackStats || false)
+    : false;
+  const [trackStats, setTrackStats] = useState(savedTrackStats);
+
+  // Handler for the Track Stats toggle — saves preference to Firebase
+  const handleTrackStatsToggle = async () => {
+    const newValue = !trackStats;
+    setTrackStats(newValue);
+
+    // Persist to Firebase so it survives navigation
+    if (!isSolo && !isTeamFormat && currentEvent?.id && selectedTeam) {
+      try {
+        await set(
+          ref(database, `events/${currentEvent.id}/players/${selectedTeam}/trackStats`),
+          newValue
+        );
+      } catch (err) {
+        console.error('Error saving trackStats preference:', err);
+      }
+    }
+  };
 
   // ==================== HOLE DATA ACCESS ====================
 
@@ -650,7 +682,7 @@ const handleBack = async () => {
             </>
           )}
 
-          <div className={`grid ${(isSolo || trackStats) ? 'grid-cols-2 md:grid-cols-4' : usesMulligans ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
+          <div className={`grid ${(isSolo || trackStats) ? 'grid-cols-2 md:grid-cols-5' : usesMulligans ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
             <div className="text-center">
               <div className="text-sm text-gray-600">Score</div>
               <div className="text-3xl font-bold text-gray-900">{stats.totalScore || 0}</div>
@@ -685,6 +717,22 @@ const handleBack = async () => {
                       : stats.totalPutts}
                   </div>
                 </div>
+                {/* ============================================================
+                    FIX #5: GIR stat added to the stats header.
+                    Shows greens hit as a fraction (e.g. 3/8) with a percentage.
+                    Matches the existing Fairways display pattern.
+                   ============================================================ */}
+                <div className="text-center">
+                  <div className="text-sm text-gray-600">GIR</div>
+                  <div className="text-3xl font-bold text-gray-900">
+                    {stats.greensInRegulation}/{stats.holesPlayed}
+                  </div>
+                  <div className="text-xs text-gray-500">
+                    {stats.holesPlayed > 0
+                      ? `${((stats.greensInRegulation / stats.holesPlayed) * 100).toFixed(0)}%`
+                      : '0%'}
+                  </div>
+                </div>
                 <div className="text-center">
                   <div className="text-sm text-gray-600">Fairways</div>
                   <div className="text-3xl font-bold text-gray-900">
@@ -708,7 +756,7 @@ const handleBack = async () => {
                 <div className="text-xs text-gray-500">Fairways, putts, GIR</div>
               </div>
               <button
-                onClick={() => setTrackStats(!trackStats)}
+                onClick={handleTrackStatsToggle}
                 className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
                   trackStats ? 'bg-green-500' : 'bg-gray-300'
                 }`}

@@ -54,7 +54,8 @@ export default function EditEventView({
         time: formData.time || null,
         numHoles: eventNumHoles,
         startingHole: eventStartingHole,
-        endingHole: eventEndingHole
+        endingHole: eventEndingHole,
+        leaguePoints: formData.leaguePoints || null
       };
 
       await update(ref(database, `events/${currentEvent.id}/meta`), updatedMeta);
@@ -97,6 +98,17 @@ export default function EditEventView({
             submitLabel="Save Changes"
             onSubmit={handleSave}
             feedback={feedback}
+            leaguePointsConfig={
+              // If leaguePoints already exists on this event, pass it through
+              // so EventForm pre-fills the section for editing.
+              // If it's a league event but has no points yet, provide a
+              // starter config so the commissioner can set it up.
+              meta.leaguePoints
+                ? meta.leaguePoints
+                : meta.leagueId
+                  ? { positions: { 1: 25, 2: 20, 3: 16, 4: 13, 5: 10, 6: 8, 7: 6, 8: 5, 9: 4, 10: 3, 11: 2, 12: 1 }, participationPoints: 5 }
+                  : null
+            }
           />
         </div>
       </div>

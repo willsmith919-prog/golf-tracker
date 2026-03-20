@@ -71,11 +71,12 @@ const eventCode = await createCode('event', eventId);
           startingHole: eventStartingHole,
           endingHole: eventEndingHole,
           createdBy: currentUser.uid,
-          status: creatingEventForLeague ? "draft" : "open",
+          status: "open",
           leagueId: creatingEventForLeague?.leagueId || null,
           seasonId: creatingEventForLeague?.seasonId || null,
           createdAt: Date.now(),
-          eventCode: eventCode
+          eventCode: eventCode,
+          leaguePoints: formData.leaguePoints || null
         },
         players: {
           [currentUser.uid]: {
@@ -109,6 +110,7 @@ const eventCode = await createCode('event', eventId);
         setFeedback('');
         
         if (creatingEventForLeague) {
+          // Keep league data fresh for when they go back to the dashboard later
           const leagueSnapshot = await get(ref(database, `leagues/${creatingEventForLeague.leagueId}`));
           const updatedLeague = leagueSnapshot.val();
           setCurrentLeague({ 
@@ -117,11 +119,13 @@ const eventCode = await createCode('event', eventId);
             userRole: currentLeague.userRole 
           });
           setCreatingEventForLeague(null);
-          setView('league-dashboard');
-        } else {
-          setCurrentEvent({ id: eventId, ...eventData });
-          setView('event-lobby');
         }
+
+        // Always go to event lobby after creation — same flow for
+        // standalone and league events so the host can immediately
+        // set up teams, share the code, etc.
+        setCurrentEvent({ id: eventId, ...eventData });
+        setView('event-lobby');
       }, 1500);
 
     } catch (error) {
@@ -163,6 +167,15 @@ const eventCode = await createCode('event', eventId);
             onSubmit={handleCreate}
             feedback={feedback}
             preFillEvent={preFillEvent}
+            leaguePointsConfig={
+              creatingEventForLeague
+                ? (() => {
+                    // Pull the default points config from the active season
+                    const season = currentLeague?.seasons?.[creatingEventForLeague.seasonId];
+                    return season?.defaultPointsConfig || null;
+                  })()
+                : null
+            }
           />
         </div>
       </div>
