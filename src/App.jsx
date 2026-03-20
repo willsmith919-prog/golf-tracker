@@ -10,7 +10,6 @@ import LoginView from './components/auth/LoginView.jsx';
 import SignupView from './components/auth/SignupView.jsx';
 import HomeView from './components/home/HomeView.jsx';
 import CreateLeagueView from './components/leagues/CreateLeagueView.jsx';
-import JoinLeagueView from './components/leagues/JoinLeagueView.jsx';
 import JoinLeagueConfirmView from './components/leagues/JoinLeagueConfirm.jsx';
 import LeagueDashboardView from './components/leagues/LeagueDashboardView.jsx';
 import EditLeagueView from './components/leagues/EditLeagueView.jsx';
@@ -521,23 +520,6 @@ function App() {
         setCurrentLeague={setCurrentLeague}
         setUserLeagues={setUserLeagues}
         generateLeagueCode={generateLeagueCode}
-        loadUserLeagues={loadUserLeagues}
-      />
-    );
-  }
-
-  if (view === 'join-league') {
-    return (
-      <JoinLeagueView
-        currentUser={currentUser}
-        userProfile={userProfile}
-        leagueCode={leagueCode}
-        setLeagueCode={setLeagueCode}
-        feedback={feedback}
-        setFeedback={setFeedback}
-        setView={setView}
-        setCurrentLeague={setCurrentLeague}
-        setUserLeagues={setUserLeagues}
         loadUserLeagues={loadUserLeagues}
       />
     );
