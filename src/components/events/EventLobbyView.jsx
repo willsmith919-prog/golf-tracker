@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { database } from '../../firebase';
 import LiveLeaderboard from '../scoring/LiveLeaderboard';
 import TeamManager from './TeamManager';
+import { calculateEventPoints, writeStandingsToFirebase } from '../../utils/leaguePoints';
 
 
 export default function EventLobbyView({
@@ -87,6 +88,98 @@ export default function EventLobbyView({
       }
     }
     return players.every(p => assignedPlayerIds.has(p.uid));
+  };
+
+  // ==================== LEADERBOARD SORTING (for league points) ====================
+  // Builds a sorted leaderboard from event data — same logic as LiveLeaderboard.
+  // Used to determine finishing positions when the host ends a league event.
+  const buildSortedLeaderboard = () => {
+    const meta = currentEvent.meta || {};
+    const evPlayers = currentEvent.players || {};
+    const evTeams = currentEvent.teams || {};
+    const coursePars = meta.coursePars || [];
+    const evTeamSize = meta.teamSize || 1;
+    const isTeam = evTeamSize > 1 && Object.keys(evTeams).length > 0;
+    const evNumHoles = meta.numHoles || 18;
+    const evStartingHole = meta.startingHole || 1;
+
+    // Build hole order
+    const holeOrd = [];
+    for (let i = 0; i < evNumHoles; i++) {
+      holeOrd.push(((evStartingHole - 1 + i) % 18) + 1);
+    }
+
+    let entries = [];
+
+    if (isTeam) {
+      entries = Object.entries(evTeams).map(([teamId, team]) => {
+        const stats = team.stats || {};
+        return {
+          id: teamId,
+          holesPlayed: stats.holesPlayed || 0,
+          toPar: stats.toPar || 0,
+          totalScore: stats.totalScore || 0,
+          stablefordPoints: stats.stablefordPoints || 0,
+          netToPar: stats.netToPar || 0
+        };
+      });
+    } else {
+      entries = Object.entries(evPlayers).map(([uid, player]) => {
+        const stats = player.stats || {};
+        return {
+          id: uid,
+          holesPlayed: stats.holesPlayed || 0,
+          toPar: stats.toPar || 0,
+          totalScore: stats.totalScore || 0,
+          stablefordPoints: stats.stablefordPoints || 0,
+          netToPar: stats.netToPar || 0
+        };
+      });
+    }
+
+    // Sort (same logic as LiveLeaderboard)
+    const primarySort = meta.display?.primarySort || 'gross';
+    const handicapEnabled = meta.handicap?.enabled || false;
+
+    entries.sort((a, b) => {
+      if (a.holesPlayed === 0 && b.holesPlayed > 0) return 1;
+      if (b.holesPlayed === 0 && a.holesPlayed > 0) return -1;
+      if (a.holesPlayed === 0 && b.holesPlayed === 0) return 0;
+
+      if (meta.scoringMethod === 'stableford') {
+        return b.stablefordPoints - a.stablefordPoints;
+      }
+      if (primarySort === 'net' && handicapEnabled) {
+        if (a.netToPar !== b.netToPar) return a.netToPar - b.netToPar;
+        return a.toPar - b.toPar;
+      }
+      if (a.toPar !== b.toPar) return a.toPar - b.toPar;
+      return a.totalScore - b.totalScore;
+    });
+
+    // Assign positions (handling ties)
+    let pos = 1;
+    entries.forEach((entry, index) => {
+      if (index === 0 || entry.holesPlayed === 0) {
+        entry.position = entry.holesPlayed === 0 ? '-' : pos;
+      } else {
+        const prev = entries[index - 1];
+        const sameScore = primarySort === 'net' && handicapEnabled
+          ? entry.netToPar === prev.netToPar
+          : meta.scoringMethod === 'stableford'
+            ? entry.stablefordPoints === prev.stablefordPoints
+            : entry.toPar === prev.toPar;
+
+        if (sameScore && prev.holesPlayed > 0) {
+          entry.position = prev.position;
+        } else {
+          entry.position = index + 1;
+        }
+      }
+      pos = (typeof entry.position === 'number' ? entry.position : pos) + 1;
+    });
+
+    return entries;
   };
 
   // ==================== START EVENT ====================
@@ -308,8 +401,28 @@ export default function EventLobbyView({
                   await update(ref(database, `events/${currentEvent.id}/meta`), {
                     status: 'completed'
                   });
-                  setFeedback('Event ended!');
-                  setTimeout(() => setFeedback(''), 2000);
+
+                  // Calculate and write league standings if this is a league event with points
+                  const lpMeta = currentEvent.meta || {};
+                  if (lpMeta.leaguePoints && lpMeta.leagueId && lpMeta.seasonId) {
+                    try {
+                      const leaderboard = buildSortedLeaderboard();
+                      const playerPoints = calculateEventPoints(
+                        leaderboard,
+                        lpMeta.leaguePoints,
+                        currentEvent.teams || {},
+                        lpMeta.teamSize || 1
+                      );
+                      await writeStandingsToFirebase(lpMeta.leagueId, lpMeta.seasonId, currentEvent.id, playerPoints);
+                      setFeedback('Event ended! League standings updated.');
+                    } catch (err) {
+                      console.error('Error updating standings:', err);
+                      setFeedback('Event ended! (Error updating league standings)');
+                    }
+                  } else {
+                    setFeedback('Event ended!');
+                  }
+                  setTimeout(() => setFeedback(''), 3000);
                 }}
                 className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-semibold transition-all mb-6"
               >
@@ -657,8 +770,27 @@ export default function EventLobbyView({
                         await update(ref(database, `events/${currentEvent.id}/meta`), {
                           status: 'completed'
                         });
-                        setFeedback('Event ended');
-                        setTimeout(() => setFeedback(''), 2000);
+
+                        const lpMeta = currentEvent.meta || {};
+                        if (lpMeta.leaguePoints && lpMeta.leagueId && lpMeta.seasonId) {
+                          try {
+                            const leaderboard = buildSortedLeaderboard();
+                            const playerPoints = calculateEventPoints(
+                              leaderboard,
+                              lpMeta.leaguePoints,
+                              currentEvent.teams || {},
+                              lpMeta.teamSize || 1
+                            );
+                            await writeStandingsToFirebase(lpMeta.leagueId, lpMeta.seasonId, currentEvent.id, playerPoints);
+                            setFeedback('Event ended! League standings updated.');
+                          } catch (err) {
+                            console.error('Error updating standings:', err);
+                            setFeedback('Event ended! (Error updating league standings)');
+                          }
+                        } else {
+                          setFeedback('Event ended');
+                        }
+                        setTimeout(() => setFeedback(''), 3000);
                       }}
                       className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-semibold transition-all"
                     >

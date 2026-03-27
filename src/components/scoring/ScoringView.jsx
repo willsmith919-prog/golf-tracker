@@ -193,6 +193,7 @@ export default function ScoringView({
   const [notes, setNotes] = useState('');
   const [confirmingMulligan, setConfirmingMulligan] = useState(false);
   const [showCustomScore, setShowCustomScore] = useState(false);
+  const [showRoundComplete, setShowRoundComplete] = useState(false);
 
   // ============================================================
   // FIX #3: trackStats is now initialized from the player's saved
@@ -489,7 +490,7 @@ export default function ScoringView({
           updatedStats
         );
 
-        setTimeout(async () => {
+       setTimeout(async () => {
           const next = getNextHole(currentHole);
           if (next) {
             await set(
@@ -500,6 +501,11 @@ export default function ScoringView({
           const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
           const updatedEvent = eventSnapshot.val();
           setCurrentEvent({ id: currentEvent.id, ...updatedEvent });
+
+          // If that was the last hole, show the "Round Complete" modal
+          if (!next) {
+            setShowRoundComplete(true);
+          }
         }, 500);
       }
     } catch (error) {
@@ -676,7 +682,47 @@ const handleBack = async () => {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-2 md:p-4">
       <div className="max-w-2xl mx-auto">
-
+        {/* ============================================================
+            ROUND COMPLETE MODAL — shown when last hole is saved in event mode
+           ============================================================ */}
+        {showRoundComplete && !isSolo && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
+            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
+              <div className="text-5xl mb-4">🏌️</div>
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">Round Complete!</h2>
+              <p className="text-gray-600 mb-6">
+                All {numHoles} holes scored. Your scores have been saved.
+              </p>
+              <div className="space-y-3">
+                <button
+                  onClick={async () => {
+                    // Clear scoring lock if team format, then go back to lobby
+                    if (isTeamFormat) {
+                      try {
+                        await remove(ref(database, `${scoringBasePath}/scoringLockedBy`));
+                      } catch (err) {
+                        console.error('Error clearing scoring lock:', err);
+                      }
+                    }
+                    setSelectedTeam(null);
+                    setShowRoundComplete(false);
+                    setView('event-lobby');
+                  }}
+                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-4 rounded-xl font-semibold text-lg shadow-lg transition-all"
+                >
+                  Back to Lobby
+                </button>
+                <button
+                  onClick={() => setShowRoundComplete(false)}
+                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold transition-all"
+                >
+                  Review Scorecard
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
           <button onClick={handleBack} className="text-white hover:text-blue-200">
