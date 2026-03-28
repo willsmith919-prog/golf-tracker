@@ -48,17 +48,19 @@ src/
 │   ├── backups/     # Backup-related components
 │   ├── events/      # Event creation and management
 │   │   ├── JoinEventConfirm.jsx  # Unified code join flow for events
-│   │   └── TeamManager.jsx       # NEW — host assigns players into teams (team formats only)
+│   │   └── TeamManager.jsx       # Host assigns players into teams (team formats only)
 │   ├── home/        # Landing/home screen
 │   ├── leagues/     # League management
-│   │   └── JoinLeagueConfirm.jsx # NEW — unified code join flow for leagues
+│   │   └── JoinLeagueConfirm.jsx # Unified code join flow for leagues
 │   ├── scoring/     # Live scoring and leaderboard
 │   └── shared/      # Reusable UI components
-│       └── ExpiredCodeView.jsx   # NEW — expired code screen (league + event)
+│       ├── EventForm.jsx         # Shared form for Create/Edit Event (includes league points config)
+│       └── ExpiredCodeView.jsx   # Expired code screen (league + event)
 ├── utils/
-│   ├── codes.js     # NEW — unified code generation and lookup (ACTIVE)
-│   ├── scoring.js   # Stableford + team score calculation (ACTIVE)
-│   └── helpers.js   # getDeviceId() only — used in App.jsx (ACTIVE, trimmed)
+│   ├── codes.js         # Unified code generation and lookup (ACTIVE)
+│   ├── leaguePoints.js  # League points calculation + standings writer (ACTIVE)
+│   ├── scoring.js       # Stableford + team score calculation (ACTIVE)
+│   └── helpers.js       # getDeviceId() only — used in App.jsx (ACTIVE, trimmed)
 ├── App.css          # Note: padding on #root was removed (was Vite boilerplate causing mobile layout issues)
 ├── App.jsx
 ├── firebase.js      # Firebase init and config
@@ -180,9 +182,9 @@ leagues/
       {seasonId}/
         name/
         status/         (active | completed)
-        pointSystem/    (finishing place → points value)
+        defaultPointsConfig/  (default leaguePoints config for new events)
         events/         (array of eventIds)
-        standings/      (userId → totalPoints — recalculated on score change)
+        standings/      (userId → { points: totalPoints, events: { eventId: pointsEarned } })
 
 series/
   {seriesId}/
@@ -200,15 +202,16 @@ events/
                          teeId, teeName, format, formatId, formatName,
                          scoringMethod, teamSize, handicap, stablefordPoints,
                          competition, display, numHoles, startingHole,
-                         endingHole, leagueId, seasonId, eventCode, createdAt)
+                         endingHole, leagueId, seasonId, eventCode, createdAt,
+                         leaguePoints)
     players/
       {userId}/         (displayName, joinedAt, role: host | player, handicap)
-    teams/              # NEW — only used for team formats (teamSize > 1)
+    teams/              # Only used for team formats (teamSize > 1)
       {teamId}/
         name/           ("Team 1", or custom name like "Team Tiger")
         members/        (userId → true)
         scores/         ({ 1: 4, 2: 5, ... } — hole-by-hole scores)
-        holes/          ({ 1: { score: 4, putts: null, fairway: null, gir: null, notes: '' }, ... })
+        holes/          ({ 1: { score: 4, putts: 2, gir: false, notes: '' }, ... })
         stats/          ({ totalScore, toPar, holesPlayed, stablefordPoints, ... })
         currentHole/    (the hole the team is currently on)
         scoringLockedBy/ (userId of whichever teammate is actively scoring, or null)
@@ -243,12 +246,13 @@ formats/
 
 ### Key Data Design Decisions
 - **Course and format data is snapshotted** onto each event/game at creation time. Changing a course or format later won't alter historical records. Like a receipt.
-- **Standings are stored, not calculated on the fly.** Recalculated and saved whenever scores change. Keeps leaderboard fast.
+- **Standings are stored, not calculated on the fly.** Written to Firebase when an event is ended. Re-ending an event recalculates (doesn't double-count).
 - **Everything has nullable parent references.** `leagueId`, `seriesId`, `seasonId` can all be null, enabling standalone use without duplicating logic.
 - **Single codes node** handles all join codes across all types. One lookup, smart routing.
 - **User memberships** stored under `users/{userId}/leagueMemberships/` and `users/{userId}/events/` — not under a generic `leagues` node.
 - **Teams are separate from players.** Players join an event individually (stored in `players/`). For team formats, the host groups them into teams (stored in `teams/`). Scores are written to the team node, not the player node. Individual formats ignore the `teams/` node entirely.
 - **User profile data is nested** under `users/{userId}/profile/` (displayName, email, handicap). Code accessing profile data must use `userProfile.profile.displayName`, not `userProfile.displayName`.
+- **Firebase rejects null/undefined values** inside objects. When building objects to write (like hole data), strip out any null keys before calling `set()`. This was a past bug source — see Section 18 for details.
 
 ---
 
@@ -321,14 +325,16 @@ formats/
 | Format management (admin) | ✅ Done | Pre-seeded defaults |
 | Solo round | ✅ Done | May need alignment with new participant model |
 | Event creation | ✅ Done | Uses new codes system |
-| League creation | ✅ Done (basic) | Uses new codes system — dashboard needs rebuild |
-| Live leaderboard | ✅ Done | Supports both team and individual formats |
+| League creation | ✅ Done (basic) | Uses new codes system |
+| Live leaderboard | ✅ Done | Supports team and individual formats, league standings projection |
 | Unified codes system | ✅ Done | Replaces old leagueCodes + eventCodes nodes |
 | New taxonomy data structure | ✅ Done | Implemented — see Sections 7 & 8 |
-| Team scoring (events) | ✅ Done | Host assigns players to teams, scores saved per team, scoring lock prevents simultaneous entry. See Section 16. |
-| Event deletion | ✅ Done | Host can delete open events from lobby. Cleans up event, code, and player references. |
+| Team scoring (events) | ✅ Done | See Section 16 |
+| Event deletion | ✅ Done | Host can delete open events from lobby |
+| League points & standings | ✅ Done | See Section 17 |
+| Round finalization prompt | ✅ Done | See Section 18 |
+| League dashboard | ✅ Done | Events (live/upcoming/completed), members, standings display |
 | Guest participants | 🔲 Not started | |
-| League dashboard rebuild | 🔲 Not started | Current dashboard predates new data structure |
 | Series concept | 🔲 Not started | |
 | Game concept | 🔲 Not started | |
 | Robust format management | 🔲 Not started | |
@@ -342,10 +348,14 @@ formats/
 
 ## 13. Key Utility Files
 
-### `utils/codes.js` — ACTIVE (new)
+### `utils/codes.js` — ACTIVE
 - `generateCode(type)` — Generates a unique code for a given type (league, series, event, game)
 - `createCode(type, targetId, expiresAt)` — Generates a code and saves it to Firebase `codes/` node
 - `lookupCode(code)` — Looks up a code in Firebase and returns its data, or null if not found
+
+### `utils/leaguePoints.js` — ACTIVE
+- `calculateEventPoints(leaderboardData, leaguePoints, teams, teamSize)` — Pure function. Takes sorted leaderboard and point config, returns `{ playerId → pointsEarned }`. Handles both team and individual formats, including team point distribution (full vs split).
+- `writeStandingsToFirebase(leagueId, seasonId, eventId, playerPoints)` — Reads current standings, subtracts any previous points for the same event (safe for re-finalization), adds new points, writes back. Standings structure: `{ points: total, events: { eventId: pointsEarned } }`.
 
 ### `utils/scoring.js` — ACTIVE
 - `calculateStablefordPoints(score, par)` — Returns Stableford points for a single hole
@@ -408,3 +418,87 @@ Prevents two teammates from entering scores simultaneously. It's a manual lock (
 
 ### Important: userProfile Path
 User profile data is nested in Firebase: `users/{userId}/profile/displayName`, not `users/{userId}/displayName`. All code that reads from `userProfile` must use `userProfile.profile.displayName` and `userProfile.profile.handicap`. This was a bug source — if new code reads user data, double-check the path.
+
+---
+
+## 17. League Points & Standings System
+
+✅ **FULLY BUILT** — March 2026
+
+League events can award points to players based on their finishing position. Points accumulate across events into season standings.
+
+### How It Works
+
+1. **Season config** — The league's active season has a `defaultPointsConfig` that pre-fills when creating league events. This is the default point structure the commissioner sets up.
+2. **Event-level config** — Each league event carries its own `meta.leaguePoints` config (snapshotted at creation, editable per event). This follows the receipt pattern — changing the season defaults won't retroactively alter past events.
+3. **Event creation** — When creating an event from the league dashboard, the league's `defaultPointsConfig` pre-fills the event's `leaguePoints`. The commissioner can adjust for this specific event.
+4. **Ending an event** — When the host clicks "End Event", the app builds a sorted leaderboard, maps each position to points, and writes to `leagues/{leagueId}/seasons/{seasonId}/standings/`.
+5. **Re-finalization** — If the host reopens and re-ends an event, standings are recalculated correctly (previous points for that event are subtracted before adding new ones). No double-counting.
+6. **Live projection** — The Live Leaderboard shows a collapsible "League Standings Impact" panel for league events. It projects what standings would look like if the round ended now, with movement arrows showing who would move up/down.
+
+### leaguePoints Config Structure
+```
+meta.leaguePoints: {
+  enabled: true,
+  positions: { "1": 25, "2": 20, "3": 16, "4": 13, ... },
+  participationPoints: 5,
+  teamPointDistribution: "full" | "split"
+}
+```
+
+- `positions` — Points awarded by finishing position (string keys)
+- `participationPoints` — Flat points every player earns just for participating
+- `teamPointDistribution` — For team formats: "full" gives each member the full position points, "split" divides evenly among members
+
+### Standings Firebase Structure
+```
+leagues/{leagueId}/seasons/{seasonId}/standings/
+  {userId}/
+    points/            (total points across all events)
+    events/
+      {eventId}/       (points earned in that specific event)
+```
+
+### Key Files
+- `src/utils/leaguePoints.js` — `calculateEventPoints()` (pure) and `writeStandingsToFirebase()`
+- `src/components/events/EventLobbyView.jsx` — calls standings calculation when "End Event" is clicked; contains `buildSortedLeaderboard()` helper
+- `src/components/scoring/LiveLeaderboard.jsx` — "League Standings Impact" projection panel
+- `src/components/shared/EventForm.jsx` — league points configuration UI (position points, participation points, team distribution)
+- `src/components/events/CreateEventView.jsx` — pulls `defaultPointsConfig` from season and passes to EventForm
+- `src/components/events/EditEventView.jsx` — passes existing `leaguePoints` to EventForm for editing
+- `src/components/leagues/LeagueDashboardView.jsx` — displays season standings
+
+---
+
+## 18. Round Finalization & Scoring Details
+
+✅ **FULLY BUILT** — March 2026
+
+### Round Complete Prompt
+When a player saves their score on the **last hole** of an event, a modal appears:
+- **"Back to Lobby"** — clears the scoring lock (if team format) and returns to the event lobby
+- **"Review Scorecard"** — dismisses the modal so the player can review/edit their scores
+
+Solo rounds already had a similar flow (confirm dialog after last hole → navigate to scorecard). The event mode now matches this behavior with a proper modal overlay.
+
+### Firebase null/undefined Safety
+Firebase Realtime Database rejects `null` or `undefined` values inside objects passed to `set()`. The `saveHoleData` function in `ScoringView.jsx` strips out any null keys from the hole entry before writing. This is especially relevant for **par 3 holes** where `fairway` is null (fairway tracking doesn't apply to par 3s), and for the **non-stat-tracking flow** where `putts` and `fairway` are both null.
+
+### Number Inputs on Mobile
+League points inputs in `EventForm.jsx` use `type="text"` with `inputMode="numeric"` instead of `type="number"`. This shows a number keyboard on mobile without the spinner arrows that `type="number"` adds (which are unhelpful on mobile and interfere with manual entry). Non-numeric characters are stripped via `onChange`.
+
+### Key Files
+- `src/components/scoring/ScoringView.jsx` — `showRoundComplete` modal, `saveHoleData` null-stripping
+- `src/components/shared/EventForm.jsx` — mobile-friendly number inputs
+
+---
+
+## 19. Known Patterns & Past Bug Sources
+
+These patterns have caused bugs before. If new code touches these areas, double-check:
+
+- **userProfile path:** Data is at `userProfile.profile.displayName`, NOT `userProfile.displayName`. Always nest through `.profile.`.
+- **Firebase null values:** Never include `null` or `undefined` in objects written via `set()`. Strip them first. Use `delete obj[key]` for null keys.
+- **Firebase update loops:** `useEffect`-based Firebase listeners + `set()` calls can cause rapid loops. The `onValue` listener in EventLobbyView is the canonical pattern — one listener, read-only in the component, manual writes only when needed.
+- **State timing:** Passing callbacks rather than setting state and navigating simultaneously avoids race conditions. Example: `onCreateSimilar` callback pattern in ExpiredCodeView.
+- **Scoring lock:** Manual lock via `scoringLockedBy` field, not a Firebase listener. Set on "Enter Scores", cleared on "Back to Lobby" or the round complete modal.

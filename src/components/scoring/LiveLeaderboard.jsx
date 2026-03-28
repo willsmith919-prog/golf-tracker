@@ -679,6 +679,11 @@ export default function LiveLeaderboard({
                         {isTeamFormat ? 'Your Team' : 'You'}
                       </span>
                     )}
+                    {!isTeamFormat && players[entry.id]?.isGuest && (
+                      <span className="text-[10px] bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full shrink-0">
+                        Guest
+                      </span>
+                    )}
                     {!isTeamFormat && entry.role === 'host' && (
                       <span className="text-[10px] bg-yellow-100 text-yellow-600 px-1.5 py-0.5 rounded-full shrink-0">
                         Host
@@ -787,7 +792,9 @@ export default function LiveLeaderboard({
                   leaderboardData,
                   leaguePoints,
                   teams,
-                  teamSize
+                  teamSize,
+                  players,
+                  currentStandings.members
                 );
 
                 // Build the projection table
@@ -907,7 +914,7 @@ export default function LiveLeaderboard({
           )}
         </div>
       )}
-      
+
       {/* Legend */}
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-400 justify-center">
         <span className="flex items-center gap-1">

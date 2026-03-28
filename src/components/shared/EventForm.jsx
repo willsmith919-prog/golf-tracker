@@ -35,7 +35,8 @@ export default function EventForm({
         enabled: true,
         positions: { ...(leaguePointsConfig.positions || {}) },
         participationPoints: leaguePointsConfig.participationPoints ?? 5,
-        teamPointDistribution: leaguePointsConfig.teamPointDistribution || 'full'
+        teamPointDistribution: leaguePointsConfig.teamPointDistribution || 'full',
+        nonLeagueHandling: leaguePointsConfig.nonLeagueHandling || 'skip'
       }
     : null;
   
@@ -321,11 +322,13 @@ export default function EventForm({
                     <div key={place} className="flex items-center gap-3">
                       <div className="w-16 text-sm font-medium text-gray-600">{ord}</div>
                       <input
-                        type="number"
-                        min="0"
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
                         value={formData.leaguePoints.positions[place]}
                         onChange={(e) => {
-                          const updated = { ...formData.leaguePoints.positions, [place]: parseInt(e.target.value) || 0 };
+                          const val = e.target.value.replace(/[^0-9]/g, '');
+                          const updated = { ...formData.leaguePoints.positions, [place]: val === '' ? 0 : parseInt(val) };
                           setFormData({ ...formData, leaguePoints: { ...formData.leaguePoints, positions: updated } });
                         }}
                         className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-center"
@@ -372,13 +375,17 @@ export default function EventForm({
                 <div className="text-xs text-gray-500">Flat points every player earns just for playing</div>
               </div>
               <input
-                type="number"
-                min="0"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
                 value={formData.leaguePoints.participationPoints}
-                onChange={(e) => setFormData({
-                  ...formData,
-                  leaguePoints: { ...formData.leaguePoints, participationPoints: parseInt(e.target.value) || 0 }
-                })}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  setFormData({
+                    ...formData,
+                    leaguePoints: { ...formData.leaguePoints, participationPoints: val === '' ? 0 : parseInt(val) }
+                  });
+                }}
                 className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-center"
               />
             </div>
@@ -420,6 +427,42 @@ export default function EventForm({
                   </label>
                 ))}
               </div>
+              {/* Non-League Player Handling */}
+          <div className="bg-white rounded-lg p-4">
+            <div className="text-sm font-medium text-gray-700 mb-1">Non-League Player Handling</div>
+            <p className="text-xs text-gray-500 mb-3">
+              When a guest or non-league member finishes in a scoring position, how should the points be handled?
+            </p>
+            <div className="flex gap-3">
+              {[
+                { value: 'skip', label: 'Skip Position', desc: 'Non-league finishes 3rd → nobody gets 3rd place points' },
+                { value: 'award_around', label: 'Award Around', desc: 'Non-league finishes 3rd → next league member gets 3rd place points' }
+              ].map(option => (
+                <label
+                  key={option.value}
+                  className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                    formData.leaguePoints.nonLeagueHandling === option.value
+                      ? 'border-purple-500 bg-purple-50 font-semibold'
+                      : 'border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="nonLeagueHandling"
+                    value={option.value}
+                    checked={formData.leaguePoints.nonLeagueHandling === option.value}
+                    onChange={() => setFormData({
+                      ...formData,
+                      leaguePoints: { ...formData.leaguePoints, nonLeagueHandling: option.value }
+                    })}
+                    className="sr-only"
+                  />
+                  <div className="text-sm">{option.label}</div>
+                  <div className="text-xs text-gray-500 mt-1">{option.desc}</div>
+                </label>
+              ))}
+            </div>
+          </div>
             </div>
           )}
         </div>

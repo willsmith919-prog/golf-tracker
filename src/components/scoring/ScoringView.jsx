@@ -440,7 +440,21 @@ export default function ScoringView({
     }
 
     const gir = calculateGIR(currentPar, score, putts);
-    const holeEntry = { score, putts, fairway, gir, notes };
+    const holeEntry = {
+      score,
+      putts: putts ?? null,
+      fairway: fairway ?? null,
+      gir: gir ?? false,
+      notes: notes || ''
+    };
+
+    // Firebase rejects undefined values inside objects.
+    // Remove any keys that are null so they don't cause a "set failed" error.
+    Object.keys(holeEntry).forEach(key => {
+      if (holeEntry[key] === null || holeEntry[key] === undefined) {
+        delete holeEntry[key];
+      }
+    });
 
     try {
       if (isSolo) {
@@ -722,7 +736,7 @@ const handleBack = async () => {
             </div>
           </div>
         )}
-        
+
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
           <button onClick={handleBack} className="text-white hover:text-blue-200">

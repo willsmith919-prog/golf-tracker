@@ -1,4 +1,4 @@
-import { ref, update, set, onValue, off } from 'firebase/database';
+import { ref, update, set, get, remove, onValue, off } from 'firebase/database';
 import { useEffect, useState } from 'react';
 import { database } from '../../firebase';
 import LiveLeaderboard from '../scoring/LiveLeaderboard';
@@ -182,6 +182,8 @@ export default function EventLobbyView({
     return entries;
   };
 
+
+
   // ==================== START EVENT ====================
 
   const startEvent = async () => {
@@ -251,6 +253,40 @@ export default function EventLobbyView({
     }
     setView('scoring');
   };
+
+  // ==================== ADD GUEST ====================
+  const [showAddGuest, setShowAddGuest] = useState(false);
+  const [guestName, setGuestName] = useState('');
+
+  const handleAddGuest = async () => {
+    const trimmedName = guestName.trim();
+    if (!trimmedName) {
+      setFeedback('Please enter a name');
+      setTimeout(() => setFeedback(''), 2000);
+      return;
+    }
+
+    try {
+      const guestId = `guest-${Date.now()}`;
+      await set(ref(database, `events/${currentEvent.id}/players/${guestId}`), {
+        displayName: trimmedName,
+        joinedAt: Date.now(),
+        role: 'player',
+        handicap: null,
+        isGuest: true
+      });
+
+      setGuestName('');
+      setShowAddGuest(false);
+      setFeedback(`${trimmedName} added as guest!`);
+      setTimeout(() => setFeedback(''), 2000);
+    } catch (error) {
+      console.error('Error adding guest:', error);
+      setFeedback('Error adding guest');
+      setTimeout(() => setFeedback(''), 3000);
+    }
+  };
+
   // Show tabs for all event statuses — leaderboard may have early scores,
   // and the teams/players tabs should always be reachable
   const showTabs = eventStatus === 'open' || eventStatus === 'active' || eventStatus === 'completed';
@@ -407,11 +443,22 @@ export default function EventLobbyView({
                   if (lpMeta.leaguePoints && lpMeta.leagueId && lpMeta.seasonId) {
                     try {
                       const leaderboard = buildSortedLeaderboard();
+                      // Load league members to determine who gets points
+                      let leagueMembersData = null;
+                      try {
+                        const membersSnap = await get(ref(database, `leagues/${lpMeta.leagueId}/members`));
+                        leagueMembersData = membersSnap.val();
+                      } catch (err) {
+                        console.error('Error loading league members:', err);
+                      }
+
                       const playerPoints = calculateEventPoints(
                         leaderboard,
                         lpMeta.leaguePoints,
                         currentEvent.teams || {},
-                        lpMeta.teamSize || 1
+                        lpMeta.teamSize || 1,
+                        currentEvent.players || {},
+                        leagueMembersData
                       );
                       await writeStandingsToFirebase(lpMeta.leagueId, lpMeta.seasonId, currentEvent.id, playerPoints);
                       setFeedback('Event ended! League standings updated.');
@@ -554,9 +601,49 @@ export default function EventLobbyView({
           <>
             {/* Players List */}
             <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-              <h2 className="text-xl font-bold text-gray-900 mb-4">
-                Players ({players.length})
-              </h2>
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-gray-900">
+                  Players ({players.length})
+                </h2>
+                {isHost && (eventStatus === 'open' || eventStatus === 'active') && (
+                  <button
+                    onClick={() => setShowAddGuest(!showAddGuest)}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1.5 rounded-lg text-sm font-semibold transition-all"
+                  >
+                    + Add Guest
+                  </button>
+                )}
+              </div>
+
+              {/* Add Guest form */}
+              {showAddGuest && (
+                <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+                  <div className="text-sm font-semibold text-gray-700 mb-2">Add a guest player (no account needed)</div>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={guestName}
+                      onChange={(e) => setGuestName(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleAddGuest(); }}
+                      placeholder="Guest name"
+                      className="flex-1 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-sm"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleAddGuest}
+                      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+                    >
+                      Add
+                    </button>
+                    <button
+                      onClick={() => { setShowAddGuest(false); setGuestName(''); }}
+                      className="bg-gray-200 hover:bg-gray-300 text-gray-600 px-3 py-2 rounded-lg text-sm font-semibold"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
               
               {players.length > 0 ? (
                 <div className="space-y-3">
@@ -564,9 +651,9 @@ export default function EventLobbyView({
                     <div key={player.uid} className="p-4 bg-gray-50 rounded-xl">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          {/* Avatar circle — yellow for host, blue for player */}
+                          {/* Avatar circle — yellow for host, blue for player, gray for guest */}
                           <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                            player.role === 'host' ? 'bg-yellow-500' : 'bg-blue-500'
+                            player.role === 'host' ? 'bg-yellow-500' : player.isGuest ? 'bg-gray-400' : 'bg-blue-500'
                           }`}>
                             {(player.displayName || '?').charAt(0).toUpperCase()}
                           </div>
@@ -578,6 +665,9 @@ export default function EventLobbyView({
                               )}
                               {player.uid === currentUser?.uid && (
                                 <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">You</span>
+                              )}
+                              {player.isGuest && (
+                                <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Guest</span>
                               )}
                             </div>
                             {player.handicap != null && (
@@ -604,6 +694,32 @@ export default function EventLobbyView({
                             </span>
                           );
                         })()}
+                        {/* Remove button for guests — host only */}
+                        {isHost && player.isGuest && (eventStatus === 'open' || eventStatus === 'active') && (
+                          <button
+                            onClick={async () => {
+                              if (!confirm(`Remove ${player.displayName} from the event?`)) return;
+                              try {
+                                await remove(ref(database, `events/${currentEvent.id}/players/${player.uid}`));
+                                // Also remove from any team they're on
+                                for (const [teamId, team] of Object.entries(teams)) {
+                                  if (team.members && team.members[player.uid]) {
+                                    await remove(ref(database, `events/${currentEvent.id}/teams/${teamId}/members/${player.uid}`));
+                                  }
+                                }
+                                setFeedback(`${player.displayName} removed`);
+                                setTimeout(() => setFeedback(''), 2000);
+                              } catch (err) {
+                                console.error('Error removing guest:', err);
+                                setFeedback('Error removing guest');
+                                setTimeout(() => setFeedback(''), 3000);
+                              }
+                            }}
+                            className="text-red-400 hover:text-red-600 text-xs font-semibold ml-2"
+                          >
+                            Remove
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}
