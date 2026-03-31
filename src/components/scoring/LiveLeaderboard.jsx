@@ -2,6 +2,10 @@ import { useState, useEffect } from 'react';
 import { ref, get } from 'firebase/database';
 import { database } from '../../firebase';
 import { calculateEventPoints } from '../../utils/leaguePoints';
+import { calculateStablefordPoints } from '../../utils/scoring';
+import { buildHoleOrder } from '../../utils/holes';
+import { getPlayerCourseHandicap, getStrokeHoles, getNetScore } from '../../utils/handicap';
+import { sortLeaderboard, assignPositions } from '../../utils/leaderboard';
 
 // ============================================================
 // LIVE LEADERBOARD COMPONENT
@@ -76,67 +80,22 @@ export default function LiveLeaderboard({
   }, [showLeagueProjection, isLeagueEvent]);
 
   // ==================== HOLE ORDER ====================
-  const buildHoleOrder = () => {
-    const holes = [];
-    for (let i = 0; i < numHoles; i++) {
-      holes.push(((startingHole - 1 + i) % 18) + 1);
-    }
-    return holes;
-  };
-
-  const holeOrder = buildHoleOrder();
+  const holeOrder = buildHoleOrder(numHoles, startingHole);
   const first9 = numHoles === 18 ? holeOrder.slice(0, 9) : holeOrder;
   const second9 = numHoles === 18 ? holeOrder.slice(9, 18) : [];
 
   // ==================== HANDICAP CALCULATIONS ====================
   const handicapEnabled = meta.handicap?.enabled || false;
-  const handicapAllowance = meta.handicap?.allowance || 100;
-  const courseStrokeIndexes = meta.courseStrokeIndexes || [];
-
-  // Course slope and rating — needed for proper USGA handicap formula
-  // Course Handicap = (Handicap Index × Slope / 113) + (Course Rating − Par)
-  // If slope/rating aren't on the event (older events), falls back to simple calculation
-  const courseSlope = meta.courseSlope || null;
-  const courseRating = meta.courseRating || null;
   const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
 
-  const getPlayerCourseHandicap = (playerHandicap) => {
-    if (!handicapEnabled || playerHandicap == null) return 0;
-
-    let courseHandicap;
-    if (courseSlope && courseRating) {
-      // Proper USGA formula:
-      // Course Handicap = (Handicap Index × Slope Rating / 113) + (Course Rating − Par)
-      courseHandicap = (playerHandicap * courseSlope / 113) + (courseRating - coursePar);
-    } else {
-      // Fallback for events that don't have slope/rating saved
-      courseHandicap = playerHandicap;
-    }
-
-    // Apply the allowance percentage (e.g. 80% for some formats)
-    courseHandicap = courseHandicap * (handicapAllowance / 100);
-
-    return Math.round(courseHandicap);
-  };
-
-  const getStrokeHoles = (courseHandicap) => {
-    if (!handicapEnabled || courseHandicap <= 0 || courseStrokeIndexes.length === 0) return {};
-    const strokes = {};
-    for (let s = 1; s <= courseHandicap; s++) {
-      const targetSI = ((s - 1) % 18) + 1;
-      const holeIndex = courseStrokeIndexes.indexOf(targetSI);
-      if (holeIndex !== -1) {
-        const holeNum = holeIndex + 1;
-        strokes[holeNum] = (strokes[holeNum] || 0) + 1;
-      }
-    }
-    return strokes;
-  };
-
-  const getNetScore = (grossScore, holeNum, strokeHoles) => {
-    if (!handicapEnabled || !grossScore) return grossScore;
-    const strokesOnHole = strokeHoles[holeNum] || 0;
-    return grossScore - strokesOnHole;
+  // Config object passed to shared handicap utilities
+  const handicapConfig = {
+    handicapEnabled,
+    courseSlope: meta.courseSlope || null,
+    courseRating: meta.courseRating || null,
+    coursePar,
+    handicapAllowance: meta.handicap?.allowance || 100,
+    courseStrokeIndexes: meta.courseStrokeIndexes || []
   };
 
   // ==================== BUILD LEADERBOARD DATA ====================
@@ -168,8 +127,8 @@ export default function LiveLeaderboard({
         ? memberHandicaps.reduce((sum, h) => sum + h, 0) / memberHandicaps.length
         : null;
 
-      const courseHandicap = getPlayerCourseHandicap(avgHandicap);
-      const strokeHoles = getStrokeHoles(courseHandicap);
+      const courseHandicap = getPlayerCourseHandicap(avgHandicap, handicapConfig);
+      const strokeHoles = getStrokeHoles(courseHandicap, handicapConfig);
 
       let netTotal = 0;
       let netToPar = 0;
@@ -179,7 +138,7 @@ export default function LiveLeaderboard({
         for (const holeNum of holeOrder) {
           const holeScore = team.scores?.[holeNum] || team.holes?.[holeNum]?.score;
           if (holeScore) {
-            netTotal += getNetScore(holeScore, holeNum, strokeHoles);
+            netTotal += getNetScore(holeScore, holeNum, strokeHoles, handicapEnabled);
             parForPlayed += coursePars[holeNum - 1] || 0;
           }
         }
@@ -217,8 +176,8 @@ export default function LiveLeaderboard({
       const totalScore = stats.totalScore || 0;
       const toPar = stats.toPar || 0;
 
-      const courseHandicap = getPlayerCourseHandicap(player.handicap);
-      const strokeHoles = getStrokeHoles(courseHandicap);
+      const courseHandicap = getPlayerCourseHandicap(player.handicap, handicapConfig);
+      const strokeHoles = getStrokeHoles(courseHandicap, handicapConfig);
 
       let netTotal = 0;
       let netToPar = 0;
@@ -228,7 +187,7 @@ export default function LiveLeaderboard({
         for (const holeNum of holeOrder) {
           const holeScore = player.scores?.[holeNum] || player.holes?.[holeNum]?.score;
           if (holeScore) {
-            netTotal += getNetScore(holeScore, holeNum, strokeHoles);
+            netTotal += getNetScore(holeScore, holeNum, strokeHoles, handicapEnabled);
             parForPlayed += coursePars[holeNum - 1] || 0;
           }
         }
@@ -299,7 +258,7 @@ export default function LiveLeaderboard({
           filteredPar += par;
 
           if (handicapEnabled) {
-            filteredNetTotal += getNetScore(holeScore, holeNum, entry.strokeHoles);
+            filteredNetTotal += getNetScore(holeScore, holeNum, entry.strokeHoles, handicapEnabled);
           }
 
           if (meta.scoringMethod === 'stableford') {
@@ -327,44 +286,10 @@ export default function LiveLeaderboard({
 
   // ==================== SORTING ====================
   const primarySort = display.primarySort || 'gross';
-
-  leaderboardData.sort((a, b) => {
-    if (a.holesPlayed === 0 && b.holesPlayed > 0) return 1;
-    if (b.holesPlayed === 0 && a.holesPlayed > 0) return -1;
-    if (a.holesPlayed === 0 && b.holesPlayed === 0) return 0;
-
-    if (meta.scoringMethod === 'stableford') {
-      return b.stablefordPoints - a.stablefordPoints;
-    }
-
-    if (primarySort === 'net' && handicapEnabled) {
-      if (a.netToPar !== b.netToPar) return a.netToPar - b.netToPar;
-      return a.toPar - b.toPar;
-    }
-
-    if (a.toPar !== b.toPar) return a.toPar - b.toPar;
-    return a.totalScore - b.totalScore;
-  });
-
-  // Assign positions (handling ties)
-  let position = 1;
-  leaderboardData.forEach((entry, index) => {
-    if (index === 0 || entry.holesPlayed === 0) {
-      entry.position = entry.holesPlayed === 0 ? '-' : position;
-    } else {
-      const prev = leaderboardData[index - 1];
-      const sameScore = primarySort === 'net' && handicapEnabled
-        ? entry.netToPar === prev.netToPar
-        : entry.toPar === prev.toPar;
-
-      if (sameScore && prev.holesPlayed > 0) {
-        entry.position = prev.position;
-      } else {
-        entry.position = index + 1;
-      }
-    }
-    position = (typeof entry.position === 'number' ? entry.position : position) + 1;
-  });
+  const sortOpts = { scoringMethod: meta.scoringMethod, primarySort, handicapEnabled };
+  const isStableford = meta.scoringMethod === 'stableford';
+  sortLeaderboard(leaderboardData, sortOpts);
+  assignPositions(leaderboardData, sortOpts);
 
   // ==================== DISPLAY HELPERS ====================
 
@@ -453,13 +378,40 @@ export default function LiveLeaderboard({
                   }, 0) || '-'}
                 </td>
               </tr>
-              {handicapEnabled && display.showNet !== false && (
+              {isStableford ? (
+                <tr className="border-t border-gray-100">
+                  <td className="p-1 text-gray-500">Pts</td>
+                  {holes.map(h => {
+                    const score = entry.scores[h] || entry.holes[h]?.score;
+                    const par = coursePars[h - 1];
+                    const pts = score ? calculateStablefordPoints(score, par) : null;
+                    return (
+                      <td key={h} className={`text-center p-1 rounded font-semibold ${
+                        pts == null ? '' :
+                        pts >= 3 ? 'text-green-600' :
+                        pts === 2 ? 'text-gray-700' :
+                        pts === 1 ? 'text-orange-500' :
+                        'text-red-600'
+                      }`}>
+                        {pts != null ? pts : '-'}
+                      </td>
+                    );
+                  })}
+                  <td className="text-center p-1 font-bold text-blue-600">
+                    {holes.reduce((sum, h) => {
+                      const s = entry.scores[h] || entry.holes[h]?.score;
+                      const par = coursePars[h - 1];
+                      return sum + (s ? calculateStablefordPoints(s, par) : 0);
+                    }, 0) || '-'}
+                  </td>
+                </tr>
+              ) : handicapEnabled && display.showNet !== false && (
                 <tr className="border-t border-gray-100">
                   <td className="p-1 text-gray-500">Net</td>
                   {holes.map(h => {
                     const score = entry.scores[h] || entry.holes[h]?.score;
                     const par = coursePars[h - 1];
-                    const net = score ? getNetScore(score, h, entry.strokeHoles) : null;
+                    const net = score ? getNetScore(score, h, entry.strokeHoles, handicapEnabled) : null;
                     const strokeCount = entry.strokeHoles[h] || 0;
                     return (
                       <td key={h} className={`text-center p-1 rounded ${net ? getScoreColor(net, par) : ''}`}>
@@ -477,7 +429,7 @@ export default function LiveLeaderboard({
                   <td className="text-center p-1 font-bold text-gray-900">
                     {holes.reduce((sum, h) => {
                       const s = entry.scores[h] || entry.holes[h]?.score;
-                      return sum + (s ? getNetScore(s, h, entry.strokeHoles) : 0);
+                      return sum + (s ? getNetScore(s, h, entry.strokeHoles, handicapEnabled) : 0);
                     }, 0) || '-'}
                   </td>
                 </tr>
@@ -626,14 +578,10 @@ export default function LiveLeaderboard({
       <div className="grid grid-cols-[32px_1fr_60px_60px_48px] items-center px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
         <div>#</div>
         <div>{isTeamFormat ? 'Team' : 'Player'}</div>
-        {display.showRelativeToPar !== false ? (
-          <div className="text-center">
-            {primarySort === 'net' && handicapEnabled ? 'Net' : 'To Par'}
-          </div>
-        ) : (
-          <div className="text-center">Score</div>
-        )}
-        {handicapEnabled && display.showNet !== false && display.showGross !== false && (
+        <div className="text-center">
+          {isStableford ? 'Pts' : display.showRelativeToPar !== false ? (primarySort === 'net' && handicapEnabled ? 'Net' : 'To Par') : 'Score'}
+        </div>
+        {!isStableford && handicapEnabled && display.showNet !== false && display.showGross !== false && (
           <div className="text-center text-gray-400">
             {primarySort === 'net' ? 'Gross' : 'Net'}
           </div>
@@ -715,13 +663,17 @@ export default function LiveLeaderboard({
                 <div className="text-center">
                   {entry.holesPlayed > 0 ? (
                     <span className={`text-lg font-bold ${
-                      display.showRelativeToPar !== false
-                        ? getToParColor(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
-                        : 'text-gray-900'
+                      isStableford
+                        ? 'text-blue-600'
+                        : display.showRelativeToPar !== false
+                          ? getToParColor(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
+                          : 'text-gray-900'
                     }`}>
-                      {display.showRelativeToPar !== false
-                        ? formatToPar(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
-                        : (primarySort === 'net' && handicapEnabled ? entry.netTotal : entry.totalScore)
+                      {isStableford
+                        ? entry.stablefordPoints
+                        : display.showRelativeToPar !== false
+                          ? formatToPar(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
+                          : (primarySort === 'net' && handicapEnabled ? entry.netTotal : entry.totalScore)
                       }
                     </span>
                   ) : (
@@ -729,8 +681,8 @@ export default function LiveLeaderboard({
                   )}
                 </div>
 
-                {/* Secondary score (only if handicap shows both) */}
-                {handicapEnabled && display.showNet !== false && display.showGross !== false && (
+                {/* Secondary score (only if handicap shows both, and not stableford) */}
+                {!isStableford && handicapEnabled && display.showNet !== false && display.showGross !== false && (
                   <div className="text-center">
                     {entry.holesPlayed > 0 ? (
                       <span className={`text-sm ${

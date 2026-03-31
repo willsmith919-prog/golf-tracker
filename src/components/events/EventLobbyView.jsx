@@ -4,6 +4,7 @@ import { database } from '../../firebase';
 import LiveLeaderboard from '../scoring/LiveLeaderboard';
 import TeamManager from './TeamManager';
 import { calculateEventPoints, writeStandingsToFirebase } from '../../utils/leaguePoints';
+import { sortLeaderboard, assignPositions } from '../../utils/leaderboard';
 
 
 export default function EventLobbyView({
@@ -91,26 +92,15 @@ export default function EventLobbyView({
   };
 
   // ==================== LEADERBOARD SORTING (for league points) ====================
-  // Builds a sorted leaderboard from event data — same logic as LiveLeaderboard.
+  // Builds a sorted leaderboard from event data using shared sort utilities.
   // Used to determine finishing positions when the host ends a league event.
   const buildSortedLeaderboard = () => {
     const meta = currentEvent.meta || {};
     const evPlayers = currentEvent.players || {};
     const evTeams = currentEvent.teams || {};
-    const coursePars = meta.coursePars || [];
-    const evTeamSize = meta.teamSize || 1;
-    const isTeam = evTeamSize > 1 && Object.keys(evTeams).length > 0;
-    const evNumHoles = meta.numHoles || 18;
-    const evStartingHole = meta.startingHole || 1;
-
-    // Build hole order
-    const holeOrd = [];
-    for (let i = 0; i < evNumHoles; i++) {
-      holeOrd.push(((evStartingHole - 1 + i) % 18) + 1);
-    }
+    const isTeam = (meta.teamSize || 1) > 1 && Object.keys(evTeams).length > 0;
 
     let entries = [];
-
     if (isTeam) {
       entries = Object.entries(evTeams).map(([teamId, team]) => {
         const stats = team.stats || {};
@@ -137,48 +127,13 @@ export default function EventLobbyView({
       });
     }
 
-    // Sort (same logic as LiveLeaderboard)
-    const primarySort = meta.display?.primarySort || 'gross';
-    const handicapEnabled = meta.handicap?.enabled || false;
-
-    entries.sort((a, b) => {
-      if (a.holesPlayed === 0 && b.holesPlayed > 0) return 1;
-      if (b.holesPlayed === 0 && a.holesPlayed > 0) return -1;
-      if (a.holesPlayed === 0 && b.holesPlayed === 0) return 0;
-
-      if (meta.scoringMethod === 'stableford') {
-        return b.stablefordPoints - a.stablefordPoints;
-      }
-      if (primarySort === 'net' && handicapEnabled) {
-        if (a.netToPar !== b.netToPar) return a.netToPar - b.netToPar;
-        return a.toPar - b.toPar;
-      }
-      if (a.toPar !== b.toPar) return a.toPar - b.toPar;
-      return a.totalScore - b.totalScore;
-    });
-
-    // Assign positions (handling ties)
-    let pos = 1;
-    entries.forEach((entry, index) => {
-      if (index === 0 || entry.holesPlayed === 0) {
-        entry.position = entry.holesPlayed === 0 ? '-' : pos;
-      } else {
-        const prev = entries[index - 1];
-        const sameScore = primarySort === 'net' && handicapEnabled
-          ? entry.netToPar === prev.netToPar
-          : meta.scoringMethod === 'stableford'
-            ? entry.stablefordPoints === prev.stablefordPoints
-            : entry.toPar === prev.toPar;
-
-        if (sameScore && prev.holesPlayed > 0) {
-          entry.position = prev.position;
-        } else {
-          entry.position = index + 1;
-        }
-      }
-      pos = (typeof entry.position === 'number' ? entry.position : pos) + 1;
-    });
-
+    const opts = {
+      scoringMethod: meta.scoringMethod,
+      primarySort: meta.display?.primarySort || 'gross',
+      handicapEnabled: meta.handicap?.enabled || false
+    };
+    sortLeaderboard(entries, opts);
+    assignPositions(entries, opts);
     return entries;
   };
 

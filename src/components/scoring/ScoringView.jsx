@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { ref, get, set, remove } from 'firebase/database';
 import { database } from '../../firebase';
 import { ChevronLeftIcon, ChevronRightIcon } from '../icons';
+import { buildHoleOrder } from '../../utils/holes';
+import { getPlayerCourseHandicap, getStrokeHoles } from '../../utils/handicap';
 
 // ============================================================
 // UNIFIED SCORING VIEW
@@ -99,7 +101,7 @@ export default function ScoringView({
 
   const format = isSolo
     ? currentSoloRound.format
-    : currentEvent?.meta?.format || 'stroke';
+    : currentEvent?.meta?.scoringMethod || 'stroke';
 
   const courseName = isSolo
     ? currentSoloRound.courseName
@@ -122,16 +124,32 @@ export default function ScoringView({
     : scoringUnit?.currentHole || startingHole;
 
   // ==================== HOLE ORDER ====================
-  const buildHoleOrder = () => {
-    const holes = [];
-    for (let i = 0; i < numHoles; i++) {
-      const holeNum = ((startingHole - 1 + i) % 18) + 1;
-      holes.push(holeNum);
-    }
-    return holes;
-  };
+  const holeOrder = buildHoleOrder(numHoles, startingHole);
 
-  const holeOrder = buildHoleOrder();
+  // ==================== HANDICAP STROKE HOLES ====================
+  // For stableford with handicap: determine which holes receive bonus strokes.
+  // A stroke on a hole raises the effective par by 1, increasing stableford points.
+  const handicapEnabled = !isSolo && currentEvent?.meta?.handicap?.enabled;
+  const strokeHoles = (() => {
+    if (!handicapEnabled || format !== 'stableford') return {};
+    const playerHandicap = isTeamFormat
+      ? (() => {
+          const hcps = Object.keys(scoringUnit?.members || {})
+            .map(uid => currentEvent.players?.[uid]?.handicap)
+            .filter(h => h != null);
+          return hcps.length > 0 ? hcps.reduce((s, h) => s + h, 0) / hcps.length : null;
+        })()
+      : scoringUnit?.handicap;
+    const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
+    const courseHandicap = getPlayerCourseHandicap(playerHandicap, {
+      handicapEnabled,
+      courseSlope: currentEvent?.meta?.courseSlope || null,
+      courseRating: currentEvent?.meta?.courseRating || null,
+      coursePar,
+      handicapAllowance: currentEvent?.meta?.handicap?.allowance || 100
+    });
+    return getStrokeHoles(courseHandicap, { handicapEnabled, courseStrokeIndexes });
+  })();
 
   const getNextHole = (current) => {
     const idx = holeOrder.indexOf(current);
@@ -329,7 +347,8 @@ export default function ScoringView({
           }
         }
         if (format === 'stableford') {
-          totalPoints += calculateStablefordPoints(hole.score, par);
+          const strokesOnHole = strokeHoles[holeNum] || 0;
+          totalPoints += calculateStablefordPoints(hole.score, par + strokesOnHole);
         }
       }
     }
@@ -359,8 +378,8 @@ export default function ScoringView({
   const useStatFlow = isSolo || trackStats;
 
   const handleScoreSelect = (score) => {
-    // If this is the Triple+ button, open custom score mode
-    if (score === currentPar + 3) {
+    // Triple+ opens the adjuster for stroke play (no cap) or 2-stroke stableford holes
+    if (score === currentPar + 3 && (maxHoleScore === null || strokesOnCurrentHole >= 2)) {
       setShowCustomScore(true);
       setCurrentScore(currentPar + 3);
       setCurrentPutts(null);
@@ -620,14 +639,30 @@ const handleBack = async () => {
 
   const stats = calculateStats(null, null);
 
+  // Maximum gross score worth recording on the current hole.
+  // null = no cap (stroke play default, Triple+ opens custom adjuster).
+  // When set, buttons are capped at this value and no custom adjuster is shown.
+  // Future: add `|| meta.maxScore === 'net_double_bogey'` here for stroke play cap setting.
+  // null = no cap (adjuster opens freely)
+  // number = max gross score; buttons capped here, adjuster blocked unless 2-stroke stableford hole
+  const strokesOnCurrentHole = strokeHoles[currentHole] || 0;
+  const maxHoleScore = (() => {
+    if (format === 'stableford') {
+      if (strokesOnCurrentHole >= 2) return currentPar + 4; // Triple+ opens adjuster, capped at Quad
+      return currentPar + 2 + strokesOnCurrentHole;         // direct buttons only (Double or Triple)
+    }
+    // Future: if (meta.maxScore === 'net_double_bogey') return currentPar + 2 + strokesOnCurrentHole;
+    return null;
+  })();
+
   const quickScoreButtons = [
     { label: 'Eagle', value: currentPar - 2, color: 'bg-yellow-400 hover:bg-yellow-500' },
     { label: 'Birdie', value: currentPar - 1, color: 'bg-green-500 hover:bg-green-600' },
     { label: 'Par', value: currentPar, color: 'bg-gray-400 hover:bg-gray-500' },
     { label: 'Bogey', value: currentPar + 1, color: 'bg-orange-400 hover:bg-orange-500' },
     { label: 'Double', value: currentPar + 2, color: 'bg-red-500 hover:bg-red-600' },
-    { label: 'Triple+', value: currentPar + 3, color: 'bg-red-800 hover:bg-red-900' }
-  ].filter(btn => btn.value >= 1);
+    { label: strokesOnCurrentHole === 1 && format === 'stableford' ? 'Triple' : 'Triple+', value: currentPar + 3, color: 'bg-red-800 hover:bg-red-900' }
+  ].filter(btn => btn.value >= 1 && (maxHoleScore === null || btn.value <= maxHoleScore));
 
   const fairwayButtons = [
     { label: 'Left', value: 'left', color: 'bg-orange-400 hover:bg-orange-500' },
@@ -660,12 +695,34 @@ const handleBack = async () => {
             </tr>
           </thead>
           <tbody>
-            <tr className="border-b border-gray-200">
+            <tr className={courseStrokeIndexes.length > 0 ? '' : 'border-b border-gray-200'}>
               <td className="p-2 text-gray-600">Par</td>
-              {holes.map(h => (
-                <td key={h} className="text-center p-2">{coursePars[h - 1]}</td>
-              ))}
+              {holes.map(h => {
+                const strokeCount = strokeHoles[h] || 0;
+                return (
+                  <td key={h} className="text-center p-2">
+                    {coursePars[h - 1]}
+                    {strokeCount > 0 && (
+                      <div className="flex justify-center gap-0.5 mt-0.5">
+                        {Array.from({ length: strokeCount }).map((_, i) => (
+                          <span key={i} className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                );
+              })}
             </tr>
+            {courseStrokeIndexes.length > 0 && (
+              <tr className="border-b border-gray-200">
+                <td className="p-2 text-gray-400 text-xs">SI</td>
+                {holes.map(h => (
+                  <td key={h} className={`text-center p-2 text-xs ${strokeHoles[h] ? 'text-blue-500 font-semibold' : 'text-gray-400'}`}>
+                    {courseStrokeIndexes[h - 1] ?? '-'}
+                  </td>
+                ))}
+              </tr>
+            )}
             <tr>
               <td className="p-2 text-gray-600">Score</td>
               {holes.map(h => {
@@ -685,6 +742,27 @@ const handleBack = async () => {
                 );
               })}
             </tr>
+            {format === 'stableford' && (
+              <tr>
+                <td className="p-2 text-gray-600">Pts</td>
+                {holes.map(h => {
+                  const hole = getHoleData(h);
+                  const par = coursePars[h - 1];
+                  const pts = hole?.score ? calculateStablefordPoints(hole.score, par + (strokeHoles[h] || 0)) : null;
+                  return (
+                    <td key={h} className={`text-center p-2 font-semibold ${
+                      pts == null ? 'text-gray-400' :
+                      pts >= 3 ? 'text-green-600' :
+                      pts === 2 ? 'text-gray-700' :
+                      pts === 1 ? 'text-orange-500' :
+                      'text-red-600'
+                    }`}>
+                      {pts != null ? pts : '-'}
+                    </td>
+                  );
+                })}
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -770,13 +848,11 @@ const handleBack = async () => {
             </>
           )}
 
-          <div className={`grid ${(isSolo || trackStats) ? 'grid-cols-2 md:grid-cols-5' : usesMulligans ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
+          <div className={`grid ${(isSolo || trackStats) ? 'grid-cols-2 md:grid-cols-5' : format === 'stableford' ? (usesMulligans ? 'grid-cols-4' : 'grid-cols-3') : usesMulligans ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
             <div className="text-center">
               <div className="text-sm text-gray-600">Score</div>
               <div className="text-3xl font-bold text-gray-900">{stats.totalScore || 0}</div>
-              <div className="text-sm text-gray-600">
-                Thru {stats.holesPlayed} holes
-              </div>
+              <div className="text-sm text-gray-600">Thru {stats.holesPlayed} holes</div>
             </div>
             <div className="text-center">
               <div className="text-sm text-gray-600">To Par</div>
@@ -784,6 +860,12 @@ const handleBack = async () => {
                 {stats.toPar > 0 ? '+' : ''}{stats.toPar || 0}
               </div>
             </div>
+            {format === 'stableford' && (
+              <div className="text-center">
+                <div className="text-sm text-gray-600">Points</div>
+                <div className="text-3xl font-bold text-blue-600">{stats.stablefordPoints || 0}</div>
+              </div>
+            )}
             {usesMulligans && (
               <div className="text-center">
                 <div className="text-sm text-gray-600">Mulligans</div>
@@ -796,13 +878,9 @@ const handleBack = async () => {
             {(isSolo || trackStats) && (
               <>
                 <div className="text-center">
-                  <div className="text-sm text-gray-600">
-                    {format === 'stableford' ? 'Points' : 'Putts'}
-                  </div>
+                  <div className="text-sm text-gray-600">Putts</div>
                   <div className="text-3xl font-bold text-gray-900">
-                    {format === 'stableford'
-                      ? stats.stablefordPoints
-                      : stats.totalPutts}
+                    {stats.totalPutts}
                   </div>
                 </div>
                 {/* ============================================================
@@ -878,6 +956,14 @@ const handleBack = async () => {
               )}
               {currentSI && (
                 <div className="text-sm text-gray-500">SI: {currentSI}</div>
+              )}
+              {(strokeHoles[currentHole] || 0) > 0 && (
+                <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-50 text-blue-600 text-sm font-semibold px-3 py-1 rounded-full">
+                  {Array.from({ length: strokeHoles[currentHole] }).map((_, i) => (
+                    <span key={i} className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                  ))}
+                  +{strokeHoles[currentHole]} stroke{strokeHoles[currentHole] > 1 ? 's' : ''}
+                </div>
               )}
             </div>
 
@@ -1006,7 +1092,14 @@ const handleBack = async () => {
                   } ${showCustomScore && btn.label === 'Triple+' ? 'ring-4 ring-blue-400' : ''} ${btn.color} text-white py-4 rounded-xl font-semibold shadow-lg transition-all`}
                 >
                   <div className="text-sm">{btn.label}</div>
-                  <div className="text-2xl font-bold">{btn.label === 'Triple+' ? `${btn.value}+` : btn.value}</div>
+                  <div className="text-2xl font-bold">
+                    {btn.label === 'Triple+' && maxHoleScore === null ? `${btn.value}+` : btn.value}
+                  </div>
+                  {format === 'stableford' && btn.label !== 'Triple+' && (
+                    <div className="text-xs mt-0.5 opacity-90">
+                      {calculateStablefordPoints(btn.value, currentPar + strokesOnCurrentHole)} pts
+                    </div>
+                  )}
                 </button>
               ))}
             </div>
@@ -1025,7 +1118,7 @@ const handleBack = async () => {
                   </button>
                   <div className="text-5xl font-bold text-gray-900 w-20 text-center">{currentScore}</div>
                   <button
-                    onClick={() => setCurrentScore(Math.min(15, currentScore + 1))}
+                    onClick={() => setCurrentScore(Math.min(maxHoleScore ?? 15, currentScore + 1))}
                     disabled={currentScore >= 15}
                     className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed w-14 h-14 rounded-xl text-2xl font-bold"
                   >
@@ -1035,6 +1128,16 @@ const handleBack = async () => {
                 <div className="text-center text-xs text-gray-400 mt-1">
                   +{currentScore - currentPar} over par
                 </div>
+                {format === 'stableford' && (
+                  <div className={`text-center text-sm font-semibold mt-2 ${
+                    calculateStablefordPoints(currentScore, currentPar + strokesOnCurrentHole) >= 3 ? 'text-green-600' :
+                    calculateStablefordPoints(currentScore, currentPar + strokesOnCurrentHole) === 2 ? 'text-gray-700' :
+                    calculateStablefordPoints(currentScore, currentPar + strokesOnCurrentHole) === 1 ? 'text-orange-500' :
+                    'text-red-600'
+                  }`}>
+                    {calculateStablefordPoints(currentScore, currentPar + strokesOnCurrentHole)} pts
+                  </div>
+                )}
                 <button
                   onClick={() => {
                     // Just close the custom adjuster — the Save & Next button
