@@ -1,14 +1,17 @@
 import { useState, useEffect } from 'react';
 import { ref, get, set, remove } from 'firebase/database';
 import { database } from '../../firebase';
-import { ChevronLeftIcon, ChevronRightIcon } from '../icons';
 import { buildHoleOrder } from '../../utils/holes';
 import { getPlayerCourseHandicap, getStrokeHoles } from '../../utils/handicap';
+import RoundCompleteModal from './RoundCompleteModal';
+import ScoringHeader from './ScoringHeader';
+import HoleCard from './HoleCard';
+import Scorecard from './Scorecard';
 
 // ============================================================
 // UNIFIED SCORING VIEW
 // Handles solo rounds, individual event scoring, AND team event scoring.
-// 
+//
 // Mode is determined by which props are passed in:
 //   - Solo mode:  currentSoloRound + setCurrentSoloRound + user
 //   - Event mode: currentEvent + setCurrentEvent + selectedTeam + setSelectedTeam + currentUser
@@ -46,27 +49,20 @@ export default function ScoringView({
   const isSolo = !!currentSoloRound;
 
   // ==================== TEAM vs INDIVIDUAL DETECTION ====================
-  // In event mode, figure out if we're scoring for a team or an individual.
-  // If selectedTeam is found in currentEvent.teams, it's a team format.
-  // Otherwise, fall back to the old individual player path.
-
   const isTeamFormat = !isSolo && currentEvent?.teams && currentEvent.teams[selectedTeam];
 
-  // The data source: either a team object or an individual player object
   const scoringUnit = isSolo
     ? null
     : isTeamFormat
       ? currentEvent.teams[selectedTeam]
       : currentEvent?.players?.[selectedTeam] || null;
 
-  // The Firebase path prefix for saving scores
   const scoringBasePath = !isSolo
     ? isTeamFormat
       ? `events/${currentEvent.id}/teams/${selectedTeam}`
       : `events/${currentEvent.id}/players/${selectedTeam}`
     : null;
 
-  // Display name for the header
   const scoringDisplayName = isSolo
     ? null
     : isTeamFormat
@@ -78,7 +74,6 @@ export default function ScoringView({
   const mulligansTotal = !isSolo ? (scoringUnit?.mulligansTotal || 0) : 0;
   const mulligansRemaining = !isSolo ? (scoringUnit?.mulligansRemaining ?? mulligansTotal) : 0;
 
-  // Build list of team member names for display (team format only)
   const teamMemberNames = isTeamFormat
     ? Object.keys(scoringUnit?.members || {}).map(uid =>
         currentEvent.players?.[uid]?.displayName || 'Unknown'
@@ -127,8 +122,6 @@ export default function ScoringView({
   const holeOrder = buildHoleOrder(numHoles, startingHole);
 
   // ==================== HANDICAP STROKE HOLES ====================
-  // For stableford with handicap: determine which holes receive bonus strokes.
-  // A stroke on a hole raises the effective par by 1, increasing stableford points.
   const handicapEnabled = !isSolo && currentEvent?.meta?.handicap?.enabled;
   const strokeHoles = (() => {
     if (!handicapEnabled || format !== 'stableford') return {};
@@ -213,16 +206,6 @@ export default function ScoringView({
   const [showCustomScore, setShowCustomScore] = useState(false);
   const [showRoundComplete, setShowRoundComplete] = useState(false);
 
-  // ============================================================
-  // FIX #3: trackStats is now initialized from the player's saved
-  // preference in Firebase. When the user toggles it, we write
-  // the new value to Firebase so it survives navigation (e.g.
-  // going to the Live Leaderboard and back).
-  //
-  // For individual event mode: reads/writes events/{id}/players/{uid}/trackStats
-  // For team mode: not shown (team mode doesn't show the toggle)
-  // For solo mode: always tracks stats, this toggle isn't used
-  // ============================================================
   const savedTrackStats = !isSolo && !isTeamFormat
     ? (currentEvent?.players?.[selectedTeam]?.trackStats || false)
     : false;
@@ -233,7 +216,6 @@ export default function ScoringView({
     const newValue = !trackStats;
     setTrackStats(newValue);
 
-    // Persist to Firebase so it survives navigation
     if (!isSolo && !isTeamFormat && currentEvent?.id && selectedTeam) {
       try {
         await set(
@@ -370,15 +352,10 @@ export default function ScoringView({
   };
 
   // ==================== HANDLERS ====================
-  // NEW FLOW: Score selection never auto-saves. User must explicitly
-  // confirm with "Save & Next". This prevents accidental double-taps
-  // from scoring the wrong hole.
 
-  // Whether we're in the full stat-tracking flow (fairway → putts → confirm)
   const useStatFlow = isSolo || trackStats;
 
   const handleScoreSelect = (score) => {
-    // Triple+ opens the adjuster for stroke play (no cap) or 2-stroke stableford holes
     if (score === currentPar + 3 && (maxHoleScore === null || strokesOnCurrentHole >= 2)) {
       setShowCustomScore(true);
       setCurrentScore(currentPar + 3);
@@ -389,7 +366,6 @@ export default function ScoringView({
     setCurrentScore(score);
     setCurrentPutts(null);
 
-    // For stat tracking: reset fairway on par 3s (no fairway needed)
     if (useStatFlow && currentPar < 4) {
       setCurrentFairway(null);
     }
@@ -399,7 +375,6 @@ export default function ScoringView({
     if (!currentScore || currentScore < 1) return;
     setShowCustomScore(false);
     setCurrentPutts(null);
-    // For stat tracking: reset fairway on par 3s
     if (useStatFlow && currentPar < 4) {
       setCurrentFairway(null);
     }
@@ -410,26 +385,20 @@ export default function ScoringView({
   };
 
   const handlePuttsSelect = (putts) => {
-    // Just select the putts — don't save yet. User confirms with Save & Next.
     const finalPutts = putts === '3+' ? 3 : putts;
     setCurrentPutts(finalPutts);
   };
 
-  // Determine if we have everything needed to save
   const isReadyToSave = (() => {
     if (!currentScore) return false;
-    if (!useStatFlow) return true; // No stats needed, score alone is enough
-    // Hole-in-one on par 3: no fairway or putts needed
+    if (!useStatFlow) return true;
     if (currentPar === 3 && currentScore === 1) return true;
-    // Par 4+: need fairway AND putts
     if (currentPar >= 4 && !currentFairway) return false;
-    // Need putts (unless no putt options exist for this score)
     const opts = getPuttOptions(currentPar, currentScore);
     if (opts.length > 0 && currentPutts === null) return false;
     return true;
   })();
 
-  // Save and advance to next hole
   const handleConfirmAndNext = () => {
     if (!isReadyToSave) return;
 
@@ -441,7 +410,6 @@ export default function ScoringView({
     saveHoleData(currentScore, finalFairway, finalPutts);
   };
 
-  // Clear current selection without saving
   const handleClearScore = () => {
     setCurrentScore(null);
     setCurrentFairway(null);
@@ -467,8 +435,6 @@ export default function ScoringView({
       notes: notes || ''
     };
 
-    // Firebase rejects undefined values inside objects.
-    // Remove any keys that are null so they don't cause a "set failed" error.
     Object.keys(holeEntry).forEach(key => {
       if (holeEntry[key] === null || holeEntry[key] === undefined) {
         delete holeEntry[key];
@@ -507,8 +473,6 @@ export default function ScoringView({
         }
 
       } else {
-        // ===== EVENT MODE (team or individual) =====
-        // scoringBasePath is either events/{id}/teams/{teamId} or events/{id}/players/{userId}
         await set(
           ref(database, `${scoringBasePath}/holes/${currentHole}`),
           holeEntry
@@ -523,7 +487,7 @@ export default function ScoringView({
           updatedStats
         );
 
-       setTimeout(async () => {
+        setTimeout(async () => {
           const next = getNextHole(currentHole);
           if (next) {
             await set(
@@ -535,7 +499,6 @@ export default function ScoringView({
           const updatedEvent = eventSnapshot.val();
           setCurrentEvent({ id: currentEvent.id, ...updatedEvent });
 
-          // If that was the last hole, show the "Round Complete" modal
           if (!next) {
             setShowRoundComplete(true);
           }
@@ -598,12 +561,10 @@ export default function ScoringView({
       const newRemaining = mulligansRemaining - 1;
       await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
 
-      // Log the mulligan usage on this hole
       const mulliganLog = scoringUnit?.mulliganLog || {};
       const holeLog = mulliganLog[currentHole] || 0;
       await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeLog + 1);
 
-      // Refresh event data
       const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
       const updatedEvent = eventSnapshot.val();
       setCurrentEvent({ id: currentEvent.id, ...updatedEvent });
@@ -618,11 +579,32 @@ export default function ScoringView({
     }
   };
 
-const handleBack = async () => {
+  const handleUndoMulligan = async () => {
+    if (!confirm('Undo a mulligan on this hole?')) return;
+    try {
+      const holeCount = scoringUnit.mulliganLog[currentHole];
+      const newRemaining = mulligansRemaining + 1;
+      await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
+      if (holeCount <= 1) {
+        await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
+      } else {
+        await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
+      }
+      const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
+      setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
+      setFeedback(`Mulligan restored! ${newRemaining} remaining`);
+      setTimeout(() => setFeedback(''), 2000);
+    } catch (error) {
+      console.error('Error undoing mulligan:', error);
+      setFeedback('Error undoing mulligan');
+      setTimeout(() => setFeedback(''), 2000);
+    }
+  };
+
+  const handleBack = async () => {
     if (isSolo) {
       setView('home');
     } else {
-      // Clear the scoring lock if this is a team format
       if (isTeamFormat) {
         try {
           await remove(ref(database, `${scoringBasePath}/scoringLockedBy`));
@@ -635,23 +617,29 @@ const handleBack = async () => {
     }
   };
 
+  const handleBackToLobby = async () => {
+    if (isTeamFormat) {
+      try {
+        await remove(ref(database, `${scoringBasePath}/scoringLockedBy`));
+      } catch (err) {
+        console.error('Error clearing scoring lock:', err);
+      }
+    }
+    setSelectedTeam(null);
+    setShowRoundComplete(false);
+    setView('event-lobby');
+  };
+
   // ==================== DISPLAY HELPERS ====================
 
   const stats = calculateStats(null, null);
 
-  // Maximum gross score worth recording on the current hole.
-  // null = no cap (stroke play default, Triple+ opens custom adjuster).
-  // When set, buttons are capped at this value and no custom adjuster is shown.
-  // Future: add `|| meta.maxScore === 'net_double_bogey'` here for stroke play cap setting.
-  // null = no cap (adjuster opens freely)
-  // number = max gross score; buttons capped here, adjuster blocked unless 2-stroke stableford hole
   const strokesOnCurrentHole = strokeHoles[currentHole] || 0;
   const maxHoleScore = (() => {
     if (format === 'stableford') {
-      if (strokesOnCurrentHole >= 2) return currentPar + 4; // Triple+ opens adjuster, capped at Quad
-      return currentPar + 2 + strokesOnCurrentHole;         // direct buttons only (Double or Triple)
+      if (strokesOnCurrentHole >= 2) return currentPar + 4;
+      return currentPar + 2 + strokesOnCurrentHole;
     }
-    // Future: if (meta.maxScore === 'net_double_bogey') return currentPar + 2 + strokesOnCurrentHole;
     return null;
   })();
 
@@ -680,141 +668,18 @@ const handleBack = async () => {
     return 'text-red-600 font-bold';
   };
 
-  // Helper to render a scorecard section (used for both halves)
-  const renderScorecardSection = (holes, label) => (
-    <div className={label === first9Label ? 'mb-6' : ''}>
-      <h3 className="text-sm font-semibold text-gray-700 mb-2">{label}</h3>
-      <table className="w-full table-fixed text-xs">
-        <colgroup>
-          <col className="w-8" />
-        </colgroup>
-        <thead>
-          <tr className="border-b-2 border-gray-300">
-            <th className="text-left py-1 px-0.5 text-gray-500">Hole</th>
-            {holes.map(h => (
-              <th key={h} className="text-center py-1 px-0.5">{h}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          <tr className={courseStrokeIndexes.length > 0 ? '' : 'border-b border-gray-200'}>
-            <td className="py-1 px-0.5 text-gray-500">Par</td>
-            {holes.map(h => {
-              const strokeCount = strokeHoles[h] || 0;
-              return (
-                <td key={h} className="text-center py-1 px-0.5">
-                  {coursePars[h - 1]}
-                  {strokeCount > 0 && (
-                    <div className="flex justify-center gap-0.5 mt-0.5">
-                      {Array.from({ length: strokeCount }).map((_, i) => (
-                        <span key={i} className="inline-block w-1 h-1 rounded-full bg-blue-500" />
-                      ))}
-                    </div>
-                  )}
-                </td>
-              );
-            })}
-          </tr>
-          {courseStrokeIndexes.length > 0 && (
-            <tr className="border-b border-gray-200">
-              <td className="py-1 px-0.5 text-gray-400">SI</td>
-              {holes.map(h => (
-                <td key={h} className={`text-center py-1 px-0.5 ${strokeHoles[h] ? 'text-blue-500 font-semibold' : 'text-gray-400'}`}>
-                  {courseStrokeIndexes[h - 1] ?? '-'}
-                </td>
-              ))}
-            </tr>
-          )}
-          <tr>
-            <td className="py-1 px-0.5 text-gray-500">Score</td>
-            {holes.map(h => {
-              const hole = getHoleData(h);
-              const par = coursePars[h - 1];
-              const holeMulligans = !isSolo ? (scoringUnit?.mulliganLog?.[h] || 0) : 0;
-              return (
-                <td
-                  key={h}
-                  className={`text-center py-1 px-0.5 cursor-pointer ${getScoreColor(hole?.score, par)}`}
-                  onClick={() => goToHole(h)}
-                >
-                  {hole?.score || '-'}
-                  {(isSolo || trackStats) && hole?.gir && <span className="text-green-600" style={{fontSize:'8px'}}>●</span>}
-                  {holeMulligans > 0 && <span className="text-purple-500" style={{fontSize:'8px'}}>{'🎟️'.repeat(holeMulligans)}</span>}
-                </td>
-              );
-              })}
-            </tr>
-            {format === 'stableford' && (
-              <tr>
-                <td className="py-1 px-0.5 text-gray-500">Pts</td>
-                {holes.map(h => {
-                  const hole = getHoleData(h);
-                  const par = coursePars[h - 1];
-                  const pts = hole?.score ? calculateStablefordPoints(hole.score, par + (strokeHoles[h] || 0)) : null;
-                  return (
-                    <td key={h} className={`text-center py-1 px-0.5 font-semibold ${
-                      pts == null ? 'text-gray-400' :
-                      pts >= 3 ? 'text-green-600' :
-                      pts === 2 ? 'text-gray-700' :
-                      pts === 1 ? 'text-orange-500' :
-                      'text-red-600'
-                    }`}>
-                      {pts != null ? pts : '-'}
-                    </td>
-                  );
-                })}
-              </tr>
-            )}
-          </tbody>
-        </table>
-    </div>
-  );
-
   // ==================== RENDER ====================
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-2 md:p-4">
       <div className="max-w-2xl mx-auto">
-        {/* ============================================================
-            ROUND COMPLETE MODAL — shown when last hole is saved in event mode
-           ============================================================ */}
-        {showRoundComplete && !isSolo && (
-          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-6">
-            <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-sm w-full text-center">
-              <div className="text-5xl mb-4">🏌️</div>
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Round Complete!</h2>
-              <p className="text-gray-600 mb-6">
-                All {numHoles} holes scored. Your scores have been saved.
-              </p>
-              <div className="space-y-3">
-                <button
-                  onClick={async () => {
-                    // Clear scoring lock if team format, then go back to lobby
-                    if (isTeamFormat) {
-                      try {
-                        await remove(ref(database, `${scoringBasePath}/scoringLockedBy`));
-                      } catch (err) {
-                        console.error('Error clearing scoring lock:', err);
-                      }
-                    }
-                    setSelectedTeam(null);
-                    setShowRoundComplete(false);
-                    setView('event-lobby');
-                  }}
-                  className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-4 rounded-xl font-semibold text-lg shadow-lg transition-all"
-                >
-                  Back to Lobby
-                </button>
-                <button
-                  onClick={() => setShowRoundComplete(false)}
-                  className="w-full bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold transition-all"
-                >
-                  Review Scorecard
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
+
+        <RoundCompleteModal
+          show={showRoundComplete && !isSolo}
+          numHoles={numHoles}
+          onBackToLobby={handleBackToLobby}
+          onReview={() => setShowRoundComplete(false)}
+        />
 
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
@@ -831,459 +696,84 @@ const handleBack = async () => {
           )}
         </div>
 
-        {/* Stats Header */}
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
-          {isSolo ? (
-            <h2 className="text-xl font-bold text-gray-900 mb-4">{courseName}</h2>
-          ) : (
-            <>
-              <h1 className="text-2xl font-bold text-gray-900 mb-1">
-                {scoringDisplayName}
-              </h1>
-              {isTeamFormat && teamMemberNames.length > 0 && (
-                <div className="text-sm text-gray-500 mb-1">
-                  {teamMemberNames.join(' & ')}
-                </div>
-              )}
-              <div className="text-sm text-gray-600 mb-4">{courseName}</div>
-            </>
-          )}
+        <ScoringHeader
+          isSolo={isSolo}
+          isTeamFormat={isTeamFormat}
+          courseName={courseName}
+          scoringDisplayName={scoringDisplayName}
+          teamMemberNames={teamMemberNames}
+          stats={stats}
+          format={format}
+          usesMulligans={usesMulligans}
+          mulligansRemaining={mulligansRemaining}
+          mulligansTotal={mulligansTotal}
+          trackStats={trackStats}
+          onTrackStatsToggle={handleTrackStatsToggle}
+        />
 
-          <div className={`grid ${(isSolo || trackStats) ? 'grid-cols-2 md:grid-cols-5' : format === 'stableford' ? (usesMulligans ? 'grid-cols-4' : 'grid-cols-3') : usesMulligans ? 'grid-cols-3' : 'grid-cols-2'} gap-4`}>
-            <div className="text-center">
-              <div className="text-sm text-gray-600">Score</div>
-              <div className="text-3xl font-bold text-gray-900">{stats.totalScore || 0}</div>
-              <div className="text-sm text-gray-600">Thru {stats.holesPlayed} holes</div>
-            </div>
-            <div className="text-center">
-              <div className="text-sm text-gray-600">To Par</div>
-              <div className="text-3xl font-bold text-gray-900">
-                {stats.toPar > 0 ? '+' : ''}{stats.toPar || 0}
-              </div>
-            </div>
-            {format === 'stableford' && (
-              <div className="text-center">
-                <div className="text-sm text-gray-600">Points</div>
-                <div className="text-3xl font-bold text-blue-600">{stats.stablefordPoints || 0}</div>
-              </div>
-            )}
-            {usesMulligans && (
-              <div className="text-center">
-                <div className="text-sm text-gray-600">Mulligans</div>
-                <div className={`text-3xl font-bold ${mulligansRemaining > 0 ? 'text-purple-700' : 'text-gray-400'}`}>
-                  {mulligansRemaining}
-                </div>
-                <div className="text-sm text-gray-600">of {mulligansTotal}</div>
-              </div>
-            )}
-            {(isSolo || trackStats) && (
-              <>
-                <div className="text-center">
-                  <div className="text-sm text-gray-600">Putts</div>
-                  <div className="text-3xl font-bold text-gray-900">
-                    {stats.totalPutts}
-                  </div>
-                </div>
-                {/* ============================================================
-                    FIX #5: GIR stat added to the stats header.
-                    Shows greens hit as a fraction (e.g. 3/8) with a percentage.
-                    Matches the existing Fairways display pattern.
-                   ============================================================ */}
-                <div className="text-center">
-                  <div className="text-sm text-gray-600">GIR</div>
-                  <div className="text-3xl font-bold text-gray-900">
-                    {stats.greensInRegulation}/{stats.holesPlayed}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {stats.holesPlayed > 0
-                      ? `${((stats.greensInRegulation / stats.holesPlayed) * 100).toFixed(0)}%`
-                      : '0%'}
-                  </div>
-                </div>
-                <div className="text-center">
-                  <div className="text-sm text-gray-600">Fairways</div>
-                  <div className="text-3xl font-bold text-gray-900">
-                    {stats.fairwaysHit}/{stats.fairwaysPossible}
-                  </div>
-                  <div className="text-xs text-gray-500">
-                    {stats.fairwaysPossible > 0
-                      ? `${((stats.fairwaysHit / stats.fairwaysPossible) * 100).toFixed(0)}%`
-                      : '0%'}
-                  </div>
-                </div>
-              </>
-            )}
-          </div>
+        <HoleCard
+          currentHole={currentHole}
+          currentPar={currentPar}
+          currentYardage={currentYardage}
+          currentSI={currentSI}
+          strokeHoles={strokeHoles}
+          strokesOnCurrentHole={strokesOnCurrentHole}
+          isFirstHole={isFirstHole}
+          isLastHole={isLastHole}
+          isSolo={isSolo}
+          useStatFlow={useStatFlow}
+          usesMulligans={usesMulligans}
+          format={format}
+          mulligansRemaining={mulligansRemaining}
+          mulligansTotal={mulligansTotal}
+          confirmingMulligan={confirmingMulligan}
+          mulliganLogCurrentHole={!isSolo ? (scoringUnit?.mulliganLog?.[currentHole] || 0) : 0}
+          currentScore={currentScore}
+          showCustomScore={showCustomScore}
+          currentFairway={currentFairway}
+          currentPutts={currentPutts}
+          maxHoleScore={maxHoleScore}
+          quickScoreButtons={quickScoreButtons}
+          fairwayButtons={fairwayButtons}
+          puttOptions={puttOptions}
+          isReadyToSave={isReadyToSave}
+          notes={notes}
+          feedback={feedback}
+          onPrevHole={() => { const prev = getPrevHole(currentHole); if (prev) goToHole(prev); }}
+          onNextHole={() => { const next = getNextHole(currentHole); if (next) goToHole(next); }}
+          onScoreSelect={handleScoreSelect}
+          onCustomScoreDecrease={() => setCurrentScore(Math.max(currentPar + 3, currentScore - 1))}
+          onCustomScoreIncrease={() => setCurrentScore(Math.min(maxHoleScore ?? 15, currentScore + 1))}
+          onCustomScoreConfirm={handleCustomScoreConfirm}
+          onFairwaySelect={handleFairwaySelect}
+          onPuttsSelect={handlePuttsSelect}
+          onConfirmAndNext={handleConfirmAndNext}
+          onClearScore={handleClearScore}
+          onStartMulligan={() => setConfirmingMulligan(true)}
+          onConfirmMulligan={useMulligan}
+          onCancelMulligan={() => setConfirmingMulligan(false)}
+          onUndoMulligan={handleUndoMulligan}
+          onNotesChange={(e) => setNotes(e.target.value)}
+        />
 
-          {/* Track Stats Toggle — event mode only (individual, non-team) */}
-          {!isSolo && !isTeamFormat && (
-            <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
-              <div>
-                <div className="text-sm font-semibold text-gray-700">Track Stats</div>
-                <div className="text-xs text-gray-500">Fairways, putts, GIR</div>
-              </div>
-              <button
-                onClick={handleTrackStatsToggle}
-                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-                  trackStats ? 'bg-green-500' : 'bg-gray-300'
-                }`}
-              >
-                <span
-                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                    trackStats ? 'translate-x-6' : 'translate-x-1'
-                  }`}
-                />
-              </button>
-            </div>
-          )}
-        </div>
+        <Scorecard
+          first9={first9}
+          second9={second9}
+          first9Label={first9Label}
+          second9Label={second9Label}
+          coursePars={coursePars}
+          courseStrokeIndexes={courseStrokeIndexes}
+          strokeHoles={strokeHoles}
+          isSolo={isSolo}
+          trackStats={trackStats}
+          usesMulligans={usesMulligans}
+          format={format}
+          mulliganLog={!isSolo ? (scoringUnit?.mulliganLog || {}) : {}}
+          getHoleData={getHoleData}
+          goToHole={goToHole}
+          getScoreColor={getScoreColor}
+        />
 
-        {/* Current Hole */}
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
-          <div className="flex items-center justify-between mb-4">
-            <button
-              onClick={() => { const prev = getPrevHole(currentHole); if (prev) goToHole(prev); }}
-              disabled={isFirstHole}
-              className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed p-3 rounded-xl"
-            >
-              <ChevronLeftIcon />
-            </button>
-
-            <div className="text-center">
-              <div className="text-5xl font-bold text-gray-900">Hole {currentHole}</div>
-              <div className="text-xl text-gray-600 mt-1">Par {currentPar}</div>
-              {currentYardage && (
-                <div className="text-sm text-gray-500">{currentYardage} yards</div>
-              )}
-              {currentSI && (
-                <div className="text-sm text-gray-500">SI: {currentSI}</div>
-              )}
-              {(strokeHoles[currentHole] || 0) > 0 && (
-                <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-50 text-blue-600 text-sm font-semibold px-3 py-1 rounded-full">
-                  {Array.from({ length: strokeHoles[currentHole] }).map((_, i) => (
-                    <span key={i} className="inline-block w-2 h-2 rounded-full bg-blue-500" />
-                  ))}
-                  +{strokeHoles[currentHole]} stroke{strokeHoles[currentHole] > 1 ? 's' : ''}
-                </div>
-              )}
-            </div>
-
-            <button
-              onClick={() => { const next = getNextHole(currentHole); if (next) goToHole(next); }}
-              disabled={isLastHole}
-              className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed p-3 rounded-xl"
-            >
-              <ChevronRightIcon />
-            </button>
-          </div>
-
-          {/* Mulligan — shown ABOVE score entry so it's logged before scoring */}
-          {usesMulligans && !confirmingMulligan && (
-            <div className="mb-4 pb-4 border-b border-gray-200">
-              {mulligansRemaining > 0 ? (
-                <>
-                  <button
-                    onClick={() => setConfirmingMulligan(true)}
-                    className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 py-2.5 rounded-xl font-semibold transition-all text-sm"
-                  >
-                    🎟️ Use Mulligan ({mulligansRemaining} left)
-                  </button>
-                  {(scoringUnit?.mulliganLog?.[currentHole] || 0) > 0 && (
-                    <button
-                      onClick={async () => {
-                        if (!confirm('Undo a mulligan on this hole?')) return;
-                        try {
-                          const holeCount = scoringUnit.mulliganLog[currentHole];
-                          const newRemaining = mulligansRemaining + 1;
-                          await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
-                          if (holeCount <= 1) {
-                            await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
-                          } else {
-                            await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
-                          }
-                          const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
-                          setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
-                          setFeedback(`Mulligan restored! ${newRemaining} remaining`);
-                          setTimeout(() => setFeedback(''), 2000);
-                        } catch (error) {
-                          console.error('Error undoing mulligan:', error);
-                          setFeedback('Error undoing mulligan');
-                          setTimeout(() => setFeedback(''), 2000);
-                        }
-                      }}
-                      className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
-                    >
-                      ↩ Undo mulligan on this hole ({scoringUnit.mulliganLog[currentHole]} used)
-                    </button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <div className="text-center text-sm text-gray-400 font-semibold">
-                    🎟️ No mulligans remaining
-                  </div>
-                  {(scoringUnit?.mulliganLog?.[currentHole] || 0) > 0 && (
-                    <button
-                      onClick={async () => {
-                        if (!confirm('Undo a mulligan on this hole?')) return;
-                        try {
-                          const holeCount = scoringUnit.mulliganLog[currentHole];
-                          const newRemaining = mulligansRemaining + 1;
-                          await set(ref(database, `${scoringBasePath}/mulligansRemaining`), newRemaining);
-                          if (holeCount <= 1) {
-                            await remove(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`));
-                          } else {
-                            await set(ref(database, `${scoringBasePath}/mulliganLog/${currentHole}`), holeCount - 1);
-                          }
-                          const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
-                          setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
-                          setFeedback(`Mulligan restored! ${newRemaining} remaining`);
-                          setTimeout(() => setFeedback(''), 2000);
-                        } catch (error) {
-                          console.error('Error undoing mulligan:', error);
-                          setFeedback('Error undoing mulligan');
-                          setTimeout(() => setFeedback(''), 2000);
-                        }
-                      }}
-                      className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
-                    >
-                      ↩ Undo mulligan on this hole ({scoringUnit.mulliganLog[currentHole]} used)
-                    </button>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Mulligan Confirmation */}
-          {usesMulligans && confirmingMulligan && (
-            <div className="mb-4 pb-4 border-b border-gray-200">
-              <p className="text-center text-sm text-gray-700 mb-3">
-                Use a mulligan on Hole {currentHole}?
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={useMulligan}
-                  className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-semibold transition-all"
-                >
-                  ✓ Confirm Mulligan
-                </button>
-                <button
-                  onClick={() => setConfirmingMulligan(false)}
-                  className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 py-3 rounded-xl font-semibold transition-all"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Score Entry */}
-          <div className="mb-4">
-            <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Score</h3>
-            <div className="grid grid-cols-3 gap-2">
-              {quickScoreButtons.map(btn => (
-                <button
-                  key={btn.label}
-                  onClick={() => handleScoreSelect(btn.value)}
-                  className={`${
-                    currentScore === btn.value && !(showCustomScore && btn.label === 'Triple+')
-                      ? 'ring-4 ring-blue-400'
-                      : ''
-                  } ${showCustomScore && btn.label === 'Triple+' ? 'ring-4 ring-blue-400' : ''} ${btn.color} text-white py-4 rounded-xl font-semibold shadow-lg transition-all`}
-                >
-                  <div className="text-sm">{btn.label}</div>
-                  <div className="text-2xl font-bold">
-                    {btn.label === 'Triple+' && maxHoleScore === null ? `${btn.value}+` : btn.value}
-                  </div>
-                  {format === 'stableford' && btn.label !== 'Triple+' && (
-                    <div className="text-xs mt-0.5 opacity-90">
-                      {calculateStablefordPoints(btn.value, currentPar + strokesOnCurrentHole)} pts
-                    </div>
-                  )}
-                </button>
-              ))}
-            </div>
-
-            {/* Custom Score Adjuster — shown when Triple+ is tapped */}
-            {showCustomScore && (
-              <div className="mt-4 pt-4 border-t border-gray-200">
-                <div className="text-center text-sm text-gray-600 mb-3">Adjust Score</div>
-                <div className="flex items-center justify-center gap-4">
-                  <button
-                    onClick={() => setCurrentScore(Math.max(currentPar + 3, currentScore - 1))}
-                    disabled={currentScore <= currentPar + 3}
-                    className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed w-14 h-14 rounded-xl text-2xl font-bold"
-                  >
-                    −
-                  </button>
-                  <div className="text-5xl font-bold text-gray-900 w-20 text-center">{currentScore}</div>
-                  <button
-                    onClick={() => setCurrentScore(Math.min(maxHoleScore ?? 15, currentScore + 1))}
-                    disabled={currentScore >= 15}
-                    className="bg-gray-200 hover:bg-gray-300 disabled:opacity-30 disabled:cursor-not-allowed w-14 h-14 rounded-xl text-2xl font-bold"
-                  >
-                    +
-                  </button>
-                </div>
-                <div className="text-center text-xs text-gray-400 mt-1">
-                  +{currentScore - currentPar} over par
-                </div>
-                {format === 'stableford' && (
-                  <div className={`text-center text-sm font-semibold mt-2 ${
-                    calculateStablefordPoints(currentScore, currentPar + strokesOnCurrentHole) >= 3 ? 'text-green-600' :
-                    calculateStablefordPoints(currentScore, currentPar + strokesOnCurrentHole) === 2 ? 'text-gray-700' :
-                    calculateStablefordPoints(currentScore, currentPar + strokesOnCurrentHole) === 1 ? 'text-orange-500' :
-                    'text-red-600'
-                  }`}>
-                    {calculateStablefordPoints(currentScore, currentPar + strokesOnCurrentHole)} pts
-                  </div>
-                )}
-                <button
-                  onClick={() => {
-                    // Just close the custom adjuster — the Save & Next button
-                    // below will handle the actual save
-                    setShowCustomScore(false);
-                    setCurrentPutts(null);
-                    if (useStatFlow && currentPar < 4) {
-                      setCurrentFairway(null);
-                    }
-                  }}
-                  className="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold transition-all"
-                >
-                  Confirm Score: {currentScore}
-                </button>
-              </div>
-            )}
-          </div>
-
-          {/* Fairway Entry — solo or when tracking stats */}
-          {useStatFlow && currentScore && !showCustomScore && currentPar >= 4 && (
-            <div className="mb-4">
-              <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Fairway</h3>
-              <div className="grid grid-cols-4 gap-3">
-                {fairwayButtons.map(btn => (
-                  <button
-                    key={btn.label}
-                    onClick={() => handleFairwaySelect(btn.value)}
-                    className={`${
-                      currentFairway === btn.value
-                        ? 'ring-4 ring-blue-400'
-                        : ''
-                    } ${btn.color} text-white py-6 rounded-xl font-semibold text-lg shadow-lg transition-all`}
-                  >
-                    {btn.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Putts Entry — solo or when tracking stats */}
-          {useStatFlow && currentScore && !showCustomScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
-            <div className="mb-4">
-              <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Putts</h3>
-              <div className="grid grid-cols-4 gap-3">
-                {puttOptions.map(putts => {
-                  const puttVal = putts === '3+' ? 3 : putts;
-                  return (
-                    <button
-                      key={putts}
-                      onClick={() => handlePuttsSelect(putts)}
-                      className={`${
-                        currentPutts === puttVal ? 'ring-4 ring-blue-400' : ''
-                      } bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
-                    >
-                      {putts}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* ============================================================
-              SAVE & NEXT / CLEAR CONFIRMATION BAR
-              Shows whenever a score is selected. Prevents accidental
-              double-taps from scoring the wrong hole.
-             ============================================================ */}
-          {currentScore && !showCustomScore && (
-            <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
-              <div className="text-center mb-3">
-                <div className="text-sm text-gray-600">
-                  Hole {currentHole} — Selected:
-                </div>
-                <div className="text-2xl font-bold text-gray-900">
-                  {currentScore} ({currentScore < currentPar ? currentScore - currentPar : currentScore === currentPar ? 'E' : '+' + (currentScore - currentPar)})
-                  {useStatFlow && currentFairway && ` · ${currentFairway === 'hit' ? 'FW' : currentFairway.charAt(0).toUpperCase() + currentFairway.slice(1)}`}
-                  {useStatFlow && currentPutts !== null && ` · ${currentPutts}P`}
-                </div>
-                {!isReadyToSave && useStatFlow && (
-                  <div className="text-xs text-amber-600 mt-1">
-                    {currentPar >= 4 && !currentFairway ? 'Select fairway →' : 'Select putts →'}
-                  </div>
-                )}
-              </div>
-              <div className="flex gap-3">
-                <button
-                  onClick={handleConfirmAndNext}
-                  disabled={!isReadyToSave}
-                  className={`flex-1 py-3 rounded-xl font-semibold text-lg transition-all ${
-                    isReadyToSave
-                      ? 'bg-green-600 hover:bg-green-700 text-white shadow-lg'
-                      : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  }`}
-                >
-                  ✓ Save & Next
-                </button>
-                <button
-                  onClick={handleClearScore}
-                  className="px-5 py-3 rounded-xl font-semibold bg-gray-200 hover:bg-gray-300 text-gray-700 transition-all"
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Mulligans are now shown above the score entry */}
-        </div>
-
-        {/* Notes — solo only */}
-
-        {/* Notes — solo only */}
-        {isSolo && (
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
-          <label className="block text-sm font-semibold text-gray-700 mb-2">Notes</label>
-          <textarea
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Add notes about this hole..."
-            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none resize-none"
-            rows="3"
-          />
-        </div>
-        )}
-
-        {feedback && (
-          <div className="mb-4 bg-red-50 border-2 border-red-200 text-red-800 px-4 py-3 rounded-xl text-sm text-center">
-            {feedback}
-          </div>
-        )}
-
-        {/* Scorecard */}
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Scorecard</h2>
-
-          {renderScorecardSection(first9, first9Label)}
-          {second9.length > 0 && renderScorecardSection(second9, second9Label)}
-
-          <div className="mt-4 text-sm text-gray-600 text-center">
-            {(isSolo || trackStats) && '● = Green in Regulation · '}
-            {usesMulligans && '🎟️ = Mulligan used · '}
-            Tap any hole to edit
-          </div>
-        </div>
       </div>
     </div>
   );

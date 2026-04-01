@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(wc -l C:/Users/Will/Documents/GitHub/golf-tracker/src/components/events/EventForm.jsx C:/Users/Will/Documents/GitHub/golf-tracker/src/components/leagues/*.jsx C:/Users/Will/Documents/GitHub/golf-tracker/src/components/home/*.jsx)"
+    ]
+  }
+}
