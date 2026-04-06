@@ -156,9 +156,12 @@ export default function HomeView({
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-white" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
+            <div className="flex items-center gap-3">
+              <img src="/icon-192x192.png" alt="LiveLinks" className="w-10 h-10" />
+              <h1 className="text-3xl font-bold text-white" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
+            </div>
             {userProfile && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mt-1">
                 <p className="text-white/80">Welcome, {userProfile?.profile?.displayName || 'Golfer'}</p>
                 <button
                   onClick={openProfileEditor}

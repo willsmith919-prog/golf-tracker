@@ -39,6 +39,7 @@ export default function LoginView({
     <div className="min-h-screen bg-[#00285e] p-6 flex items-center justify-center">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
+          <img src="/icon-192x192.png" alt="LiveLinks" className="w-20 h-20 mx-auto mb-4" />
           <h1 className="text-5xl font-bold text-white mb-2" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
           <p className="text-[#c8d6e5]">Golf League Management</p>
         </div>
