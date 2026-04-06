@@ -152,7 +152,7 @@ export default function HomeView({
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] p-6 font-sans">
+    <div className="min-h-screen bg-[#00285e] p-6 font-sans">
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -415,14 +415,14 @@ export default function HomeView({
           <div className="mb-6">
             <button
               onClick={() => setView('event-history')}
-              className="w-full bg-white/10 backdrop-blur-sm p-5 rounded-2xl hover:bg-white/20 transition-all text-left"
+              className="w-full bg-white/95 hover:bg-white p-5 rounded-2xl transition-all text-left shadow-lg"
             >
               <div className="flex items-center justify-between">
                 <div>
-                  <div className="text-lg font-semibold text-white">📂 Event History</div>
-                  <div className="text-sm text-white/70">View completed events</div>
+                  <div className="text-lg font-semibold text-gray-900">📂 Event History</div>
+                  <div className="text-sm text-gray-600">View completed events</div>
                 </div>
-                <div className="text-white/50">›</div>
+                <div className="text-gray-400">›</div>
               </div>
             </button>
           </div>
@@ -433,10 +433,10 @@ export default function HomeView({
           <h2 className="text-white text-lg font-semibold mb-3">SOLO</h2>
           <button
             onClick={() => setView('solo-setup')}
-            className="w-full bg-[#e17055] text-white p-6 rounded-2xl text-left shadow-lg transition-all"
+            className="w-full bg-white/95 hover:bg-white text-gray-900 p-6 rounded-2xl text-left shadow-lg transition-all"
           >
             <div className="font-bold text-lg mb-1">Play Solo</div>
-            <div className="text-sm text-green-100">Track your personal round</div>
+            <div className="text-sm text-gray-600">Track your personal round</div>
           </button>
         </div>
 
@@ -446,10 +446,10 @@ export default function HomeView({
           <div className="space-y-3">
             <button
               onClick={() => setView('rounds-history')}
-              className="w-full bg-[#00285e] text-white p-6 rounded-2xl text-left shadow-lg transition-all"
+              className="w-full bg-white/95 hover:bg-white text-gray-900 p-6 rounded-2xl text-left shadow-lg transition-all"
             >
               <div className="font-bold text-lg mb-1">My Rounds</div>
-              <div className="text-sm text-[#dce8f5]">View all your golf rounds</div>
+              <div className="text-sm text-gray-600">View all your golf rounds</div>
             </button>
           </div>
         </div>

@@ -89,7 +89,7 @@ export default function JoinEventConfirm({
   // --- Loading state ---
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center">
+      <div className="min-h-screen bg-[#00285e] flex items-center justify-center">
         <p className="text-white text-lg">Loading...</p>
       </div>
     );
@@ -98,7 +98,7 @@ export default function JoinEventConfirm({
   // --- Error state ---
   if (error) {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] p-6 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-[#00285e] p-6 flex flex-col items-center justify-center">
         <p className="text-white text-lg mb-4">{error}</p>
         <button
           onClick={() => setView('home')}
@@ -113,7 +113,7 @@ export default function JoinEventConfirm({
   const meta = event?.meta || {};
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] p-6 font-sans">
+    <div className="min-h-screen bg-[#00285e] p-6 font-sans">
       <div className="max-w-2xl mx-auto">
 
         {/* Back button */}

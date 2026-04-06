@@ -37,7 +37,7 @@ export default function EventHistoryView({
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] p-6 font-sans">
+    <div className="min-h-screen bg-[#00285e] p-6 font-sans">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => setView('home')}

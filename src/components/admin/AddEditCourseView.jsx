@@ -158,7 +158,7 @@ export default function AddEditCourseView({
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] p-6">
+    <div className="min-h-screen bg-[#00285e] p-6">
       <div className="max-w-6xl mx-auto">
         <button 
           onClick={() => { 

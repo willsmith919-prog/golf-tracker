@@ -79,7 +79,7 @@ export default function EditEventView({
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] p-6">
+    <div className="min-h-screen bg-[#00285e] p-6">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => setView('event-lobby')}

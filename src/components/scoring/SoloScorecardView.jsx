@@ -3,7 +3,7 @@ import { database } from '../../firebase';
 export default function SoloScorecardView({ currentSoloRound, setView }) {
   if (!currentSoloRound) {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#00285e] p-6 flex items-center justify-center">
         <div className="text-white text-center">
           <p className="text-xl mb-4">Round not found</p>
           <button onClick={() => setView('home')} className="bg-white text-[#004f4e] px-6 py-3 rounded-xl font-semibold">
@@ -43,7 +43,7 @@ export default function SoloScorecardView({ currentSoloRound, setView }) {
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] p-4">
+    <div className="min-h-screen bg-[#00285e] p-4">
       <div className="max-w-4xl mx-auto">
         <button 
           onClick={() => setView('rounds-history')} 

@@ -36,7 +36,7 @@ export default function LoginView({
   };
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
+    <div className="min-h-screen bg-[#00285e] p-6 flex items-center justify-center">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold text-white mb-2" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>

@@ -171,7 +171,7 @@ export default function ScoringView({
 
   if (!isSolo && !scoringUnit) {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#00285e] p-6 flex items-center justify-center">
         <div className="text-white text-center">
           <p className="text-xl mb-4">
             {isTeamFormat ? 'Team not found in this event' : 'Player not found in this event'}
@@ -186,7 +186,7 @@ export default function ScoringView({
 
   if (isSolo && !currentSoloRound) {
     return (
-      <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#00285e] p-6 flex items-center justify-center">
         <div className="text-white text-center">
           <p className="text-xl mb-4">Round not found</p>
           <button onClick={() => setView('home')} className="bg-white text-[#004f4e] px-6 py-3 rounded-xl font-semibold">
@@ -671,7 +671,7 @@ export default function ScoringView({
   // ==================== RENDER ====================
 
   return (
-    <div className="min-h-screen bg-[#1a1a2e] p-2 md:p-4">
+    <div className="min-h-screen bg-[#00285e] p-2 md:p-4">
       <div className="max-w-2xl mx-auto">
 
         <RoundCompleteModal
