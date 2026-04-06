@@ -324,7 +324,7 @@ export default function HomeView({
                     }}
                     className={`w-full p-5 rounded-2xl shadow-xl transition-all text-left ${
                       isActive
-                        ? 'from-green-50 to-emerald-50 border-2 border-green-300 hover:border-green-400'
+                        ? 'bg-white border-2 border-[#e63946] hover:border-[#c5303c]'
                         : 'bg-white/95 backdrop-blur-sm hover:bg-white'
                     }`}
                   >
@@ -339,7 +339,7 @@ export default function HomeView({
                           )}
                           {event.eventName || event.name || 'Unnamed Event'}
                           {isActive && (
-                            <span className="text-xs bg-green-500 text-white px-2 py-0.5 rounded-full">LIVE</span>
+                            <span className="text-xs bg-[#e63946] text-white px-2 py-0.5 rounded-full">LIVE</span>
                           )}
                         </div>
                         <div className="text-sm text-gray-600">
@@ -348,7 +348,7 @@ export default function HomeView({
                           {!isActive && event.status ? ` · ${event.status.charAt(0).toUpperCase() + event.status.slice(1)}` : ''}
                         </div>
                       </div>
-                      <div className={isActive ? 'text-green-500' : 'text-gray-400'}>›</div>
+                      <div className={isActive ? 'text-[#e63946]' : 'text-gray-400'}>›</div>
                     </div>
                   </button>
                 );
