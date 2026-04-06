@@ -43,12 +43,12 @@ export default function TeamsList({
                           if (e.key === 'Enter') saveTeamName(teamId, teamNameValue);
                           if (e.key === 'Escape') setEditingTeamName(null);
                         }}
-                        className="flex-1 px-3 py-1.5 rounded-lg border-2 border-blue-300 focus:border-blue-500 focus:outline-none text-sm font-semibold"
+                        className="flex-1 px-3 py-1.5 rounded-lg border-2 border-[#c8d6e5] focus:border-[#00285e] focus:outline-none text-sm font-semibold"
                         autoFocus
                       />
                       <button
                         onClick={() => saveTeamName(teamId, teamNameValue)}
-                        className="px-2 py-1 rounded text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700"
+                        className="px-2 py-1 rounded text-xs font-semibold bg-[#00285e] text-white hover:bg-[#003a7d]"
                       >
                         Save
                       </button>
@@ -64,7 +64,7 @@ export default function TeamsList({
                       <h3 className="font-bold text-gray-900">{team.name || 'Unnamed Team'}</h3>
                       {teamId === myTeamId && (
                         <>
-                          <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">Your Team</span>
+                          <span className="text-[10px] bg-[#f0f4ff] text-[#00285e] px-1.5 py-0.5 rounded-full">Your Team</span>
                           <button
                             onClick={() => {
                               setEditingTeamName(teamId);
@@ -84,13 +84,13 @@ export default function TeamsList({
                   {Object.keys(team.members || {}).map(uid => (
                     <div key={uid} className="flex items-center gap-2 text-sm text-gray-700">
                       <div className={`w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold ${
-                        players.find(p => p.uid === uid)?.role === 'host' ? 'bg-yellow-500' : 'bg-blue-500'
+                        players.find(p => p.uid === uid)?.role === 'host' ? 'bg-yellow-500' : 'bg-[#00285e]'
                       }`}>
                         {(currentEvent.players?.[uid]?.displayName || '?').charAt(0).toUpperCase()}
                       </div>
                       {currentEvent.players?.[uid]?.displayName || 'Unknown'}
                       {uid === currentUser?.uid && (
-                        <span className="text-[10px] bg-blue-100 text-blue-600 px-1 py-0.5 rounded-full">You</span>
+                        <span className="text-[10px] bg-[#f0f4ff] text-[#00285e] px-1 py-0.5 rounded-full">You</span>
                       )}
                     </div>
                   ))}
@@ -98,8 +98,8 @@ export default function TeamsList({
 
                 {usesMulligans && team.mulligansTotal > 0 && (
                   <div className="mt-2 pt-2 border-t border-gray-200 flex items-center gap-2">
-                    <span className="text-xs text-purple-700 font-semibold">🎟️ Mulligans:</span>
-                    <span className="text-sm font-bold text-purple-700">
+                    <span className="text-xs text-[#00285e] font-semibold">🎟️ Mulligans:</span>
+                    <span className="text-sm font-bold text-[#00285e]">
                       {team.mulligansRemaining ?? team.mulligansTotal}
                     </span>
                     <span className="text-xs text-gray-400">of {team.mulligansTotal}</span>

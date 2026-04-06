@@ -262,7 +262,7 @@ export default function LiveLeaderboard({
         <h2 className="text-xl font-bold text-gray-900">Live Leaderboard</h2>
         <div className="flex items-center gap-2">
           {handicapEnabled && (
-            <span className="text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded-full">
+            <span className="text-xs bg-[#f0f4ff] text-[#00285e] px-2 py-1 rounded-full">
               {primarySort === 'net' ? 'Net' : 'Gross'}
             </span>
           )}
@@ -348,17 +348,17 @@ export default function LiveLeaderboard({
         </span>
         {handicapEnabled && display.showStrokeHoles !== false && (
           <span className="flex items-center gap-1">
-            <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span> = 1 stroke
+            <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#00285e]"></span> = 1 stroke
             <span className="ml-1 inline-flex gap-0.5">
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
-              <span className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#00285e]"></span>
+              <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#00285e]"></span>
             </span> = 2 strokes
           </span>
         )}
         <span>F = Finished</span>
         {usesMulligans && (
           <span className="flex items-center gap-1">
-            <span className="text-purple-500">🎟️</span> Mulligan
+            <span className="text-[#00285e]">🎟️</span> Mulligan
           </span>
         )}
       </div>

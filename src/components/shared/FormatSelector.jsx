@@ -96,7 +96,7 @@ export default function FormatSelector({
           <div className="flex items-center justify-between">
             <span className="text-xs text-gray-500">Filter formats</span>
             {hasActiveFilters && (
-              <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">
+              <button onClick={clearFilters} className="text-xs text-[#00285e] hover:text-[#007a78]">
                 Clear
               </button>
             )}
@@ -109,7 +109,7 @@ export default function FormatSelector({
                 onClick={() => toggleFilter('teamSize', size)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   filters.teamSize === size
-                    ? 'bg-blue-600 text-white border-blue-600'
+                    ? 'bg-[#00285e] text-white border-[#003a7d]'
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -139,7 +139,7 @@ export default function FormatSelector({
                 onClick={() => toggleFilter('combinationMethod', combo)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   filters.combinationMethod === combo
-                    ? 'bg-purple-600 text-white border-purple-600'
+                    ? 'bg-[#00285e] text-white border-[#003a7d]'
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -154,7 +154,7 @@ export default function FormatSelector({
                 onClick={() => toggleFilter('competition', comp)}
                 className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
                   filters.competition === comp
-                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    ? 'bg-[#00285e] text-white border-[#00285e]'
                     : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
                 }`}
               >
@@ -205,7 +205,7 @@ export default function FormatSelector({
           onFormatChange(formatId, formatData);
         }}
         disabled={disabled}
-        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
+        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
       >
         <option value="">
           {hasActiveFilters

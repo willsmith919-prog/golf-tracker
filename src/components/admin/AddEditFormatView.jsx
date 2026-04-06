@@ -352,7 +352,7 @@ export default function AddEditFormatView({
     <label
       className={`flex items-start p-4 rounded-xl border-2 cursor-pointer transition-colors ${
         checked
-          ? 'border-blue-500 bg-blue-50'
+          ? 'border-[#00285e] bg-[#f0f4ff]'
           : 'border-gray-200 hover:bg-gray-50'
       } ${className}`}
     >
@@ -362,7 +362,7 @@ export default function AddEditFormatView({
         value={value}
         checked={checked}
         onChange={onChange}
-        className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0"
+        className="w-5 h-5 text-[#00285e] mt-0.5 flex-shrink-0"
       />
       <div className="ml-3">
         <div className="text-gray-900 font-medium">{label}</div>
@@ -385,7 +385,7 @@ export default function AddEditFormatView({
           onChange={onChange}
           className="sr-only peer"
         />
-        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00285e]"></div>
       </label>
     </div>
   );
@@ -401,7 +401,7 @@ export default function AddEditFormatView({
         step={step}
         value={value}
         onChange={onChange}
-        className="w-24 px-3 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+        className="w-24 px-3 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
       />
       {helpText && <p className="text-xs text-gray-500 mt-1">{helpText}</p>}
     </div>
@@ -418,14 +418,14 @@ export default function AddEditFormatView({
   // ==================== RENDER ====================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => {
             setEditingFormat(null);
             setView('manage-formats');
           }}
-          className="text-white mb-6 hover:text-blue-200"
+          className="text-white mb-6 hover:text-[#c8d6e5]"
         >
           ← Back to Formats
         </button>
@@ -447,13 +447,13 @@ export default function AddEditFormatView({
                 value={formatForm.name}
                 onChange={(e) => setFormatForm({ ...formatForm, name: e.target.value })}
                 placeholder={autoName || "e.g., 2-Man Scramble - Net"}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
               />
               {autoName && formatForm.name !== autoName && (
                 <button
                   type="button"
                   onClick={() => setFormatForm({ ...formatForm, name: autoName })}
-                  className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                  className="text-xs text-[#00285e] hover:text-[#007a78] mt-1"
                 >
                   Use suggested: "{autoName}"
                 </button>
@@ -469,13 +469,13 @@ export default function AddEditFormatView({
                 onChange={(e) => setFormatForm({ ...formatForm, description: e.target.value })}
                 placeholder={autoDescription || "Briefly describe how this format works..."}
                 rows="3"
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none resize-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none resize-none"
               />
               {autoDescription && formatForm.description !== autoDescription && (
                 <button
                   type="button"
                   onClick={() => setFormatForm({ ...formatForm, description: autoDescription })}
-                  className="text-xs text-blue-600 hover:text-blue-800 mt-1"
+                  className="text-xs text-[#00285e] hover:text-[#007a78] mt-1"
                 >
                   Use suggested description
                 </button>
@@ -496,7 +496,7 @@ export default function AddEditFormatView({
                     key={option.value}
                     className={`flex items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-colors ${
                       formatForm.teamSize === option.value
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-[#00285e] bg-[#f0f4ff]'
                         : 'border-gray-200 hover:bg-gray-50'
                     }`}
                   >
@@ -506,7 +506,7 @@ export default function AddEditFormatView({
                       value={option.value}
                       checked={formatForm.teamSize === option.value}
                       onChange={(e) => handleTeamSizeChange(e.target.value)}
-                      className="w-5 h-5 text-blue-600"
+                      className="w-5 h-5 text-[#00285e]"
                     />
                     <span className="ml-3 text-gray-900 font-medium">{option.label}</span>
                   </label>
@@ -515,7 +515,7 @@ export default function AddEditFormatView({
 
               {/* Note when Wolf has locked team size */}
               {formatForm.competitionStructure === 'wolf' && (
-                <p className="text-xs text-blue-600 mt-2">
+                <p className="text-xs text-[#00285e] mt-2">
                   Team size is set to 4-Person because Wolf requires exactly 4 players.
                 </p>
               )}
@@ -565,7 +565,7 @@ export default function AddEditFormatView({
                         max="20"
                         value={formatForm.stablefordPoints[item.key] ?? 0}
                         onChange={(e) => handleStablefordChange(item.key, e.target.value)}
-                        className="w-16 px-2 py-1 text-center rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                        className="w-16 px-2 py-1 text-center rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                       />
                     </div>
                   ))}
@@ -586,7 +586,7 @@ export default function AddEditFormatView({
                       key={option.value}
                       className={`flex items-center p-4 rounded-xl border-2 cursor-pointer transition-colors ${
                         formatForm.combinationMethod === option.value
-                          ? 'border-blue-500 bg-blue-50'
+                          ? 'border-[#00285e] bg-[#f0f4ff]'
                           : 'border-gray-200 hover:bg-gray-50'
                       }`}
                     >
@@ -596,7 +596,7 @@ export default function AddEditFormatView({
                         value={option.value}
                         checked={formatForm.combinationMethod === option.value}
                         onChange={(e) => setFormatForm({ ...formatForm, combinationMethod: e.target.value })}
-                        className="w-5 h-5 text-blue-600"
+                        className="w-5 h-5 text-[#00285e]"
                       />
                       <span className="ml-3 text-gray-900 text-sm">{option.label}</span>
                     </label>
@@ -605,7 +605,7 @@ export default function AddEditFormatView({
 
                 {/* Note when Wolf has locked combination method */}
                 {formatForm.competitionStructure === 'wolf' && (
-                  <p className="text-xs text-blue-600 mt-2">
+                  <p className="text-xs text-[#00285e] mt-2">
                     Combination method is set to Individual because Wolf scores each player separately.
                   </p>
                 )}
@@ -761,7 +761,7 @@ export default function AddEditFormatView({
 
               {/* Round Robin Settings */}
               {formatForm.competitionStructure === 'round_robin' && (
-                <div className="mt-4 bg-indigo-50 border-2 border-indigo-200 rounded-xl p-4">
+                <div className="mt-4 bg-[#f0f4ff] border-2 border-[#dce8f5] rounded-xl p-4">
                   <SectionHeader
                     title="Round Robin Settings"
                     description="Configure how teams are matched up and how points are awarded."
@@ -788,7 +788,7 @@ export default function AddEditFormatView({
                           step="0.5"
                           value={formatForm.roundRobin.pointsForWin}
                           onChange={(e) => handleRoundRobinChange('pointsForWin', parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                          className="w-full px-3 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                         />
                       </div>
                       <div>
@@ -800,7 +800,7 @@ export default function AddEditFormatView({
                           step="0.5"
                           value={formatForm.roundRobin.pointsForTie}
                           onChange={(e) => handleRoundRobinChange('pointsForTie', parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                          className="w-full px-3 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                         />
                       </div>
                       <div>
@@ -812,7 +812,7 @@ export default function AddEditFormatView({
                           step="0.5"
                           value={formatForm.roundRobin.pointsForLoss}
                           onChange={(e) => handleRoundRobinChange('pointsForLoss', parseFloat(e.target.value) || 0)}
-                          className="w-full px-3 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                          className="w-full px-3 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                         />
                       </div>
                     </div>
@@ -902,7 +902,7 @@ export default function AddEditFormatView({
 
             {/* ========== FEEDBACK ========== */}
             {feedback && (
-              <div className="bg-blue-50 border-2 border-blue-200 text-blue-800 px-4 py-3 rounded-xl text-sm">
+              <div className="bg-[#f0f4ff] border-2 border-[#dce8f5] text-[#007a78] px-4 py-3 rounded-xl text-sm">
                 {feedback}
               </div>
             )}
@@ -910,7 +910,7 @@ export default function AddEditFormatView({
             {/* ========== SAVE BUTTON ========== */}
             <button
               onClick={handleSave}
-              className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
+              className="w-full bg-[#00285e] text-white py-4 rounded-xl font-semibold text-lg hover:bg-[#003a7d] shadow-lg"
             >
               {isEditing ? 'Update Format' : 'Create Format'}
             </button>

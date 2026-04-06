@@ -136,7 +136,7 @@ const eventCode = await createCode('event', eventId);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
         <button 
           onClick={() => {
@@ -147,15 +147,15 @@ const eventCode = await createCode('event', eventId);
               setView('home');
             }
           }} 
-          className="text-white mb-6 hover:text-blue-200"
+          className="text-white mb-6 hover:text-[#c8d6e5]"
         >
           ← Back
         </button>
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-6" style={{ fontFamily: 'Georgia, serif' }}>Create Event</h2>
           {creatingEventForLeague && (
-            <div className="bg-blue-50 border-2 border-blue-200 p-3 rounded-lg mb-6">
-              <div className="text-sm text-blue-800">Creating event for <strong>{currentLeague?.meta?.name}</strong></div>
+            <div className="bg-[#f0f4ff] border-2 border-[#dce8f5] p-3 rounded-lg mb-6">
+              <div className="text-sm text-[#007a78]">Creating event for <strong>{currentLeague?.meta?.name}</strong></div>
             </div>
           )}
           

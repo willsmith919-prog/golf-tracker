@@ -215,7 +215,7 @@ export default function LeagueDashboardView({
                 {registered ? (
                   <button
                     onClick={() => handleViewLobby(event)}
-                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold whitespace-nowrap"
+                    className="bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold whitespace-nowrap"
                   >
                     View Lobby
                   </button>
@@ -274,9 +274,9 @@ export default function LeagueDashboardView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
-        <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">← Back to Home</button>
+        <button onClick={() => setView('home')} className="text-white mb-6 hover:text-[#c8d6e5]">← Back to Home</button>
 
         {/* Header */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
@@ -300,9 +300,9 @@ export default function LeagueDashboardView({
           )}
           
           <div className="flex items-center gap-3">
-            <div className="bg-blue-50 px-4 py-2 rounded-lg">
+            <div className="bg-[#f0f4ff] px-4 py-2 rounded-lg">
               <div className="text-xs text-gray-600 mb-1">League Code</div>
-              <div className="font-mono font-bold text-blue-600 text-lg">{currentLeague.meta.code}</div>
+              <div className="font-mono font-bold text-[#00285e] text-lg">{currentLeague.meta.code}</div>
             </div>
             <button
               onClick={() => {
@@ -310,7 +310,7 @@ export default function LeagueDashboardView({
                 setFeedback('Code copied!');
                 setTimeout(() => setFeedback(''), 2000);
               }}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold"
+              className="bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold"
             >
               Copy Code
             </button>
@@ -361,7 +361,7 @@ export default function LeagueDashboardView({
                   });
                   setView('create-event');
                 }}
-                className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold flex items-center gap-2"
+                className="bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold flex items-center gap-2"
               >
                 <PlusIcon />
                 Create Event
@@ -385,7 +385,7 @@ export default function LeagueDashboardView({
                     });
                     setView('create-event');
                   }}
-                  className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 font-semibold"
+                  className="bg-[#00285e] text-white px-6 py-3 rounded-xl hover:bg-[#003a7d] font-semibold"
                 >
                   Create First Event
                 </button>
@@ -410,7 +410,7 @@ export default function LeagueDashboardView({
               {/* Upcoming Events */}
               {upcomingEvents.length > 0 && (
                 <div>
-                  <div className="text-sm font-semibold text-blue-600 uppercase tracking-wide mb-2">
+                  <div className="text-sm font-semibold text-[#00285e] uppercase tracking-wide mb-2">
                     Upcoming
                   </div>
                   <div className="space-y-3">
@@ -453,7 +453,7 @@ export default function LeagueDashboardView({
                           <div className="text-lg font-bold text-gray-400 w-8">#{index + 1}</div>
                           <div className="font-semibold text-gray-900">{member?.displayName || 'Unknown'}</div>
                         </div>
-                        <div className="text-lg font-bold text-blue-600">{data.points || 0} pts</div>
+                        <div className="text-lg font-bold text-[#00285e]">{data.points || 0} pts</div>
                       </div>
                     );
                   })}

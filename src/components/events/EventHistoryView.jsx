@@ -37,11 +37,11 @@ export default function EventHistoryView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 font-sans">
+    <div className="min-h-screen bg-[#1a1a2e] p-6 font-sans">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => setView('home')}
-          className="text-white mb-6 hover:text-blue-200 flex items-center gap-2"
+          className="text-white mb-6 hover:text-[#c8d6e5] flex items-center gap-2"
         >
           ← Back
         </button>

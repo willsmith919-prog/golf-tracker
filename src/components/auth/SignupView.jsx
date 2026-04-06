@@ -55,11 +55,11 @@ export default function SignupView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+    <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold text-white mb-2" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
-          <p className="text-blue-200">Golf League Management</p>
+          <p className="text-[#c8d6e5]">Golf League Management</p>
         </div>
 
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
@@ -79,7 +79,7 @@ export default function SignupView({
                 value={signupDisplayName}
                 onChange={(e) => setSignupDisplayName(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                 placeholder="How you'll appear in the league"
               />
             </div>
@@ -91,7 +91,7 @@ export default function SignupView({
                 value={signupEmail}
                 onChange={(e) => setSignupEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                 placeholder="your@email.com"
               />
             </div>
@@ -104,7 +104,7 @@ export default function SignupView({
                 onChange={(e) => setSignupPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                 placeholder="Min 6 characters"
               />
             </div>
@@ -116,7 +116,7 @@ export default function SignupView({
                 step="0.1"
                 value={signupHandicap}
                 onChange={(e) => setSignupHandicap(e.target.value)}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                 placeholder="e.g. 12.4"
               />
             </div>
@@ -124,7 +124,7 @@ export default function SignupView({
             <button
               type="submit"
               disabled={authLoading2}
-              className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-[#00285e] text-white py-3 rounded-xl font-semibold hover:bg-[#003a7d] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {authLoading2 ? 'Creating account...' : 'Sign Up'}
             </button>
@@ -136,7 +136,7 @@ export default function SignupView({
                 setAuthError('');
                 setView('login');
               }}
-              className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
+              className="text-[#00285e] hover:text-[#003a7d] font-semibold text-sm"
             >
               Already have an account? Login
             </button>

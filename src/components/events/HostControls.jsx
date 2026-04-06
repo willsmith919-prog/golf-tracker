@@ -38,9 +38,9 @@ export default function HostControls({
           <h2 className="text-lg font-bold text-gray-900 mb-3">Host Controls</h2>
 
           {usesMulligans && (
-            <div className="mb-5 p-4 bg-purple-50 border-2 border-purple-200 rounded-xl">
-              <h3 className="text-sm font-bold text-purple-800 mb-1">🎟️ Assign Mulligans</h3>
-              <p className="text-xs text-purple-600 mb-3">
+            <div className="mb-5 p-4 bg-[#f0f4ff] border-2 border-[#dce8f5] rounded-xl">
+              <h3 className="text-sm font-bold text-[#007a78] mb-1">🎟️ Assign Mulligans</h3>
+              <p className="text-xs text-[#00285e] mb-3">
                 Set how many mulligans each {isTeamFormat ? 'team' : 'player'} gets for this event.
               </p>
               <div className="space-y-2">
@@ -63,12 +63,12 @@ export default function HostControls({
                               onClick={() => handleMulliganChange(path, team.mulligansTotal || 0, -1)}
                               className="w-8 h-8 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-lg flex items-center justify-center"
                             >−</button>
-                            <div className="w-10 text-center font-bold text-lg text-purple-700">
+                            <div className="w-10 text-center font-bold text-lg text-[#00285e]">
                               {team.mulligansTotal || 0}
                             </div>
                             <button
                               onClick={() => handleMulliganChange(path, team.mulligansTotal || 0, 1)}
-                              className="w-8 h-8 rounded-lg bg-purple-200 hover:bg-purple-300 text-purple-700 font-bold text-lg flex items-center justify-center"
+                              className="w-8 h-8 rounded-lg bg-[#e8eef8] hover:bg-[#d0dcf0] text-[#00285e] font-bold text-lg flex items-center justify-center"
                             >+</button>
                           </div>
                         </div>
@@ -93,10 +93,10 @@ export default function HostControls({
                             onClick={() => handleMulliganChange(path, current, -1)}
                             className="w-8 h-8 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold text-lg flex items-center justify-center"
                           >−</button>
-                          <div className="w-10 text-center font-bold text-lg text-purple-700">{current}</div>
+                          <div className="w-10 text-center font-bold text-lg text-[#00285e]">{current}</div>
                           <button
                             onClick={() => handleMulliganChange(path, current, 1)}
-                            className="w-8 h-8 rounded-lg bg-purple-200 hover:bg-purple-300 text-purple-700 font-bold text-lg flex items-center justify-center"
+                            className="w-8 h-8 rounded-lg bg-[#e8eef8] hover:bg-[#d0dcf0] text-[#00285e] font-bold text-lg flex items-center justify-center"
                           >+</button>
                         </div>
                       </div>
@@ -124,7 +124,7 @@ export default function HostControls({
                 disabled={!canStart}
                 className={`w-full py-4 rounded-xl font-semibold text-lg shadow-lg transition-all ${
                   canStart
-                    ? 'bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white'
+                    ? 'bg-[#e17055] text-white'
                     : 'bg-gray-200 text-gray-400 cursor-not-allowed'
                 }`}
               >

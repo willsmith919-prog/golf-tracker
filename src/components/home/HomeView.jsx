@@ -152,7 +152,7 @@ export default function HomeView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 font-sans">
+    <div className="min-h-screen bg-[#1a1a2e] p-6 font-sans">
       <div className="max-w-2xl mx-auto">
         <div className="flex justify-between items-center mb-8">
           <div>
@@ -206,7 +206,7 @@ export default function HomeView({
                   type="text"
                   value={editDisplayName}
                   onChange={(e) => setEditDisplayName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                   placeholder="How you appear to others"
                 />
               </div>
@@ -218,7 +218,7 @@ export default function HomeView({
                   step="0.1"
                   value={editHandicap}
                   onChange={(e) => setEditHandicap(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                   placeholder="e.g. 12.4"
                 />
               </div>
@@ -232,7 +232,7 @@ export default function HomeView({
               <button
                 onClick={saveProfile}
                 disabled={savingProfile}
-                className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white py-3 rounded-xl font-semibold transition-all"
+                className="w-full bg-[#00285e] hover:bg-[#003a7d] disabled:bg-gray-400 text-white py-3 rounded-xl font-semibold transition-all"
               >
                 {savingProfile ? 'Saving...' : 'Save Changes'}
               </button>
@@ -324,7 +324,7 @@ export default function HomeView({
                     }}
                     className={`w-full p-5 rounded-2xl shadow-xl transition-all text-left ${
                       isActive
-                        ? 'bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-300 hover:border-green-400'
+                        ? 'from-green-50 to-emerald-50 border-2 border-green-300 hover:border-green-400'
                         : 'bg-white/95 backdrop-blur-sm hover:bg-white'
                     }`}
                   >
@@ -369,12 +369,12 @@ export default function HomeView({
                 onChange={e => setJoinCode(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key === 'Enter' && handleCodeEntry()}
                 placeholder="e.g. LG-4X9K"
-                className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                className="flex-1 border border-gray-300 rounded-xl px-4 py-2 text-sm font-mono uppercase focus:outline-none focus:ring-2 focus:ring-[#003a7d]"
                 maxLength={7}
               />
               <button
                 onClick={handleCodeEntry}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all"
+                className="bg-[#00285e] hover:bg-[#003a7d] text-white px-4 py-2 rounded-xl text-sm font-semibold transition-all"
               >
                 Go
               </button>
@@ -433,7 +433,7 @@ export default function HomeView({
           <h2 className="text-white text-lg font-semibold mb-3">SOLO</h2>
           <button
             onClick={() => setView('solo-setup')}
-            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white p-6 rounded-2xl text-left shadow-lg transition-all"
+            className="w-full bg-[#e17055] text-white p-6 rounded-2xl text-left shadow-lg transition-all"
           >
             <div className="font-bold text-lg mb-1">Play Solo</div>
             <div className="text-sm text-green-100">Track your personal round</div>
@@ -446,10 +446,10 @@ export default function HomeView({
           <div className="space-y-3">
             <button
               onClick={() => setView('rounds-history')}
-              className="w-full bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white p-6 rounded-2xl text-left shadow-lg transition-all"
+              className="w-full bg-[#00285e] text-white p-6 rounded-2xl text-left shadow-lg transition-all"
             >
               <div className="font-bold text-lg mb-1">My Rounds</div>
-              <div className="text-sm text-indigo-100">View all your golf rounds</div>
+              <div className="text-sm text-[#dce8f5]">View all your golf rounds</div>
             </button>
           </div>
         </div>

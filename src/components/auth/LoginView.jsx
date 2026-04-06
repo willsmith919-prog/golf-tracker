@@ -36,11 +36,11 @@ export default function LoginView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+    <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
       <div className="max-w-md w-full">
         <div className="text-center mb-8">
           <h1 className="text-5xl font-bold text-white mb-2" style={{ fontFamily: 'Georgia, serif' }}>LiveLinks</h1>
-          <p className="text-blue-200">Golf League Management</p>
+          <p className="text-[#c8d6e5]">Golf League Management</p>
         </div>
 
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
@@ -60,7 +60,7 @@ export default function LoginView({
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
                 required
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                 placeholder="your@email.com"
               />
             </div>
@@ -73,7 +73,7 @@ export default function LoginView({
                 onChange={(e) => setLoginPassword(e.target.value)}
                 required
                 minLength={6}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                 placeholder="••••••••"
               />
             </div>
@@ -81,7 +81,7 @@ export default function LoginView({
             <button
               type="submit"
               disabled={authLoading2}
-              className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full bg-[#00285e] text-white py-3 rounded-xl font-semibold hover:bg-[#003a7d] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {authLoading2 ? 'Logging in...' : 'Login'}
             </button>
@@ -93,7 +93,7 @@ export default function LoginView({
                 setAuthError('');
                 setView('signup');
               }}
-              className="text-blue-600 hover:text-blue-700 font-semibold text-sm"
+              className="text-[#00285e] hover:text-[#003a7d] font-semibold text-sm"
             >
               Don't have an account? Sign up
             </button>

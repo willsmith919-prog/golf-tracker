@@ -158,14 +158,14 @@ export default function AddEditCourseView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-6xl mx-auto">
         <button 
           onClick={() => { 
             setView('manage-courses'); 
             setEditingCourse(null); 
           }} 
-          className="text-white mb-6 hover:text-blue-200"
+          className="text-white mb-6 hover:text-[#c8d6e5]"
         >
           ← Back
         </button>
@@ -185,7 +185,7 @@ export default function AddEditCourseView({
                   type="text"
                   value={courseForm.name}
                   onChange={(e) => setCourseForm({ ...courseForm, name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                   placeholder="Glen Eagle Golf Course"
                 />
               </div>
@@ -195,7 +195,7 @@ export default function AddEditCourseView({
                   type="text"
                   value={courseForm.location}
                   onChange={(e) => setCourseForm({ ...courseForm, location: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                   placeholder="Syracuse, UT"
                 />
               </div>
@@ -223,7 +223,7 @@ export default function AddEditCourseView({
                           type="text"
                           value={tee.name}
                           onChange={(e) => updateTeeField(index, 'name', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                           placeholder="Black"
                         />
                       </td>
@@ -233,7 +233,7 @@ export default function AddEditCourseView({
                           step="0.1"
                           value={tee.rating}
                           onChange={(e) => updateTeeField(index, 'rating', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                           placeholder="72.1"
                         />
                       </td>
@@ -242,7 +242,7 @@ export default function AddEditCourseView({
                           type="number"
                           value={tee.slope}
                           onChange={(e) => updateTeeField(index, 'slope', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                           placeholder="131"
                         />
                       </td>
@@ -262,7 +262,7 @@ export default function AddEditCourseView({
             </div>
             <button
               onClick={addTee}
-              className="mt-3 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold flex items-center gap-2"
+              className="mt-3 bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold flex items-center gap-2"
             >
               <PlusIcon />
               Add Tee
@@ -300,7 +300,7 @@ export default function AddEditCourseView({
                             pattern="[0-9]*"
                             value={courseForm.strokeIndex[i]}
                             onChange={(e) => updateStrokeIndex(i, e.target.value)}
-                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
+                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
                           />
                         </td>
                       ))}
@@ -334,7 +334,7 @@ export default function AddEditCourseView({
                             pattern="[0-9]*"
                             value={courseForm.strokeIndex[i + 9]}
                             onChange={(e) => updateStrokeIndex(i + 9, e.target.value)}
-                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
+                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
                           />
                         </td>
                       ))}
@@ -380,7 +380,7 @@ export default function AddEditCourseView({
                               }));
                               setCourseForm({ ...courseForm, tees: newTees });
                             }}
-                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
+                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
                           />
                         </td>
                       ))}
@@ -426,7 +426,7 @@ export default function AddEditCourseView({
                                 }));
                                 setCourseForm({ ...courseForm, tees: newTees });
                               }}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
+                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
                             />
                           </td>
                           {i === 8 && (
@@ -478,7 +478,7 @@ export default function AddEditCourseView({
                               pattern="[0-9]*"
                               value={tee.yardages[i]}
                               onChange={(e) => updateTeeHole(teeIndex, i, 'yardages', e.target.value)}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
+                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
                             />
                           </td>
                         ))}
@@ -515,7 +515,7 @@ export default function AddEditCourseView({
                               pattern="[0-9]*"
                               value={tee.yardages[i + 9]}
                               onChange={(e) => updateTeeHole(teeIndex, i + 9, 'yardages', e.target.value)}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-blue-500 focus:outline-none"
+                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
                             />
                           </td>
                         ))}
@@ -542,7 +542,7 @@ export default function AddEditCourseView({
 
           <button
             onClick={saveCourse}
-            className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 text-lg"
+            className="w-full bg-[#00285e] text-white py-4 rounded-xl font-semibold hover:bg-[#003a7d] text-lg"
           >
             Save Course
           </button>

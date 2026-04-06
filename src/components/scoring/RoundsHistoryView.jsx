@@ -123,26 +123,26 @@ export default function RoundsHistoryView({ user, setView, setCurrentSoloRound }
   const getRoundTypeBadgeColor = (type) => {
     switch (type) {
       case 'solo': return 'bg-green-100 text-green-800';
-      case 'league': return 'bg-blue-100 text-blue-800';
-      case 'event': return 'bg-purple-100 text-purple-800';
+      case 'league': return 'bg-[#f0f4ff] text-[#007a78]';
+      case 'event': return 'bg-[#f0f4ff] text-[#007a78]';
       default: return 'bg-gray-100 text-gray-800';
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
         <div className="text-white text-xl">Loading rounds...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-4xl mx-auto">
         <button 
           onClick={() => setView('home')} 
-          className="text-white mb-6 hover:text-blue-200 flex items-center gap-2"
+          className="text-white mb-6 hover:text-[#c8d6e5] flex items-center gap-2"
         >
           ← Back
         </button>
@@ -156,7 +156,7 @@ export default function RoundsHistoryView({ user, setView, setCurrentSoloRound }
               onClick={() => setFilter('all')}
               className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
                 filter === 'all'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-[#00285e] text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
@@ -176,7 +176,7 @@ export default function RoundsHistoryView({ user, setView, setCurrentSoloRound }
               onClick={() => setFilter('league')}
               className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
                 filter === 'league'
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-[#00285e] text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
@@ -186,7 +186,7 @@ export default function RoundsHistoryView({ user, setView, setCurrentSoloRound }
               onClick={() => setFilter('event')}
               className={`px-4 py-2 rounded-lg font-semibold whitespace-nowrap transition-colors ${
                 filter === 'event'
-                  ? 'bg-purple-600 text-white'
+                  ? 'bg-[#00285e] text-white'
                   : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
               }`}
             >
@@ -200,7 +200,7 @@ export default function RoundsHistoryView({ user, setView, setCurrentSoloRound }
               <p className="text-gray-600 mb-4">No rounds yet</p>
               <button
                 onClick={() => setView('solo-setup')}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-xl font-semibold"
+                className="bg-[#00285e] hover:bg-[#003a7d] text-white px-6 py-3 rounded-xl font-semibold"
               >
                 Start Your First Round
               </button>
@@ -210,7 +210,7 @@ export default function RoundsHistoryView({ user, setView, setCurrentSoloRound }
               {filteredRounds.map(round => (
                 <div 
                   key={round.id}
-                  className="border-2 border-gray-200 rounded-xl p-6 hover:border-blue-400 transition-colors"
+                  className="border-2 border-gray-200 rounded-xl p-6 hover:border-[#00285e] transition-colors"
                 >
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex-1">
@@ -246,19 +246,19 @@ export default function RoundsHistoryView({ user, setView, setCurrentSoloRound }
 
                   {round.fullData?.stats && (
                     <div className="grid grid-cols-3 gap-4 mb-4">
-                      <div className="bg-blue-50 p-3 rounded-lg">
+                      <div className="bg-[#f0f4ff] p-3 rounded-lg">
                         <div className="text-xs text-gray-600">Putts</div>
                         <div className="text-lg font-bold text-gray-900">
                           {round.fullData.stats.totalPutts || 0}
                         </div>
                       </div>
-                      <div className="bg-blue-50 p-3 rounded-lg">
+                      <div className="bg-[#f0f4ff] p-3 rounded-lg">
                         <div className="text-xs text-gray-600">GIR</div>
                         <div className="text-lg font-bold text-gray-900">
                           {round.fullData.stats.greensInRegulation || 0}
                         </div>
                       </div>
-                      <div className="bg-blue-50 p-3 rounded-lg">
+                      <div className="bg-[#f0f4ff] p-3 rounded-lg">
                         <div className="text-xs text-gray-600">Fairways</div>
                         <div className="text-lg font-bold text-gray-900">
                           {round.fullData.stats.fairwaysHit || 0}/
@@ -271,7 +271,7 @@ export default function RoundsHistoryView({ user, setView, setCurrentSoloRound }
                   <div className="flex gap-2">
                     <button
                       onClick={() => viewRound(round)}
-                      className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 rounded-lg font-semibold"
+                      className="flex-1 bg-[#00285e] hover:bg-[#003a7d] text-white py-2 rounded-lg font-semibold"
                     >
                       View Scorecard
                     </button>

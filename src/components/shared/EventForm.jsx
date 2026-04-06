@@ -148,7 +148,7 @@ export default function EventForm({
           onChange={(e) => onChange(e.target.checked)}
           className="sr-only peer"
         />
-        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#00285e]"></div>
       </label>
     </div>
   );
@@ -171,7 +171,7 @@ export default function EventForm({
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
           placeholder="e.g., Week 1 Scramble"
-          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
         />
       </div>
 
@@ -233,7 +233,7 @@ export default function EventForm({
                       {['net', 'gross'].map(sort => (
                         <label key={sort} className={`flex-1 text-center p-3 rounded-xl border-2 cursor-pointer transition-colors ${
                           formData.display?.primarySort === sort
-                            ? 'border-blue-500 bg-blue-50 font-semibold'
+                            ? 'border-[#00285e] bg-[#f0f4ff] font-semibold'
                             : 'border-gray-200 hover:bg-gray-50'
                         }`}>
                           <input
@@ -301,7 +301,7 @@ export default function EventForm({
 
       {/* ===== LEAGUE POINTS — only shown when creating from a league ===== */}
       {formData.leaguePoints && (
-        <div className="border-2 border-purple-200 bg-purple-50 rounded-xl p-5">
+        <div className="border-2 border-[#dce8f5] bg-[#f0f4ff] rounded-xl p-5">
           <label className="block text-sm font-semibold text-gray-700 mb-1">🏆 League Points</label>
           <p className="text-sm text-gray-500 mb-4">
             Points awarded to players based on finishing position. Pre-filled from league defaults — adjust for this event if needed.
@@ -331,7 +331,7 @@ export default function EventForm({
                           const updated = { ...formData.leaguePoints.positions, [place]: val === '' ? 0 : parseInt(val) };
                           setFormData({ ...formData, leaguePoints: { ...formData.leaguePoints, positions: updated } });
                         }}
-                        className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-center"
+                        className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
                       />
                       <span className="text-xs text-gray-400">pts</span>
                     </div>
@@ -347,7 +347,7 @@ export default function EventForm({
                   const updated = { ...positions, [nextPlace]: 0 };
                   setFormData({ ...formData, leaguePoints: { ...formData.leaguePoints, positions: updated } });
                 }}
-                className="text-purple-600 hover:text-purple-700 text-sm font-semibold"
+                className="text-[#00285e] hover:text-[#00285e] text-sm font-semibold"
               >
                 + Add Position
               </button>
@@ -386,7 +386,7 @@ export default function EventForm({
                     leaguePoints: { ...formData.leaguePoints, participationPoints: val === '' ? 0 : parseInt(val) }
                   });
                 }}
-                className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-purple-500 focus:outline-none text-center"
+                className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
               />
             </div>
           </div>
@@ -407,7 +407,7 @@ export default function EventForm({
                     key={option.value}
                     className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-colors text-center ${
                       formData.leaguePoints.teamPointDistribution === option.value
-                        ? 'border-purple-500 bg-purple-50 font-semibold'
+                        ? 'border-[#00285e] bg-[#f0f4ff] font-semibold'
                         : 'border-gray-200 hover:bg-gray-50'
                     }`}
                   >
@@ -442,7 +442,7 @@ export default function EventForm({
                   key={option.value}
                   className={`flex-1 p-3 rounded-xl border-2 cursor-pointer transition-colors ${
                     formData.leaguePoints.nonLeagueHandling === option.value
-                      ? 'border-purple-500 bg-purple-50 font-semibold'
+                      ? 'border-[#00285e] bg-[#f0f4ff] font-semibold'
                       : 'border-gray-200 hover:bg-gray-50'
                   }`}
                 >
@@ -475,7 +475,7 @@ export default function EventForm({
             type="date"
             value={formData.date}
             onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
           />
         </div>
         <div>
@@ -484,7 +484,7 @@ export default function EventForm({
             type="time"
             value={formData.time}
             onChange={(e) => setFormData({ ...formData, time: e.target.value })}
-            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
           />
         </div>
       </div>
@@ -510,7 +510,7 @@ export default function EventForm({
 
       <button
         onClick={handleSubmit}
-        className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold text-lg hover:bg-blue-700 shadow-lg"
+        className="w-full bg-[#00285e] text-white py-4 rounded-xl font-semibold text-lg hover:bg-[#003a7d] shadow-lg"
       >
         {submitLabel}
       </button>

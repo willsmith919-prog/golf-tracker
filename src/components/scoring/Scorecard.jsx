@@ -43,7 +43,7 @@ export default function Scorecard({
                   {strokeCount > 0 && (
                     <div className="flex justify-center gap-0.5 mt-0.5">
                       {Array.from({ length: strokeCount }).map((_, i) => (
-                        <span key={i} className="inline-block w-1 h-1 rounded-full bg-blue-500" />
+                        <span key={i} className="inline-block w-1 h-1 rounded-full bg-[#00285e]" />
                       ))}
                     </div>
                   )}
@@ -55,7 +55,7 @@ export default function Scorecard({
             <tr className="border-b border-gray-200">
               <td className="py-1 px-0.5 text-gray-400">SI</td>
               {holes.map(h => (
-                <td key={h} className={`text-center py-1 px-0.5 ${strokeHoles[h] ? 'text-blue-500 font-semibold' : 'text-gray-400'}`}>
+                <td key={h} className={`text-center py-1 px-0.5 ${strokeHoles[h] ? 'text-[#00285e] font-semibold' : 'text-gray-400'}`}>
                   {courseStrokeIndexes[h - 1] ?? '-'}
                 </td>
               ))}
@@ -75,7 +75,7 @@ export default function Scorecard({
                 >
                   {hole?.score || '-'}
                   {(isSolo || trackStats) && hole?.gir && <span className="text-green-600" style={{ fontSize: '8px' }}>●</span>}
-                  {holeMulligans > 0 && <span className="text-purple-500" style={{ fontSize: '8px' }}>{'🎟️'.repeat(holeMulligans)}</span>}
+                  {holeMulligans > 0 && <span className="text-[#00285e]" style={{ fontSize: '8px' }}>{'🎟️'.repeat(holeMulligans)}</span>}
                 </td>
               );
             })}

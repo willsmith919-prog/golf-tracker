@@ -67,14 +67,14 @@ export default function EventDetailsView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
         <button 
           onClick={() => {
             setEditingEvent(null);
             setView('league-dashboard');
           }} 
-          className="text-white mb-6 hover:text-blue-200"
+          className="text-white mb-6 hover:text-[#c8d6e5]"
         >
           ← Back to League
         </button>
@@ -136,7 +136,7 @@ export default function EventDetailsView({
               ) : (
                 <button
                   onClick={handleRegister}
-                  className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700"
+                  className="w-full bg-[#00285e] text-white py-3 rounded-xl font-semibold hover:bg-[#003a7d]"
                 >
                   Register for Event
                 </button>
@@ -168,7 +168,7 @@ export default function EventDetailsView({
                     )}
                   </div>
                   {reg.uid === currentUser.uid && (
-                    <span className="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-semibold">
+                    <span className="text-xs bg-[#f0f4ff] text-[#007a78] px-2 py-1 rounded-full font-semibold">
                       You
                     </span>
                   )}

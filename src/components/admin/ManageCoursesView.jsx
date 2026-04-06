@@ -43,9 +43,9 @@ export default function ManageCoursesView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-4xl mx-auto">
-        <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">
+        <button onClick={() => setView('home')} className="text-white mb-6 hover:text-[#c8d6e5]">
           ← Back to Home
         </button>
 
@@ -58,7 +58,7 @@ export default function ManageCoursesView({
                 setEditingCourse(null);
                 setView('add-edit-course');
               }}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 font-semibold flex items-center gap-2"
+              className="bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] font-semibold flex items-center gap-2"
             >
               <PlusIcon />
               Add Course
@@ -112,7 +112,7 @@ export default function ManageCoursesView({
                           setEditingCourse(course);
                           setView('add-edit-course');
                         }}
-                        className="text-blue-600 hover:text-blue-700 font-semibold"
+                        className="text-[#00285e] hover:text-[#003a7d] font-semibold"
                       >
                         <EditIcon />
                       </button>
@@ -136,7 +136,7 @@ export default function ManageCoursesView({
                   setEditingCourse(null);
                   setView('add-edit-course');
                 }}
-                className="bg-blue-600 text-white px-6 py-3 rounded-xl hover:bg-blue-700 font-semibold"
+                className="bg-[#00285e] text-white px-6 py-3 rounded-xl hover:bg-[#003a7d] font-semibold"
               >
                 Add First Course
               </button>

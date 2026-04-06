@@ -1,7 +1,12 @@
 {
   "permissions": {
     "allow": [
-      "Bash(wc -l C:/Users/Will/Documents/GitHub/golf-tracker/src/components/events/EventForm.jsx C:/Users/Will/Documents/GitHub/golf-tracker/src/components/leagues/*.jsx C:/Users/Will/Documents/GitHub/golf-tracker/src/components/home/*.jsx)"
+      "Bash(wc -l C:/Users/Will/Documents/GitHub/golf-tracker/src/components/events/EventForm.jsx C:/Users/Will/Documents/GitHub/golf-tracker/src/components/leagues/*.jsx C:/Users/Will/Documents/GitHub/golf-tracker/src/components/home/*.jsx)",
+      "Bash(grep -r \"style=\" /c/Users/Will/Documents/GitHub/golf-tracker/src/*.jsx)",
+      "Bash(grep -r \"className=\" /c/Users/Will/Documents/GitHub/golf-tracker/src/components/*.jsx)",
+      "Bash(xargs sed:*)",
+      "Bash(grep -rn '\\\\bblue-[0-9]' c:/Users/Will/Documents/GitHub/golf-tracker/src --include=\"*.jsx\" --exclude-path=\"*/backups/*\")",
+      "Bash(grep -r \"blue-[0-9]\" src --include=\"*.jsx\" ! -path \"*/backups/*\")"
     ]
   }
 }

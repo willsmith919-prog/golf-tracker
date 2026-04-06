@@ -89,7 +89,7 @@ export default function JoinEventConfirm({
   // --- Loading state ---
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center">
         <p className="text-white text-lg">Loading...</p>
       </div>
     );
@@ -98,7 +98,7 @@ export default function JoinEventConfirm({
   // --- Error state ---
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] p-6 flex flex-col items-center justify-center">
         <p className="text-white text-lg mb-4">{error}</p>
         <button
           onClick={() => setView('home')}
@@ -113,7 +113,7 @@ export default function JoinEventConfirm({
   const meta = event?.meta || {};
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 font-sans">
+    <div className="min-h-screen bg-[#1a1a2e] p-6 font-sans">
       <div className="max-w-2xl mx-auto">
 
         {/* Back button */}
@@ -159,7 +159,7 @@ export default function JoinEventConfirm({
                 setCurrentEvent({ id: eventId, ...event });
                 setView('event-lobby');
               }}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-xl text-sm font-semibold"
+              className="bg-[#00285e] hover:bg-[#003a7d] text-white px-6 py-2 rounded-xl text-sm font-semibold"
             >
               Go to Event →
             </button>
@@ -168,7 +168,7 @@ export default function JoinEventConfirm({
           <button
             onClick={handleJoin}
             disabled={joining}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-4 rounded-2xl shadow-lg transition-all text-lg"
+            className="w-full bg-[#00285e] hover:bg-[#003a7d] disabled:bg-gray-400 text-white font-bold py-4 rounded-2xl shadow-lg transition-all text-lg"
           >
             {joining ? 'Joining...' : 'Join Event'}
           </button>

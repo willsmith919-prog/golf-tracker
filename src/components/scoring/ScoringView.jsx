@@ -171,12 +171,12 @@ export default function ScoringView({
 
   if (!isSolo && !scoringUnit) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
         <div className="text-white text-center">
           <p className="text-xl mb-4">
             {isTeamFormat ? 'Team not found in this event' : 'Player not found in this event'}
           </p>
-          <button onClick={() => setView('event-lobby')} className="bg-white text-blue-900 px-6 py-3 rounded-xl font-semibold">
+          <button onClick={() => setView('event-lobby')} className="bg-white text-[#004f4e] px-6 py-3 rounded-xl font-semibold">
             Back to Lobby
           </button>
         </div>
@@ -186,10 +186,10 @@ export default function ScoringView({
 
   if (isSolo && !currentSoloRound) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
         <div className="text-white text-center">
           <p className="text-xl mb-4">Round not found</p>
-          <button onClick={() => setView('home')} className="bg-white text-blue-900 px-6 py-3 rounded-xl font-semibold">
+          <button onClick={() => setView('home')} className="bg-white text-[#004f4e] px-6 py-3 rounded-xl font-semibold">
             Back to Home
           </button>
         </div>
@@ -671,7 +671,7 @@ export default function ScoringView({
   // ==================== RENDER ====================
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-2 md:p-4">
+    <div className="min-h-screen bg-[#1a1a2e] p-2 md:p-4">
       <div className="max-w-2xl mx-auto">
 
         <RoundCompleteModal
@@ -683,13 +683,13 @@ export default function ScoringView({
 
         {/* Header */}
         <div className="flex justify-between items-center mb-4">
-          <button onClick={handleBack} className="text-white hover:text-blue-200">
+          <button onClick={handleBack} className="text-white hover:text-[#c8d6e5]">
             ← {isSolo ? 'Back' : 'Back to Lobby'}
           </button>
           {isSolo && (
             <button
               onClick={endRound}
-              className="text-white hover:text-blue-200 font-semibold"
+              className="text-white hover:text-[#c8d6e5] font-semibold"
             >
               End Round
             </button>

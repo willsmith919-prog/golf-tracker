@@ -76,9 +76,9 @@ export default function HoleCard({
               <div className="text-sm text-gray-500">SI: {currentSI}</div>
             )}
             {(strokeHoles[currentHole] || 0) > 0 && (
-              <div className="mt-2 inline-flex items-center gap-1.5 bg-blue-50 text-blue-600 text-sm font-semibold px-3 py-1 rounded-full">
+              <div className="mt-2 inline-flex items-center gap-1.5 bg-[#f0f4ff] text-[#00285e] text-sm font-semibold px-3 py-1 rounded-full">
                 {Array.from({ length: strokeHoles[currentHole] }).map((_, i) => (
-                  <span key={i} className="inline-block w-2 h-2 rounded-full bg-blue-500" />
+                  <span key={i} className="inline-block w-2 h-2 rounded-full bg-[#00285e]" />
                 ))}
                 +{strokeHoles[currentHole]} stroke{strokeHoles[currentHole] > 1 ? 's' : ''}
               </div>
@@ -101,14 +101,14 @@ export default function HoleCard({
               <>
                 <button
                   onClick={onStartMulligan}
-                  className="w-full bg-purple-100 hover:bg-purple-200 text-purple-700 py-2.5 rounded-xl font-semibold transition-all text-sm"
+                  className="w-full bg-[#f0f4ff] hover:bg-[#e8eef8] text-[#00285e] py-2.5 rounded-xl font-semibold transition-all text-sm"
                 >
                   🎟️ Use Mulligan ({mulligansRemaining} left)
                 </button>
                 {mulliganLogCurrentHole > 0 && (
                   <button
                     onClick={onUndoMulligan}
-                    className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
+                    className="w-full mt-2 text-sm text-[#003a7d] hover:text-[#00285e] transition-all"
                   >
                     ↩ Undo mulligan on this hole ({mulliganLogCurrentHole} used)
                   </button>
@@ -122,7 +122,7 @@ export default function HoleCard({
                 {mulliganLogCurrentHole > 0 && (
                   <button
                     onClick={onUndoMulligan}
-                    className="w-full mt-2 text-sm text-purple-400 hover:text-purple-600 transition-all"
+                    className="w-full mt-2 text-sm text-[#003a7d] hover:text-[#00285e] transition-all"
                   >
                     ↩ Undo mulligan on this hole ({mulliganLogCurrentHole} used)
                   </button>
@@ -141,7 +141,7 @@ export default function HoleCard({
             <div className="flex gap-3">
               <button
                 onClick={onConfirmMulligan}
-                className="flex-1 bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl font-semibold transition-all"
+                className="flex-1 bg-[#00285e] hover:bg-[#003a7d] text-white py-3 rounded-xl font-semibold transition-all"
               >
                 ✓ Confirm Mulligan
               </button>
@@ -165,9 +165,9 @@ export default function HoleCard({
                 onClick={() => onScoreSelect(btn.value)}
                 className={`${
                   currentScore === btn.value && !(showCustomScore && btn.label === 'Triple+')
-                    ? 'ring-4 ring-blue-400'
+                    ? 'ring-4 ring-[#003a7d]'
                     : ''
-                } ${showCustomScore && btn.label === 'Triple+' ? 'ring-4 ring-blue-400' : ''} ${btn.color} text-white py-4 rounded-xl font-semibold shadow-lg transition-all`}
+                } ${showCustomScore && btn.label === 'Triple+' ? 'ring-4 ring-[#003a7d]' : ''} ${btn.color} text-white py-4 rounded-xl font-semibold shadow-lg transition-all`}
               >
                 <div className="text-sm">{btn.label}</div>
                 <div className="text-2xl font-bold">
@@ -218,7 +218,7 @@ export default function HoleCard({
               )}
               <button
                 onClick={onCustomScoreConfirm}
-                className="w-full mt-3 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold transition-all"
+                className="w-full mt-3 bg-[#00285e] hover:bg-[#003a7d] text-white py-3 rounded-xl font-semibold transition-all"
               >
                 Confirm Score: {currentScore}
               </button>
@@ -236,7 +236,7 @@ export default function HoleCard({
                   key={btn.label}
                   onClick={() => onFairwaySelect(btn.value)}
                   className={`${
-                    currentFairway === btn.value ? 'ring-4 ring-blue-400' : ''
+                    currentFairway === btn.value ? 'ring-4 ring-[#003a7d]' : ''
                   } ${btn.color} text-white py-6 rounded-xl font-semibold text-lg shadow-lg transition-all`}
                 >
                   {btn.label}
@@ -258,8 +258,8 @@ export default function HoleCard({
                     key={putts}
                     onClick={() => onPuttsSelect(putts)}
                     className={`${
-                      currentPutts === puttVal ? 'ring-4 ring-blue-400' : ''
-                    } bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                      currentPutts === puttVal ? 'ring-4 ring-[#003a7d]' : ''
+                    } bg-[#00285e] hover:bg-[#003a7d] text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
                   >
                     {putts}
                   </button>
@@ -271,7 +271,7 @@ export default function HoleCard({
 
         {/* Save & Next / Clear Confirmation Bar */}
         {currentScore && !showCustomScore && (
-          <div className="mb-4 bg-blue-50 border-2 border-blue-200 rounded-xl p-4">
+          <div className="mb-4 bg-[#f0f4ff] border-2 border-[#dce8f5] rounded-xl p-4">
             <div className="text-center mb-3">
               <div className="text-sm text-gray-600">
                 Hole {currentHole} — Selected:
@@ -318,7 +318,7 @@ export default function HoleCard({
             value={notes}
             onChange={onNotesChange}
             placeholder="Add notes about this hole..."
-            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none resize-none"
+            className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none resize-none"
             rows="3"
           />
         </div>

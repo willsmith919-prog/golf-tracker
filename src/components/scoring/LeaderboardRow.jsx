@@ -40,7 +40,7 @@ export default function LeaderboardRow({
   return (
     <div
       className={`rounded-xl transition-all ${
-        entry.isMyEntry ? 'bg-blue-50 border-2 border-blue-200' : 'bg-gray-50 border border-gray-100'
+        entry.isMyEntry ? 'bg-[#f0f4ff] border-2 border-[#dce8f5]' : 'bg-gray-50 border border-gray-100'
       }`}
     >
       {/* Main row — tappable */}
@@ -65,7 +65,7 @@ export default function LeaderboardRow({
               {entry.displayName}
             </span>
             {entry.isMyEntry && (
-              <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full shrink-0">
+              <span className="text-[10px] bg-[#f0f4ff] text-[#00285e] px-1.5 py-0.5 rounded-full shrink-0">
                 {isTeamFormat ? 'Your Team' : 'You'}
               </span>
             )}
@@ -86,7 +86,7 @@ export default function LeaderboardRow({
           )}
           {/* Mulligans remaining badge */}
           {usesMulligans && entry.mulligansTotal > 0 && (
-            <div className="text-[10px] text-purple-600 font-semibold">
+            <div className="text-[10px] text-[#00285e] font-semibold">
               🎟️ {entry.mulligansRemaining}/{entry.mulligansTotal} mulligans
             </div>
           )}
@@ -94,7 +94,7 @@ export default function LeaderboardRow({
           <div className="mt-1 h-1.5 bg-gray-200 rounded-full overflow-hidden w-full max-w-[120px]">
             <div
               className={`h-full rounded-full transition-all ${
-                entry.holesPlayed === numHoles ? 'bg-green-500' : 'bg-blue-500'
+                entry.holesPlayed === numHoles ? 'bg-green-500' : 'bg-[#00285e]'
               }`}
               style={{ width: `${getProgressPercent(entry.holesPlayed, numHoles, throughHole, holeOrder)}%` }}
             />
@@ -106,7 +106,7 @@ export default function LeaderboardRow({
           {entry.holesPlayed > 0 ? (
             <span className={`text-lg font-bold ${
               isStableford
-                ? 'text-blue-600'
+                ? 'text-[#00285e]'
                 : display.showRelativeToPar !== false
                   ? getToParColor(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
                   : 'text-gray-900'

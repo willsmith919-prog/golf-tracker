@@ -51,13 +51,13 @@ export default function ScoringHeader({
         {format === 'stableford' && (
           <div className="text-center">
             <div className="text-sm text-gray-600">Points</div>
-            <div className="text-3xl font-bold text-blue-600">{stats.stablefordPoints || 0}</div>
+            <div className="text-3xl font-bold text-[#00285e]">{stats.stablefordPoints || 0}</div>
           </div>
         )}
         {usesMulligans && (
           <div className="text-center">
             <div className="text-sm text-gray-600">Mulligans</div>
-            <div className={`text-3xl font-bold ${mulligansRemaining > 0 ? 'text-purple-700' : 'text-gray-400'}`}>
+            <div className={`text-3xl font-bold ${mulligansRemaining > 0 ? 'text-[#00285e]' : 'text-gray-400'}`}>
               {mulligansRemaining}
             </div>
             <div className="text-sm text-gray-600">of {mulligansTotal}</div>

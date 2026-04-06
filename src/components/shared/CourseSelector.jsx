@@ -53,7 +53,7 @@ export default function CourseSelector({
           value={selectedCourseId}
           onChange={(e) => onCourseChange(e.target.value)}
           disabled={disabled}
-          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
+          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
         >
           <option value="">Select a course</option>
           {sortedCourses.map(course => (
@@ -77,7 +77,7 @@ export default function CourseSelector({
             onTeeChange(teeId, teeData, selectedCourse);
           }}
           disabled={!selectedCourseId || disabled}
-          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
+          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-gray-900 disabled:bg-gray-100 disabled:cursor-not-allowed"
         >
           <option value="">Select a tee</option>
           {tees.map(tee => {

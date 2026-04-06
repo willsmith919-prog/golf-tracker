@@ -1,11 +1,32 @@
 @import "tailwindcss";
 
+@theme {
+  --color-brand-navy: #00285e;
+  --color-brand-navy-light: #003a7d;
+  --color-brand-red: #e63946;
+  --color-brand-red-dark: #c5303c;
+  --color-brand-dark: #1a1a2e;
+}
+
+:root {
+  --color-primary: #00285e;
+  --color-primary-light: #003a7d;
+  --color-accent: #e63946;
+  --color-accent-dark: #c5303c;
+  --color-bg-white: #ffffff;
+  --color-bg-off-white: #f7f8fa;
+  --color-text-primary: #1a1a2e;
+  --color-text-secondary: #636e72;
+  --color-border: #e2e8f0;
+  --color-success: #00b894;
+  --color-warning: #fdcb6e;
+  --color-danger: #e63946;
+}
+
 body {
   margin: 0;
   padding: 0;
-  background-color: #1e3a8a; /* Dark blue to match your gradient */
-  /* Or use black: */
-  /* background-color: #000; */
+  background-color: #00285e;
 }
 
 html {

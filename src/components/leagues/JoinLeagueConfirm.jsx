@@ -98,7 +98,7 @@ export default function JoinLeagueConfirm({
   // --- Loading state ---
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 flex items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] flex items-center justify-center">
         <p className="text-white text-lg">Loading...</p>
       </div>
     );
@@ -107,7 +107,7 @@ export default function JoinLeagueConfirm({
   // --- Error state ---
   if (error) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex flex-col items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] p-6 flex flex-col items-center justify-center">
         <p className="text-white text-lg mb-4">{error}</p>
         <button
           onClick={() => setView('home')}
@@ -120,7 +120,7 @@ export default function JoinLeagueConfirm({
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 font-sans">
+    <div className="min-h-screen bg-[#1a1a2e] p-6 font-sans">
       <div className="max-w-2xl mx-auto">
 
         {/* Back button */}
@@ -152,7 +152,7 @@ export default function JoinLeagueConfirm({
             <p className="text-yellow-700 text-sm mb-4">No need to join again.</p>
             <button
               onClick={() => setView('home')}
-              className="text-indigo-600 hover:text-indigo-800 text-sm font-medium"
+              className="text-[#00285e] hover:text-[#007a78] text-sm font-medium"
             >
               ← Back to Home
             </button>
@@ -161,7 +161,7 @@ export default function JoinLeagueConfirm({
           <button
             onClick={handleJoin}
             disabled={joining}
-            className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white font-bold py-4 rounded-2xl shadow-lg transition-all text-lg"
+            className="w-full bg-[#00285e] hover:bg-[#003a7d] disabled:bg-gray-400 text-white font-bold py-4 rounded-2xl shadow-lg transition-all text-lg"
           >
             {joining ? 'Joining...' : 'Join League'}
           </button>

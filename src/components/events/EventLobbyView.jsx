@@ -165,9 +165,9 @@ export default function EventLobbyView({
 
   // ==================== RENDER ====================
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
-        <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">
+        <button onClick={() => setView('home')} className="text-white mb-6 hover:text-[#c8d6e5]">
           ← Back to Home
         </button>
 
@@ -184,7 +184,7 @@ export default function EventLobbyView({
         {eventStatus === 'active' && (
           <button
             onClick={handleEnterScores}
-            className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white py-4 rounded-xl font-semibold text-lg shadow-lg transition-all mb-6"
+            className="w-full bg-[#e17055] text-white py-4 rounded-xl font-semibold text-lg shadow-lg transition-all mb-6"
           >
             ⛳ {isTeamFormat ? 'Enter Team Scores' : 'Enter My Scores'}
           </button>

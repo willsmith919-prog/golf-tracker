@@ -103,18 +103,18 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
         <div className="text-white text-xl">Loading courses...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
         <button 
           onClick={() => setView('home')} 
-          className="text-white mb-6 hover:text-blue-200 flex items-center gap-2"
+          className="text-white mb-6 hover:text-[#c8d6e5] flex items-center gap-2"
         >
           ← Back
         </button>
@@ -144,7 +144,7 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
                   value="stroke"
                   checked={format === 'stroke'}
                   onChange={(e) => setFormat(e.target.value)}
-                  className="w-5 h-5 text-blue-600"
+                  className="w-5 h-5 text-[#00285e]"
                 />
                 <span className="ml-3 text-gray-900 font-medium">Stroke Play</span>
               </label>
@@ -155,7 +155,7 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
                   value="stableford"
                   checked={format === 'stableford'}
                   onChange={(e) => setFormat(e.target.value)}
-                  className="w-5 h-5 text-blue-600"
+                  className="w-5 h-5 text-[#00285e]"
                 />
                 <span className="ml-3 text-gray-900 font-medium">Stableford</span>
               </label>
@@ -174,7 +174,7 @@ export default function SoloSetupView({ setView, setCurrentSoloRound, user }) {
           <button
             onClick={startRound}
             disabled={!selectedCourseId || !selectedTeeId}
-            className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-lg transition-colors"
+            className="w-full bg-[#00285e] hover:bg-[#003a7d] disabled:bg-gray-300 disabled:cursor-not-allowed text-white py-4 rounded-xl font-bold text-lg transition-colors"
           >
             Start Round
           </button>

@@ -50,9 +50,9 @@ export default function EventHeader({ currentEvent, isHost, eventStatus, feedbac
       </div>
 
       <div className="mt-4 flex items-center gap-3">
-        <div className="bg-blue-50 px-4 py-2 rounded-lg">
+        <div className="bg-[#f0f4ff] px-4 py-2 rounded-lg">
           <div className="text-xs text-gray-600 mb-1">Event Code</div>
-          <div className="font-mono font-bold text-blue-600 text-lg">{meta.eventCode}</div>
+          <div className="font-mono font-bold text-[#00285e] text-lg">{meta.eventCode}</div>
         </div>
         <button
           onClick={() => {
@@ -60,7 +60,7 @@ export default function EventHeader({ currentEvent, isHost, eventStatus, feedbac
             setFeedback('Code copied!');
             setTimeout(() => setFeedback(''), 2000);
           }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 text-sm font-semibold"
+          className="bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold"
         >
           Copy Code
         </button>

@@ -212,7 +212,7 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
         <div className="flex gap-2">
           <button
             onClick={autoAssignTeams}
-            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-purple-100 text-purple-700 hover:bg-purple-200 transition-all"
+            className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#f0f4ff] text-[#00285e] hover:bg-[#e8eef8] transition-all"
           >
             🎲 Auto-Assign
           </button>
@@ -238,7 +238,7 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
                 className="flex items-center gap-2 bg-white px-3 py-2 rounded-lg border border-yellow-300 shadow-sm"
               >
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
-                  player.role === 'host' ? 'bg-yellow-500' : 'bg-blue-500'
+                  player.role === 'host' ? 'bg-yellow-500' : 'bg-[#00285e]'
                 }`}>
                   {(player.displayName || '?').charAt(0).toUpperCase()}
                 </div>
@@ -246,7 +246,7 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
                   {player.displayName}
                 </span>
                 {player.uid === currentUser?.uid && (
-                  <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">You</span>
+                  <span className="text-[10px] bg-[#f0f4ff] text-[#00285e] px-1.5 py-0.5 rounded-full">You</span>
                 )}
               </div>
             ))}
@@ -276,12 +276,12 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
                         if (e.key === 'Enter') saveTeamName(team.teamId);
                         if (e.key === 'Escape') setTeamNameEditing(null);
                       }}
-                      className="flex-1 px-3 py-1.5 rounded-lg border-2 border-blue-300 focus:border-blue-500 focus:outline-none text-sm font-semibold"
+                      className="flex-1 px-3 py-1.5 rounded-lg border-2 border-[#c8d6e5] focus:border-[#00285e] focus:outline-none text-sm font-semibold"
                       autoFocus
                     />
                     <button
                       onClick={() => saveTeamName(team.teamId)}
-                      className="px-2 py-1 rounded text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700"
+                      className="px-2 py-1 rounded text-xs font-semibold bg-[#00285e] text-white hover:bg-[#003a7d]"
                     >
                       Save
                     </button>
@@ -322,13 +322,13 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
                     <div key={member.uid} className="flex items-center justify-between bg-white px-3 py-2 rounded-lg">
                       <div className="flex items-center gap-2">
                         <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white text-sm font-bold ${
-                          players[member.uid]?.role === 'host' ? 'bg-yellow-500' : 'bg-blue-500'
+                          players[member.uid]?.role === 'host' ? 'bg-yellow-500' : 'bg-[#00285e]'
                         }`}>
                           {(member.displayName || '?').charAt(0).toUpperCase()}
                         </div>
                         <span className="text-sm font-medium text-gray-900">{member.displayName}</span>
                         {member.uid === currentUser?.uid && (
-                          <span className="text-[10px] bg-blue-100 text-blue-600 px-1.5 py-0.5 rounded-full">You</span>
+                          <span className="text-[10px] bg-[#f0f4ff] text-[#00285e] px-1.5 py-0.5 rounded-full">You</span>
                         )}
                         {member.handicap != null && (
                           <span className="text-xs text-gray-400">HCP: {member.handicap}</span>
@@ -359,7 +359,7 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
                       e.target.value = ''; // reset dropdown
                     }
                   }}
-                  className="w-full px-3 py-2 rounded-lg border-2 border-dashed border-gray-300 text-sm text-gray-500 focus:border-blue-400 focus:outline-none bg-white"
+                  className="w-full px-3 py-2 rounded-lg border-2 border-dashed border-gray-300 text-sm text-gray-500 focus:border-[#00285e] focus:outline-none bg-white"
                 >
                   <option value="">+ Add a player...</option>
                   {unassignedPlayers.map(player => (

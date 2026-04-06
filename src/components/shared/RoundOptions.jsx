@@ -32,7 +32,7 @@ export default function RoundOptions({
               value="9"
               checked={numHoles === 9}
               onChange={() => onNumHolesChange(9)}
-              className="w-5 h-5 text-blue-600"
+              className="w-5 h-5 text-[#00285e]"
             />
             <span className="ml-3 text-gray-900 font-medium">9 Holes</span>
           </label>
@@ -43,7 +43,7 @@ export default function RoundOptions({
               value="18"
               checked={numHoles === 18}
               onChange={() => onNumHolesChange(18)}
-              className="w-5 h-5 text-blue-600"
+              className="w-5 h-5 text-[#00285e]"
             />
             <span className="ml-3 text-gray-900 font-medium">18 Holes</span>
           </label>
@@ -63,7 +63,7 @@ export default function RoundOptions({
               value="1"
               checked={startingHole === 1}
               onChange={() => onStartingHoleChange(1)}
-              className="w-5 h-5 text-blue-600"
+              className="w-5 h-5 text-[#00285e]"
             />
             <span className="ml-3 text-gray-900 font-medium">
               {numHoles === 9 ? 'Front 9 (1-9)' : 'Hole 1'}
@@ -76,7 +76,7 @@ export default function RoundOptions({
               value="10"
               checked={startingHole === 10}
               onChange={() => onStartingHoleChange(10)}
-              className="w-5 h-5 text-blue-600"
+              className="w-5 h-5 text-[#00285e]"
             />
             <span className="ml-3 text-gray-900 font-medium">
               {numHoles === 9 ? 'Back 9 (10-18)' : 'Hole 10'}

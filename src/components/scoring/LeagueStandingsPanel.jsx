@@ -42,21 +42,21 @@ export default function LeagueStandingsPanel({
     <div className="mt-6">
       <button
         onClick={() => setShowLeagueProjection(!showLeagueProjection)}
-        className="w-full flex items-center justify-between bg-purple-50 hover:bg-purple-100 border-2 border-purple-200 rounded-xl px-4 py-3 transition-colors"
+        className="w-full flex items-center justify-between bg-[#f0f4ff] hover:bg-[#f0f4ff] border-2 border-[#dce8f5] rounded-xl px-4 py-3 transition-colors"
       >
         <div className="flex items-center gap-2">
           <span className="text-lg">🏆</span>
-          <span className="font-semibold text-purple-800 text-sm">League Standings Impact</span>
+          <span className="font-semibold text-[#007a78] text-sm">League Standings Impact</span>
         </div>
-        <span className="text-purple-400 text-sm font-semibold">
+        <span className="text-[#003a7d] text-sm font-semibold">
           {showLeagueProjection ? 'Hide ▲' : 'Show ▼'}
         </span>
       </button>
 
       {showLeagueProjection && (
-        <div className="mt-3 bg-purple-50 border-2 border-purple-200 rounded-xl p-4">
+        <div className="mt-3 bg-[#f0f4ff] border-2 border-[#dce8f5] rounded-xl p-4">
           {loadingStandings ? (
-            <div className="text-center py-4 text-purple-600 text-sm">Loading standings...</div>
+            <div className="text-center py-4 text-[#00285e] text-sm">Loading standings...</div>
           ) : currentStandings ? (() => {
             const projectedPoints = calculateEventPoints(
               leaderboardData,
@@ -99,7 +99,7 @@ export default function LeagueStandingsPanel({
 
             return (
               <>
-                <div className="text-xs text-purple-600 mb-3 font-medium">
+                <div className="text-xs text-[#00285e] mb-3 font-medium">
                   If the round ended now, here's how league standings would change:
                 </div>
                 <div className="space-y-2">
@@ -112,7 +112,7 @@ export default function LeagueStandingsPanel({
                       <div
                         key={row.uid}
                         className={`flex items-center justify-between p-3 rounded-lg ${
-                          row.isInEvent ? 'bg-white' : 'bg-purple-100/50 opacity-60'
+                          row.isInEvent ? 'bg-white' : 'bg-[#f0f4ff]/50 opacity-60'
                         }`}
                       >
                         <div className="flex items-center gap-3">
@@ -130,14 +130,14 @@ export default function LeagueStandingsPanel({
                               {row.displayName}
                             </span>
                             {row.isInEvent && row.projected > 0 && (
-                              <span className="text-xs text-purple-600">
+                              <span className="text-xs text-[#00285e]">
                                 +{row.projected} pts this event
                               </span>
                             )}
                           </div>
                         </div>
                         <div className="text-right">
-                          <div className="text-sm font-bold text-purple-700">{row.newTotal} pts</div>
+                          <div className="text-sm font-bold text-[#00285e]">{row.newTotal} pts</div>
                           {row.basePoints !== row.newTotal && (
                             <div className="text-xs text-gray-400">was {row.basePoints}</div>
                           )}
@@ -148,8 +148,8 @@ export default function LeagueStandingsPanel({
                 </div>
 
                 {/* Points key */}
-                <div className="mt-3 pt-3 border-t border-purple-200">
-                  <div className="text-xs text-purple-500 font-medium mb-2">Points this event:</div>
+                <div className="mt-3 pt-3 border-t border-[#dce8f5]">
+                  <div className="text-xs text-[#00285e] font-medium mb-2">Points this event:</div>
                   <div className="flex flex-wrap gap-2">
                     {Object.entries(leaguePoints.positions)
                       .sort(([a], [b]) => Number(a) - Number(b))
@@ -160,13 +160,13 @@ export default function LeagueStandingsPanel({
                         const v = n % 100;
                         const ord = n + (s[(v - 20) % 10] || s[v] || s[0]);
                         return (
-                          <span key={place} className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                          <span key={place} className="text-xs bg-[#f0f4ff] text-[#00285e] px-2 py-1 rounded-full">
                             {ord}: {pts}pts
                           </span>
                         );
                       })}
                     {leaguePoints.participationPoints > 0 && (
-                      <span className="text-xs bg-purple-100 text-purple-700 px-2 py-1 rounded-full">
+                      <span className="text-xs bg-[#f0f4ff] text-[#00285e] px-2 py-1 rounded-full">
                         Participation: {leaguePoints.participationPoints}pts
                       </span>
                     )}
@@ -175,7 +175,7 @@ export default function LeagueStandingsPanel({
               </>
             );
           })() : (
-            <div className="text-center py-4 text-purple-600 text-sm">Could not load standings</div>
+            <div className="text-center py-4 text-[#00285e] text-sm">Could not load standings</div>
           )}
         </div>
       )}

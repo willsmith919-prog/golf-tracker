@@ -156,11 +156,11 @@ export default function EditLeagueView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => setView('league-dashboard')}
-          className="text-white mb-6 hover:text-blue-200"
+          className="text-white mb-6 hover:text-[#c8d6e5]"
         >
           ← Back to Dashboard
         </button>
@@ -185,7 +185,7 @@ export default function EditLeagueView({
               onClick={() => setActiveTab('league')}
               className={`flex-1 py-3 text-center font-semibold text-sm transition-colors ${
                 activeTab === 'league'
-                  ? 'text-blue-600 border-b-2 border-blue-600 -mb-[2px]'
+                  ? 'text-[#00285e] border-b-2 border-[#003a7d] -mb-[2px]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -195,7 +195,7 @@ export default function EditLeagueView({
               onClick={() => setActiveTab('season')}
               className={`flex-1 py-3 text-center font-semibold text-sm transition-colors ${
                 activeTab === 'season'
-                  ? 'text-blue-600 border-b-2 border-blue-600 -mb-[2px]'
+                  ? 'text-[#00285e] border-b-2 border-[#003a7d] -mb-[2px]'
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
@@ -212,7 +212,7 @@ export default function EditLeagueView({
                   type="text"
                   value={leagueName}
                   onChange={(e) => setLeagueName(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                   placeholder="Sunday Golf League"
                 />
               </div>
@@ -222,7 +222,7 @@ export default function EditLeagueView({
                 <textarea
                   value={leagueDescription}
                   onChange={(e) => setLeagueDescription(e.target.value)}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                   placeholder="Weekly competitive league for golfers of all levels"
                   rows={3}
                 />
@@ -231,7 +231,7 @@ export default function EditLeagueView({
               <button
                 onClick={handleSaveLeagueInfo}
                 disabled={saving}
-                className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:bg-blue-400 text-lg"
+                className="w-full bg-[#00285e] text-white py-3 rounded-xl font-semibold hover:bg-[#003a7d] disabled:bg-gray-400 text-lg"
               >
                 {saving ? 'Saving...' : 'Save League Info'}
               </button>
@@ -256,7 +256,7 @@ export default function EditLeagueView({
                         type="text"
                         value={seasonName}
                         onChange={(e) => setSeasonName(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                         placeholder="2026 Season"
                       />
                     </div>
@@ -268,7 +268,7 @@ export default function EditLeagueView({
                           type="date"
                           value={seasonStartDate}
                           onChange={(e) => setSeasonStartDate(e.target.value)}
-                          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                         />
                       </div>
                       <div>
@@ -277,14 +277,14 @@ export default function EditLeagueView({
                           type="date"
                           value={seasonEndDate}
                           onChange={(e) => setSeasonEndDate(e.target.value)}
-                          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                         />
                       </div>
                     </div>
                   </div>
 
                   {/* Participation Points */}
-                  <div className="bg-blue-50 p-4 rounded-xl">
+                  <div className="bg-[#f0f4ff] p-4 rounded-xl">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Participation Points
                     </label>
@@ -296,12 +296,12 @@ export default function EditLeagueView({
                       min="0"
                       value={participationPoints}
                       onChange={(e) => setParticipationPoints(parseInt(e.target.value) || 0)}
-                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center"
+                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
                     />
                   </div>
 
                   {/* Drop Lowest */}
-                  <div className="bg-blue-50 p-4 rounded-xl">
+                  <div className="bg-[#f0f4ff] p-4 rounded-xl">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Drop Lowest Scores
                     </label>
@@ -313,7 +313,7 @@ export default function EditLeagueView({
                       min="0"
                       value={dropLowest}
                       onChange={(e) => setDropLowest(parseInt(e.target.value) || 0)}
-                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center"
+                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
                     />
                   </div>
 
@@ -338,7 +338,7 @@ export default function EditLeagueView({
                               min="0"
                               value={pointPositions[place]}
                               onChange={(e) => updatePositionPoints(place, e.target.value)}
-                              className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center"
+                              className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
                             />
                             <span className="text-xs text-gray-400">pts</span>
                           </div>
@@ -349,7 +349,7 @@ export default function EditLeagueView({
                       <button
                         type="button"
                         onClick={addPositionRow}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-semibold"
+                        className="text-[#00285e] hover:text-[#003a7d] text-sm font-semibold"
                       >
                         + Add Position
                       </button>
@@ -372,7 +372,7 @@ export default function EditLeagueView({
                   <button
                     onClick={handleSaveSeasonConfig}
                     disabled={saving}
-                    className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 disabled:bg-blue-400 text-lg"
+                    className="w-full bg-[#00285e] text-white py-3 rounded-xl font-semibold hover:bg-[#003a7d] disabled:bg-gray-400 text-lg"
                   >
                     {saving ? 'Saving...' : 'Save Season Config'}
                   </button>

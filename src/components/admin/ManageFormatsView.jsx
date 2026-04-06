@@ -200,11 +200,11 @@ export default function ManageFormatsView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
         <button
           onClick={() => setView('home')}
-          className="text-white mb-6 hover:text-blue-200"
+          className="text-white mb-6 hover:text-[#c8d6e5]"
         >
           ← Back
         </button>
@@ -216,14 +216,14 @@ export default function ManageFormatsView({
             </h2>
             <button
               onClick={handleAdd}
-              className="bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 font-semibold"
+              className="bg-[#00285e] text-white px-4 py-2 rounded-xl hover:bg-[#003a7d] font-semibold"
             >
               + Add Format
             </button>
           </div>
 
           {feedback && (
-            <div className="mb-4 bg-blue-50 border-2 border-blue-200 text-blue-800 px-4 py-3 rounded-xl text-sm">
+            <div className="mb-4 bg-[#f0f4ff] border-2 border-[#dce8f5] text-[#007a78] px-4 py-3 rounded-xl text-sm">
               {feedback}
             </div>
           )}
@@ -240,7 +240,7 @@ export default function ManageFormatsView({
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Filter</span>
                     {hasActiveFilters && (
-                      <button onClick={clearFilters} className="text-xs text-blue-600 hover:text-blue-800">
+                      <button onClick={clearFilters} className="text-xs text-[#00285e] hover:text-[#007a78]">
                         Clear all
                       </button>
                     )}
@@ -253,7 +253,7 @@ export default function ManageFormatsView({
                         onClick={() => toggleFilter('teamSize', size)}
                         className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                           filters.teamSize === size
-                            ? 'bg-blue-600 text-white border-blue-600'
+                            ? 'bg-[#00285e] text-white border-[#003a7d]'
                             : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                         }`}
                       >
@@ -283,7 +283,7 @@ export default function ManageFormatsView({
                         onClick={() => toggleFilter('combinationMethod', combo)}
                         className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                           filters.combinationMethod === combo
-                            ? 'bg-purple-600 text-white border-purple-600'
+                            ? 'bg-[#00285e] text-white border-[#003a7d]'
                             : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                         }`}
                       >
@@ -298,7 +298,7 @@ export default function ManageFormatsView({
                         onClick={() => toggleFilter('competition', comp)}
                         className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
                           filters.competition === comp
-                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            ? 'bg-[#00285e] text-white border-[#00285e]'
                             : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
                         }`}
                       >
@@ -354,14 +354,14 @@ export default function ManageFormatsView({
                       <h3 className="text-lg font-bold text-gray-900">{format.name}</h3>
                       <p className="text-sm text-gray-600 mt-1">{format.description}</p>
                       <div className="flex flex-wrap gap-2 mt-3">
-                        <span className="inline-block bg-blue-100 text-blue-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                        <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
                           {teamSizeLabels[format.teamSize] || `${format.teamSize}-Person`}
                         </span>
                         <span className="inline-block bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
                           {scoringMethodLabels[format.scoringMethod] || format.scoringMethod}
                         </span>
                         {format.teamSize > 1 && (
-                          <span className="inline-block bg-purple-100 text-purple-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                          <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
                             {combinationLabels[format.combinationMethod] || format.combinationMethod}
                           </span>
                         )}
@@ -371,7 +371,7 @@ export default function ManageFormatsView({
                           </span>
                         )}
                         {competitionLabels[format.competition?.structure] && (
-                          <span className="inline-block bg-indigo-100 text-indigo-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                          <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
                             {competitionLabels[format.competition.structure]}
                           </span>
                         )}
@@ -380,7 +380,7 @@ export default function ManageFormatsView({
                     <div className="flex gap-2 ml-4">
                       <button
                         onClick={() => handleEdit(format)}
-                        className="text-blue-600 hover:text-blue-800 text-sm font-semibold"
+                        className="text-[#00285e] hover:text-[#007a78] text-sm font-semibold"
                       >
                         Edit
                       </button>

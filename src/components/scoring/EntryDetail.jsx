@@ -38,7 +38,7 @@ export default function EntryDetail({
                     {handicapEnabled && display.showStrokeHoles !== false && strokeCount > 0 && (
                       <div className="flex justify-center gap-0.5 mt-0.5">
                         {Array.from({ length: strokeCount }).map((_, i) => (
-                          <span key={i} className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                          <span key={i} className="inline-block w-1.5 h-1.5 rounded-full bg-[#00285e]" />
                         ))}
                       </div>
                     )}
@@ -67,7 +67,7 @@ export default function EntryDetail({
                   <td key={h} className={`text-center p-1 rounded ${getScoreColor(score, par)}`}>
                     {score || '-'}
                     {usesMulligans && (entry.mulliganLog[h] || 0) > 0 && (
-                      <span className="text-purple-500 text-[8px]">{'🎟️'.repeat(entry.mulliganLog[h])}</span>
+                      <span className="text-[#00285e] text-[8px]">{'🎟️'.repeat(entry.mulliganLog[h])}</span>
                     )}
                   </td>
                 );
@@ -98,7 +98,7 @@ export default function EntryDetail({
                     </td>
                   );
                 })}
-                <td className="text-center p-1 font-bold text-blue-600">
+                <td className="text-center p-1 font-bold text-[#00285e]">
                   {holes.reduce((sum, h) => {
                     const s = entry.scores[h] || entry.holes[h]?.score;
                     const par = coursePars[h - 1];
@@ -120,7 +120,7 @@ export default function EntryDetail({
                       {strokeCount > 0 && display.showStrokeHoles !== false && (
                         <div className="flex justify-center gap-0.5 mt-0.5">
                           {Array.from({ length: strokeCount }).map((_, i) => (
-                            <span key={i} className="inline-block w-1.5 h-1.5 rounded-full bg-blue-500" />
+                            <span key={i} className="inline-block w-1.5 h-1.5 rounded-full bg-[#00285e]" />
                           ))}
                         </div>
                       )}

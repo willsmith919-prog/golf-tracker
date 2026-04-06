@@ -138,9 +138,9 @@ export default function CreateLeagueView({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6">
+    <div className="min-h-screen bg-[#1a1a2e] p-6">
       <div className="max-w-2xl mx-auto">
-        <button onClick={() => setView('home')} className="text-white mb-6 hover:text-blue-200">
+        <button onClick={() => setView('home')} className="text-white mb-6 hover:text-[#c8d6e5]">
           ← Back
         </button>
 
@@ -166,7 +166,7 @@ export default function CreateLeagueView({
                 type="text"
                 value={newLeague.name}
                 onChange={(e) => setNewLeague({ ...newLeague, name: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                 placeholder="Sunday Golf League"
                 required
               />
@@ -177,7 +177,7 @@ export default function CreateLeagueView({
               <textarea
                 value={newLeague.description}
                 onChange={(e) => setNewLeague({ ...newLeague, description: e.target.value })}
-                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                 placeholder="Weekly competitive league for golfers of all levels"
                 rows={3}
               />
@@ -194,7 +194,7 @@ export default function CreateLeagueView({
                     type="text"
                     value={newLeague.seasonName}
                     onChange={(e) => setNewLeague({ ...newLeague, seasonName: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                     placeholder="2026 Season"
                   />
                 </div>
@@ -206,7 +206,7 @@ export default function CreateLeagueView({
                       type="date"
                       value={newLeague.seasonStartDate}
                       onChange={(e) => setNewLeague({ ...newLeague, seasonStartDate: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                     />
                   </div>
                   <div>
@@ -215,7 +215,7 @@ export default function CreateLeagueView({
                       type="date"
                       value={newLeague.seasonEndDate}
                       onChange={(e) => setNewLeague({ ...newLeague, seasonEndDate: e.target.value })}
-                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-blue-500 focus:outline-none"
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
                     />
                   </div>
                 </div>
@@ -234,7 +234,7 @@ export default function CreateLeagueView({
                 <button
                   type="button"
                   onClick={() => setShowPointsConfig(!showPointsConfig)}
-                  className="text-blue-600 hover:text-blue-700 text-sm font-semibold"
+                  className="text-[#00285e] hover:text-[#003a7d] text-sm font-semibold"
                 >
                   {showPointsConfig ? 'Collapse' : 'Expand'}
                 </button>
@@ -244,7 +244,7 @@ export default function CreateLeagueView({
                 <div className="space-y-4">
 
                   {/* Participation Points */}
-                  <div className="bg-blue-50 p-4 rounded-xl">
+                  <div className="bg-[#f0f4ff] p-4 rounded-xl">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Participation Points
                     </label>
@@ -256,12 +256,12 @@ export default function CreateLeagueView({
                       min="0"
                       value={newLeague.participationPoints}
                       onChange={(e) => setNewLeague({ ...newLeague, participationPoints: parseInt(e.target.value) || 0 })}
-                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center"
+                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
                     />
                   </div>
 
                   {/* Drop Lowest */}
-                  <div className="bg-blue-50 p-4 rounded-xl">
+                  <div className="bg-[#f0f4ff] p-4 rounded-xl">
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
                       Drop Lowest Scores
                     </label>
@@ -273,7 +273,7 @@ export default function CreateLeagueView({
                       min="0"
                       value={newLeague.dropLowest}
                       onChange={(e) => setNewLeague({ ...newLeague, dropLowest: parseInt(e.target.value) || 0 })}
-                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center"
+                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
                     />
                   </div>
 
@@ -293,7 +293,7 @@ export default function CreateLeagueView({
                               min="0"
                               value={newLeague.pointSystem[place]}
                               onChange={(e) => updatePositionPoints(place, e.target.value)}
-                              className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-center"
+                              className="w-20 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
                             />
                             <span className="text-xs text-gray-400">pts</span>
                           </div>
@@ -305,7 +305,7 @@ export default function CreateLeagueView({
                       <button
                         type="button"
                         onClick={addPositionRow}
-                        className="text-blue-600 hover:text-blue-700 text-sm font-semibold flex items-center gap-1"
+                        className="text-[#00285e] hover:text-[#003a7d] text-sm font-semibold flex items-center gap-1"
                       >
                         + Add Position
                       </button>
@@ -339,7 +339,7 @@ export default function CreateLeagueView({
             {/* ===== SUBMIT ===== */}
             <button
               type="submit"
-              className="w-full bg-blue-600 text-white py-4 rounded-xl font-semibold hover:bg-blue-700 text-lg"
+              className="w-full bg-[#00285e] text-white py-4 rounded-xl font-semibold hover:bg-[#003a7d] text-lg"
             >
               Create League
             </button>

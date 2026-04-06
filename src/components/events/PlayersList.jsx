@@ -75,7 +75,7 @@ export default function PlayersList({
       </div>
 
       {showAddGuest && (
-        <div className="mb-4 p-4 bg-blue-50 border-2 border-blue-200 rounded-xl">
+        <div className="mb-4 p-4 bg-[#f0f4ff] border-2 border-[#dce8f5] rounded-xl">
           <div className="text-sm font-semibold text-gray-700 mb-2">Add a guest player (no account needed)</div>
           <div className="flex gap-2">
             <input
@@ -84,12 +84,12 @@ export default function PlayersList({
               onChange={(e) => setGuestName(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter') handleAddGuest(); }}
               placeholder="Guest name"
-              className="flex-1 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-blue-500 focus:outline-none text-sm"
+              className="flex-1 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-sm"
               autoFocus
             />
             <button
               onClick={handleAddGuest}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-semibold"
+              className="bg-[#00285e] hover:bg-[#003a7d] text-white px-4 py-2 rounded-lg text-sm font-semibold"
             >
               Add
             </button>
@@ -110,7 +110,7 @@ export default function PlayersList({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${
-                    player.role === 'host' ? 'bg-yellow-500' : player.isGuest ? 'bg-gray-400' : 'bg-blue-500'
+                    player.role === 'host' ? 'bg-yellow-500' : player.isGuest ? 'bg-gray-400' : 'bg-[#00285e]'
                   }`}>
                     {(player.displayName || '?').charAt(0).toUpperCase()}
                   </div>
@@ -121,7 +121,7 @@ export default function PlayersList({
                         <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full">Host</span>
                       )}
                       {player.uid === currentUser?.uid && (
-                        <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full">You</span>
+                        <span className="text-xs bg-[#f0f4ff] text-[#003a7d] px-2 py-0.5 rounded-full">You</span>
                       )}
                       {player.isGuest && (
                         <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Guest</span>

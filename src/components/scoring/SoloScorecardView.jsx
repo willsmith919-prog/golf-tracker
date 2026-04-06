@@ -3,10 +3,10 @@ import { database } from '../../firebase';
 export default function SoloScorecardView({ currentSoloRound, setView }) {
   if (!currentSoloRound) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-6 flex items-center justify-center">
+      <div className="min-h-screen bg-[#1a1a2e] p-6 flex items-center justify-center">
         <div className="text-white text-center">
           <p className="text-xl mb-4">Round not found</p>
-          <button onClick={() => setView('home')} className="bg-white text-blue-900 px-6 py-3 rounded-xl font-semibold">
+          <button onClick={() => setView('home')} className="bg-white text-[#004f4e] px-6 py-3 rounded-xl font-semibold">
             Back to Home
           </button>
         </div>
@@ -43,11 +43,11 @@ export default function SoloScorecardView({ currentSoloRound, setView }) {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-indigo-800 to-purple-900 p-4">
+    <div className="min-h-screen bg-[#1a1a2e] p-4">
       <div className="max-w-4xl mx-auto">
         <button 
           onClick={() => setView('rounds-history')} 
-          className="text-white mb-4 hover:text-blue-200"
+          className="text-white mb-4 hover:text-[#c8d6e5]"
         >
           ← Back to Rounds
         </button>
@@ -63,7 +63,7 @@ export default function SoloScorecardView({ currentSoloRound, setView }) {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-blue-50 p-4 rounded-xl text-center">
+            <div className="bg-[#f0f4ff] p-4 rounded-xl text-center">
               <div className="text-sm text-gray-600 mb-1">Score</div>
               <div className="text-3xl font-bold text-gray-900">
                 {currentSoloRound.stats.totalScore}
@@ -73,7 +73,7 @@ export default function SoloScorecardView({ currentSoloRound, setView }) {
               </div>
             </div>
 
-            <div className="bg-blue-50 p-4 rounded-xl text-center">
+            <div className="bg-[#f0f4ff] p-4 rounded-xl text-center">
               <div className="text-sm text-gray-600 mb-1">Total Putts</div>
               <div className="text-3xl font-bold text-gray-900">
                 {currentSoloRound.stats.totalPutts}
@@ -83,7 +83,7 @@ export default function SoloScorecardView({ currentSoloRound, setView }) {
               </div>
             </div>
 
-            <div className="bg-blue-50 p-4 rounded-xl text-center">
+            <div className="bg-[#f0f4ff] p-4 rounded-xl text-center">
               <div className="text-sm text-gray-600 mb-1">GIR</div>
               <div className="text-3xl font-bold text-gray-900">
                 {currentSoloRound.stats.greensInRegulation}
@@ -93,7 +93,7 @@ export default function SoloScorecardView({ currentSoloRound, setView }) {
               </div>
             </div>
 
-            <div className="bg-blue-50 p-4 rounded-xl text-center">
+            <div className="bg-[#f0f4ff] p-4 rounded-xl text-center">
               <div className="text-sm text-gray-600 mb-1">Fairways</div>
               <div className="text-3xl font-bold text-gray-900">
                 {currentSoloRound.stats.fairwaysHit}/{currentSoloRound.stats.fairwaysPossible}
@@ -300,7 +300,7 @@ export default function SoloScorecardView({ currentSoloRound, setView }) {
               {Object.entries(currentSoloRound.holes)
                 .filter(([_, hole]) => hole.notes)
                 .map(([holeNum, hole]) => (
-                  <div key={holeNum} className="border-l-4 border-blue-500 pl-4 py-2">
+                  <div key={holeNum} className="border-l-4 border-[#00285e] pl-4 py-2">
                     <div className="text-sm font-semibold text-gray-700 mb-1">
                       Hole {holeNum}
                     </div>

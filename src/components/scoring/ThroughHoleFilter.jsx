@@ -18,7 +18,7 @@ export default function ThroughHoleFilter({
           onClick={() => { setThroughHole(null); setShowAllHoles(false); }}
           className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors ${
             throughHole === null
-              ? 'bg-blue-600 text-white'
+              ? 'bg-[#00285e] text-white'
               : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
           }`}
         >
@@ -31,8 +31,8 @@ export default function ThroughHoleFilter({
             onClick={() => { setThroughHole(myThroughHole); setShowAllHoles(false); }}
             className={`text-xs px-3 py-1.5 rounded-full font-semibold transition-colors ${
               throughHole === myThroughHole
-                ? 'bg-blue-600 text-white'
-                : 'bg-blue-50 text-blue-600 hover:bg-blue-100 border border-blue-200'
+                ? 'bg-[#00285e] text-white'
+                : 'bg-[#f0f4ff] text-[#00285e] hover:bg-[#f0f4ff] border border-[#dce8f5]'
             }`}
           >
             Thru {myHolesPlayed} ({myThroughHole})
@@ -61,9 +61,9 @@ export default function ThroughHoleFilter({
               onClick={() => setThroughHole(throughHole === h ? null : h)}
               className={`flex-shrink-0 w-8 h-8 rounded-lg text-xs font-bold transition-colors ${
                 throughHole === h
-                  ? 'bg-blue-600 text-white'
+                  ? 'bg-[#00285e] text-white'
                   : h === myThroughHole
-                  ? 'bg-blue-50 text-blue-600 border border-blue-200'
+                  ? 'bg-[#f0f4ff] text-[#00285e] border border-[#dce8f5]'
                   : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
               }`}
             >
@@ -75,7 +75,7 @@ export default function ThroughHoleFilter({
 
       {/* Active filter indicator */}
       {throughHole !== null && (
-        <div className="text-xs text-blue-600 mt-1.5 font-medium">
+        <div className="text-xs text-[#00285e] mt-1.5 font-medium">
           Showing scores through Hole {throughHole} ({holeOrder.indexOf(throughHole) + 1} of {numHoles} holes)
         </div>
       )}
