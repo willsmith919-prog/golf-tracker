@@ -4,10 +4,11 @@ import { database } from '../../firebase';
 
 export default function JoinEventConfirm({
   currentUser,
-  userProfile,
   joinCode,
   setView,
   setCurrentEvent,
+  loadUserEvents,
+  setUserEvents,
 }) {
   const [event, setEvent] = useState(null);
   const [eventId, setEventId] = useState(null);
@@ -60,19 +61,33 @@ export default function JoinEventConfirm({
   const handleJoin = async () => {
     setJoining(true);
     try {
+      // Fetch profile fresh from Firebase to avoid timing issues with the prop not yet loaded
+      const profileSnapshot = await get(ref(database, `users/${currentUser.uid}/profile`));
+      const profile = profileSnapshot.val() || {};
+      const displayName = profile.displayName || currentUser.email || 'Unknown';
+      const handicap = profile.handicap ?? null;
+
       // Add user to event players
-      await set(ref(database, `events/${eventId}/players/${currentUser.uid}`), {
-        displayName: userProfile?.profile?.displayName || currentUser.email || 'Unknown',
+      const playerEntry = {
+        displayName,
         joinedAt: Date.now(),
         role: 'player',
-        handicap: userProfile?.profile?.handicap || null,
-      });
+      };
+      if (handicap !== null) playerEntry.handicap = handicap;
+
+      await set(ref(database, `events/${eventId}/players/${currentUser.uid}`), playerEntry);
 
       // Add event reference to user's profile
       await set(ref(database, `users/${currentUser.uid}/events/${eventId}`), {
         role: 'player',
         joinedAt: Date.now(),
       });
+
+      // Refresh the home screen event list so the event appears immediately
+      if (loadUserEvents && setUserEvents) {
+        const updatedEvents = await loadUserEvents(currentUser.uid);
+        setUserEvents(updatedEvents);
+      }
 
       // Load the full event and take user to the lobby
       const eventSnapshot = await get(ref(database, `events/${eventId}`));

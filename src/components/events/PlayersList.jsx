@@ -14,6 +14,38 @@ export default function PlayersList({
 }) {
   const [showAddGuest, setShowAddGuest] = useState(false);
   const [guestName, setGuestName] = useState('');
+  const [editingHandicapFor, setEditingHandicapFor] = useState(null);
+  const [handicapEditValue, setHandicapEditValue] = useState('');
+
+  const handleEditHandicap = (player) => {
+    setEditingHandicapFor(player.uid);
+    setHandicapEditValue(player.handicap != null ? String(player.handicap) : '');
+  };
+
+  const handleSaveHandicap = async (player) => {
+    const raw = handicapEditValue.trim();
+    const value = raw === '' ? null : parseFloat(raw);
+    if (raw !== '' && isNaN(value)) {
+      setFeedback('Handicap must be a number');
+      setTimeout(() => setFeedback(''), 2000);
+      return;
+    }
+    try {
+      const playerRef = ref(database, `events/${currentEvent.id}/players/${player.uid}/handicap`);
+      if (value === null) {
+        await set(playerRef, null);
+      } else {
+        await set(playerRef, value);
+      }
+      setEditingHandicapFor(null);
+      setFeedback(`${player.displayName}'s handicap updated`);
+      setTimeout(() => setFeedback(''), 2000);
+    } catch (err) {
+      console.error('Error saving handicap:', err);
+      setFeedback('Error saving handicap');
+      setTimeout(() => setFeedback(''), 3000);
+    }
+  };
 
   const handleAddGuest = async () => {
     const trimmedName = guestName.trim();
@@ -127,8 +159,46 @@ export default function PlayersList({
                         <span className="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">Guest</span>
                       )}
                     </div>
-                    {player.handicap != null && (
-                      <div className="text-sm text-gray-500">Handicap: {player.handicap}</div>
+                    {/* Host: show if someone else entered this player's scores */}
+                    {isHost && player.scoredByLog && (
+                      <div className="mt-1">
+                        {Object.values(player.scoredByLog).map((entry, i) => (
+                          <p key={i} className="text-xs text-orange-600">
+                            Holes {entry.holes.join(', ')} entered by {entry.name}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {editingHandicapFor === player.uid ? (
+                      <div className="flex items-center gap-2 mt-1">
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          value={handicapEditValue}
+                          onChange={(e) => setHandicapEditValue(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') handleSaveHandicap(player); if (e.key === 'Escape') setEditingHandicapFor(null); }}
+                          placeholder="e.g. 14"
+                          className="w-20 px-2 py-1 rounded-lg border-2 border-[#00285e] focus:outline-none text-sm"
+                          autoFocus
+                        />
+                        <button onClick={() => handleSaveHandicap(player)} className="text-xs bg-[#00285e] text-white px-2 py-1 rounded-lg font-semibold">Save</button>
+                        <button onClick={() => setEditingHandicapFor(null)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">
+                          {player.handicap != null ? `HCP ${player.handicap}` : 'No handicap'}
+                        </span>
+                        {isHost && (eventStatus === 'open' || eventStatus === 'active') && (
+                          <button
+                            onClick={() => handleEditHandicap(player)}
+                            className="text-xs text-[#00285e] hover:text-[#003a7d] font-semibold"
+                          >
+                            Edit
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>

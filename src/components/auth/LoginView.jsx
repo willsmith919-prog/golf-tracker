@@ -1,4 +1,5 @@
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { useState } from 'react';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../firebase.js';
 
 export default function LoginView({
@@ -12,6 +13,31 @@ export default function LoginView({
   setAuthLoading2,
   setView
 }) {
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetMessage, setResetMessage] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+
+  const handlePasswordReset = async (e) => {
+    e.preventDefault();
+    if (!resetEmail.trim()) { setResetMessage('Please enter your email address.'); return; }
+    setResetLoading(true);
+    setResetMessage('');
+    try {
+      await sendPasswordResetEmail(auth, resetEmail.trim());
+      setResetMessage('Check your email for a reset link.');
+    } catch (err) {
+      if (err.code === 'auth/user-not-found') {
+        setResetMessage('No account found with that email.');
+      } else if (err.code === 'auth/invalid-email') {
+        setResetMessage('Invalid email address.');
+      } else {
+        setResetMessage('Something went wrong. Try again.');
+      }
+    }
+    setResetLoading(false);
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setAuthError('');
@@ -87,6 +113,44 @@ export default function LoginView({
               {authLoading2 ? 'Logging in...' : 'Login'}
             </button>
           </form>
+
+          <div className="mt-4 text-center">
+            <button
+              onClick={() => { setShowForgotPassword(!showForgotPassword); setResetMessage(''); setResetEmail(loginEmail); }}
+              className="text-gray-500 hover:text-gray-700 text-sm"
+            >
+              Forgot password?
+            </button>
+          </div>
+
+          {showForgotPassword && (
+            <div className="mt-4 p-4 bg-gray-50 rounded-xl border-2 border-gray-200">
+              <p className="text-sm font-semibold text-gray-700 mb-3">Reset your password</p>
+              {resetMessage ? (
+                <>
+                <p className="text-sm text-green-700">{resetMessage}</p>
+                <p className="text-xs text-gray-500 mt-1">Don't see it? Check your spam or junk folder.</p>
+              </>
+              ) : (
+                <form onSubmit={handlePasswordReset} className="space-y-3">
+                  <input
+                    type="email"
+                    value={resetEmail}
+                    onChange={(e) => setResetEmail(e.target.value)}
+                    placeholder="your@email.com"
+                    className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-sm"
+                  />
+                  <button
+                    type="submit"
+                    disabled={resetLoading}
+                    className="w-full bg-[#00285e] text-white py-2 rounded-lg text-sm font-semibold hover:bg-[#003a7d] disabled:opacity-50"
+                  >
+                    {resetLoading ? 'Sending...' : 'Send Reset Email'}
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
 
           <div className="mt-6 text-center">
             <button

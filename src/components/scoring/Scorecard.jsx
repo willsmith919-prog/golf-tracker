@@ -15,7 +15,9 @@ export default function Scorecard({
   mulliganLog,
   getHoleData,
   goToHole,
-  getScoreColor
+  getScoreColor,
+  isScoringForOther = false,
+  scoringDisplayName = ''
 }) {
   const renderSection = (holes, label) => (
     <div className={label === first9Label ? 'mb-6' : ''}>
@@ -108,6 +110,11 @@ export default function Scorecard({
 
   return (
     <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
+      {isScoringForOther && (
+        <div className="bg-orange-400 text-white text-sm font-semibold text-center rounded-xl px-4 py-2 mb-4">
+          ⚠️ Scoring for {scoringDisplayName} — not your score
+        </div>
+      )}
       <h2 className="text-xl font-bold text-gray-900 mb-4">Scorecard</h2>
       {renderSection(first9, first9Label)}
       {second9.length > 0 && renderSection(second9, second9Label)}

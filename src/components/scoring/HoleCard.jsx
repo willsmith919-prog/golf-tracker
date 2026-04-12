@@ -50,12 +50,19 @@ export default function HoleCard({
   onConfirmMulligan,
   onCancelMulligan,
   onUndoMulligan,
-  onNotesChange
+  onNotesChange,
+  isScoringForOther = false,
+  scoringDisplayName = ''
 }) {
   return (
     <>
       {/* Current Hole Card */}
       <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-4">
+        {isScoringForOther && (
+          <div className="bg-orange-400 text-white text-sm font-semibold text-center rounded-xl px-4 py-2 mb-4">
+            ⚠️ Scoring for {scoringDisplayName} — not your score
+          </div>
+        )}
         {/* Hole Navigation */}
         <div className="flex items-center justify-between mb-4">
           <button

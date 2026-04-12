@@ -134,10 +134,11 @@ export default function ScoringView({
         })()
       : scoringUnit?.handicap;
     const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
+    const useSlope = currentEvent?.meta?.handicap?.useSlope ?? true;
     const courseHandicap = getPlayerCourseHandicap(playerHandicap, {
       handicapEnabled,
-      courseSlope: currentEvent?.meta?.courseSlope || null,
-      courseRating: currentEvent?.meta?.courseRating || null,
+      courseSlope: useSlope ? (currentEvent?.meta?.courseSlope || null) : null,
+      courseRating: useSlope ? (currentEvent?.meta?.courseRating || null) : null,
       coursePar,
       handicapAllowance: currentEvent?.meta?.handicap?.allowance || 100
     });
@@ -158,6 +159,47 @@ export default function ScoringView({
 
   const isFirstHole = holeOrder[0] === currentHole;
   const isLastHole = holeOrder[holeOrder.length - 1] === currentHole;
+
+  // ==================== PLAYER SWITCHER ====================
+  const [showPlayerSwitcher, setShowPlayerSwitcher] = useState(false);
+  const [pendingSwitch, setPendingSwitch] = useState(null); // { id, name }
+
+  // Is the current user scoring for someone other than themselves?
+  const isScoringForOther = !isSolo && (
+    isTeamFormat
+      ? !scoringUnit?.members?.[currentUser?.uid]
+      : selectedTeam !== currentUser?.uid
+  );
+
+  // ==================== SCORED-BY NOTIFICATION ====================
+  const [scoredByDismissed, setScoredByDismissed] = useState(false);
+
+  const scoredByLog = !isSolo && !isScoringForOther
+    ? scoringUnit?.scoredByLog || null
+    : null;
+
+  const handleDismissScoredBy = async () => {
+    setScoredByDismissed(true);
+    await remove(ref(database, `${scoringBasePath}/scoredByLog`));
+  };
+
+  const handleSwitchTo = async (targetId) => {
+    if (isTeamFormat) {
+      // Release lock on current team, acquire on new one
+      try {
+        await remove(ref(database, `${scoringBasePath}/scoringLockedBy`));
+      } catch {}
+      const targetTeam = currentEvent.teams[targetId];
+      if (targetTeam?.scoringLockedBy && targetTeam.scoringLockedBy !== currentUser.uid) {
+        setFeedback('Someone else is already scoring that team');
+        setTimeout(() => setFeedback(''), 3000);
+        return;
+      }
+      await set(ref(database, `events/${currentEvent.id}/teams/${targetId}/scoringLockedBy`), currentUser.uid);
+    }
+    setSelectedTeam(targetId);
+    setShowPlayerSwitcher(false);
+  };
 
   const first9 = numHoles === 18 ? holeOrder.slice(0, 9) : holeOrder;
   const second9 = numHoles === 18 ? holeOrder.slice(9, 18) : [];
@@ -435,6 +477,11 @@ export default function ScoringView({
       notes: notes || ''
     };
 
+    // Attribution: record who entered this score when it wasn't the player themselves
+    if (!isSolo && isScoringForOther && currentUser?.uid) {
+      holeEntry.scoredBy = currentUser.uid;
+    }
+
     Object.keys(holeEntry).forEach(key => {
       if (holeEntry[key] === null || holeEntry[key] === undefined) {
         delete holeEntry[key];
@@ -486,6 +533,15 @@ export default function ScoringView({
           ref(database, `${scoringBasePath}/stats`),
           updatedStats
         );
+
+        // Update scoredByLog so the player and host can see who entered scores
+        if (isScoringForOther && currentUser?.uid) {
+          const scorerName = currentEvent?.players?.[currentUser.uid]?.displayName || currentUser.email || 'Someone';
+          const logRef = ref(database, `${scoringBasePath}/scoredByLog/${currentUser.uid}`);
+          const existing = (await get(logRef)).val() || { name: scorerName, holes: [] };
+          const updatedHoles = [...new Set([...(existing.holes || []), currentHole])].sort((a, b) => a - b);
+          await set(logRef, { name: scorerName, holes: updatedHoles });
+        }
 
         setTimeout(async () => {
           const next = getNextHole(currentHole);
@@ -696,6 +752,133 @@ export default function ScoringView({
           )}
         </div>
 
+        {/* Scored-by notification — shown to the player when someone else entered their scores */}
+        {scoredByLog && !scoredByDismissed && (
+          <div className="bg-blue-50 border-2 border-blue-200 rounded-xl p-4 mb-4">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-blue-900 mb-1">Scores were entered on your behalf</p>
+                <div className="space-y-0.5">
+                  {Object.values(scoredByLog).map((entry, i) => (
+                    <p key={i} className="text-xs text-blue-700">
+                      <span className="font-semibold">{entry.name}</span> entered holes {entry.holes.join(', ')}
+                    </p>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={handleDismissScoredBy}
+                className="text-blue-400 hover:text-blue-600 text-lg leading-none flex-shrink-0"
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Confirmation modal for switching scorer */}
+        {pendingSwitch && (
+          <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-6">
+            <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">Score for {pendingSwitch.name}?</h3>
+              <p className="text-sm text-gray-600 mb-6">
+                You're about to enter scores on behalf of <span className="font-semibold">{pendingSwitch.name}</span>. Make sure this is intentional — their scores will be updated under your account.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { handleSwitchTo(pendingSwitch.id); setPendingSwitch(null); }}
+                  className="flex-1 bg-[#e63946] hover:bg-[#c5303c] text-white py-3 rounded-xl font-semibold transition-all"
+                >
+                  Yes, score for {pendingSwitch.name}
+                </button>
+                <button
+                  onClick={() => setPendingSwitch(null)}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-3 rounded-xl font-semibold transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Player/Team switcher — event mode only */}
+        {!isSolo && (
+          <div className="mb-4">
+            <button
+              onClick={() => setShowPlayerSwitcher(!showPlayerSwitcher)}
+              className="text-white/80 hover:text-white text-sm flex items-center gap-1"
+            >
+              Scoring for: <span className="font-semibold text-white">{scoringDisplayName}</span>
+              <span className="text-white/60 ml-1">{showPlayerSwitcher ? '▲' : '▼'}</span>
+            </button>
+
+            {showPlayerSwitcher && (
+              <div className="bg-white/95 rounded-xl p-4 mt-2 shadow-lg">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  {isTeamFormat ? 'Switch to a different team:' : 'Switch to a different player:'}
+                </p>
+                <div className="space-y-2">
+                  {isTeamFormat
+                    ? Object.entries(currentEvent.teams || {}).map(([teamId, team]) => {
+                        const isCurrent = teamId === selectedTeam;
+                        const isLocked = !isCurrent && team.scoringLockedBy && team.scoringLockedBy !== currentUser.uid;
+                        const lockerName = isLocked
+                          ? Object.values(currentEvent.players || {}).find(p => p.uid === team.scoringLockedBy)?.displayName || 'Someone'
+                          : null;
+                        return (
+                          <button
+                            key={teamId}
+                            onClick={() => {
+                              if (isCurrent || isLocked) return;
+                              const isSelf = !!team.members?.[currentUser.uid];
+                              isSelf ? handleSwitchTo(teamId) : setPendingSwitch({ id: teamId, name: team.name || 'Unnamed Team' });
+                            }}
+                            disabled={isCurrent || isLocked}
+                            className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
+                              isCurrent
+                                ? 'border-[#00285e] bg-[#f0f4ff] font-semibold text-[#00285e] cursor-default'
+                                : isLocked
+                                  ? 'border-gray-200 bg-gray-50 text-gray-400 cursor-not-allowed'
+                                  : 'border-gray-200 hover:border-[#00285e] hover:bg-[#f0f4ff] text-gray-800'
+                            }`}
+                          >
+                            {team.name || 'Unnamed Team'}
+                            {isCurrent && <span className="text-xs ml-2">(current)</span>}
+                            {isLocked && <span className="text-xs ml-2">({lockerName} scoring)</span>}
+                          </button>
+                        );
+                      })
+                    : Object.entries(currentEvent.players || {}).map(([uid, player]) => {
+                        const isCurrent = uid === selectedTeam;
+                        return (
+                          <button
+                            key={uid}
+                            onClick={() => {
+                              if (isCurrent) return;
+                              uid === currentUser.uid ? handleSwitchTo(uid) : setPendingSwitch({ id: uid, name: player.displayName || 'Unknown Player' });
+                            }}
+                            disabled={isCurrent}
+                            className={`w-full text-left px-4 py-3 rounded-lg border-2 transition-all ${
+                              isCurrent
+                                ? 'border-[#00285e] bg-[#f0f4ff] font-semibold text-[#00285e] cursor-default'
+                                : 'border-gray-200 hover:border-[#00285e] hover:bg-[#f0f4ff] text-gray-800'
+                            }`}
+                          >
+                            {player.displayName || 'Unknown Player'}
+                            {player.isGuest && <span className="text-xs text-gray-500 ml-2">(Guest)</span>}
+                            {player.handicap != null && <span className="text-xs text-gray-500 ml-2">HCP {player.handicap}</span>}
+                            {isCurrent && <span className="text-xs ml-2">(current)</span>}
+                          </button>
+                        );
+                      })
+                  }
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <ScoringHeader
           isSolo={isSolo}
           isTeamFormat={isTeamFormat}
@@ -709,9 +892,12 @@ export default function ScoringView({
           mulligansTotal={mulligansTotal}
           trackStats={trackStats}
           onTrackStatsToggle={handleTrackStatsToggle}
+          isScoringForOther={isScoringForOther}
         />
 
         <HoleCard
+          isScoringForOther={isScoringForOther}
+          scoringDisplayName={scoringDisplayName}
           currentHole={currentHole}
           currentPar={currentPar}
           currentYardage={currentYardage}
@@ -757,6 +943,8 @@ export default function ScoringView({
         />
 
         <Scorecard
+          isScoringForOther={isScoringForOther}
+          scoringDisplayName={scoringDisplayName}
           first9={first9}
           second9={second9}
           first9Label={first9Label}

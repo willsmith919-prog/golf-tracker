@@ -163,6 +163,7 @@ export default function EventLobbyView({
     setView('scoring');
   };
 
+
   // ==================== RENDER ====================
   return (
     <div className="min-h-screen bg-[#00285e] p-6">

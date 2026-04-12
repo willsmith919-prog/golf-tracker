@@ -121,6 +121,7 @@ export default function EventForm({
       showRoundRobinGrid: competitionStructure === 'round_robin'
     };
 
+    const baseHandicap = formatData?.handicap || { enabled: false, allowance: 100 };
     setFormData({
       ...formData,
       formatId: formatId,
@@ -128,7 +129,7 @@ export default function EventForm({
       scoringMethod: scoringMethod,
       teamSize: formatData?.teamSize || 2,
       formatName: formatData?.name || '',
-      handicap: formatData?.handicap || { enabled: false, allowance: 100 },
+      handicap: { ...baseHandicap, useSlope: baseHandicap.useSlope ?? true },
       stablefordPoints: formatData?.stablefordPoints || null,
       competition: formatData?.competition || { structure: 'full_field' },
       display: smartDisplay
@@ -255,6 +256,15 @@ export default function EventForm({
                   description="Mark which holes get a handicap stroke"
                   checked={formData.display?.showStrokeHoles ?? true}
                   onChange={(val) => setFormData({ ...formData, display: { ...formData.display, showStrokeHoles: val } })}
+                />
+                <div className="border-t border-gray-200 pt-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Handicap Calculation</p>
+                </div>
+                <DisplayToggle
+                  label="Adjust handicaps for this course"
+                  description="Uses slope & course rating to fine-tune strokes. Turn off for casual rounds where players just use their stated handicap."
+                  checked={formData.handicap?.useSlope ?? true}
+                  onChange={(val) => setFormData({ ...formData, handicap: { ...formData.handicap, useSlope: val } })}
                 />
               </>
             )}

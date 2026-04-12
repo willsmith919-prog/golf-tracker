@@ -96,6 +96,16 @@ export default function TeamsList({
                   ))}
                 </div>
 
+                {team.scoredByLog && (
+                  <div className="mt-2 pt-2 border-t border-gray-200">
+                    {Object.values(team.scoredByLog).map((entry, i) => (
+                      <p key={i} className="text-xs text-orange-600">
+                        Holes {entry.holes.join(', ')} entered by {entry.name}
+                      </p>
+                    ))}
+                  </div>
+                )}
+
                 {usesMulligans && team.mulligansTotal > 0 && (
                   <div className="mt-2 pt-2 border-t border-gray-200 flex items-center gap-2">
                     <span className="text-xs text-[#00285e] font-semibold">🎟️ Mulligans:</span>

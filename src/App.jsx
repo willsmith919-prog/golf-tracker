@@ -616,6 +616,8 @@ function App() {
       joinCode={joinCode}
       setView={setView}
       setCurrentEvent={setCurrentEvent}
+      loadUserEvents={loadUserEvents}
+      setUserEvents={setUserEvents}
     />
   );
 }

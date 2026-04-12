@@ -10,7 +10,8 @@ export default function ScoringHeader({
   mulligansRemaining,
   mulligansTotal,
   trackStats,
-  onTrackStatsToggle
+  onTrackStatsToggle,
+  isScoringForOther = false
 }) {
   const gridCols = (isSolo || trackStats)
     ? 'grid-cols-2 md:grid-cols-5'
@@ -24,9 +25,14 @@ export default function ScoringHeader({
         <h2 className="text-xl font-bold text-gray-900 mb-4">{courseName}</h2>
       ) : (
         <>
-          <h1 className="text-2xl font-bold text-gray-900 mb-1">
-            {scoringDisplayName}
-          </h1>
+          <div className="text-center mb-1">
+            <h1 className="text-2xl font-bold text-gray-900">{scoringDisplayName}</h1>
+            {isScoringForOther && (
+              <span className="inline-block bg-orange-400 text-white text-xs font-semibold px-3 py-0.5 rounded-full mt-1">
+                ⚠️ Not your score
+              </span>
+            )}
+          </div>
           {isTeamFormat && teamMemberNames.length > 0 && (
             <div className="text-sm text-gray-500 mb-1">
               {teamMemberNames.join(' & ')}
