@@ -46,7 +46,7 @@ export default function LeaderboardRow({
       {/* Main row — tappable */}
       <button
         onClick={onToggleExpand}
-        className="w-full grid grid-cols-[32px_1fr_60px_60px_48px] items-center px-3 py-3 text-left"
+        className="w-full grid grid-cols-[28px_1fr_52px_52px_40px] items-center px-3 py-3 text-left"
       >
         {/* Position */}
         <div className={`text-lg font-bold ${
@@ -61,7 +61,7 @@ export default function LeaderboardRow({
         {/* Name + subtitle + progress */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <span className="font-semibold text-gray-900 truncate">
+            <span className="font-semibold text-gray-900 break-words leading-tight">
               {entry.displayName}
             </span>
             {entry.isMyEntry && (

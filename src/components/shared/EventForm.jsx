@@ -478,8 +478,8 @@ export default function EventForm({
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-4">
-        <div>
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-2">Date</label>
           <input
             type="date"
@@ -488,7 +488,7 @@ export default function EventForm({
             className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
           />
         </div>
-        <div>
+        <div className="flex-1">
           <label className="block text-sm font-semibold text-gray-700 mb-2">Time</label>
           <input
             type="time"

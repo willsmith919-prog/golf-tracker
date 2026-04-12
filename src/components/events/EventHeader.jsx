@@ -40,8 +40,15 @@ export default function EventHeader({ currentEvent, isHost, eventStatus, feedbac
         </div>
         <div className="flex items-center gap-2">
           <span className="font-semibold">Date:</span>
-          {new Date(meta.date).toLocaleDateString()}
-          {meta.time && ` at ${meta.time}`}
+          {meta.date ? (() => {
+            const [y, m, d] = meta.date.split('-').map(Number);
+            const dateStr = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'numeric', day: 'numeric', year: 'numeric' });
+            if (!meta.time) return dateStr;
+            const [h, min] = meta.time.split(':').map(Number);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const hour12 = h % 12 || 12;
+            return `${dateStr} at ${hour12}:${String(min).padStart(2, '0')} ${ampm}`;
+          })() : '—'}
         </div>
         <div className="flex items-center gap-2">
           <span className="font-semibold">Holes:</span>
