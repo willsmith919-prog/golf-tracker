@@ -85,7 +85,7 @@ export default function EntryDetail({
                 {holes.map(h => {
                   const score = entry.scores[h] || entry.holes[h]?.score;
                   const par = coursePars[h - 1];
-                  const pts = score ? calculateStablefordPoints(score, par) : null;
+                  const pts = score ? calculateStablefordPoints(score, par + (entry.strokeHoles[h] || 0)) : null;
                   return (
                     <td key={h} className={`text-center p-1 rounded font-semibold ${
                       pts == null ? '' :
@@ -102,7 +102,7 @@ export default function EntryDetail({
                   {holes.reduce((sum, h) => {
                     const s = entry.scores[h] || entry.holes[h]?.score;
                     const par = coursePars[h - 1];
-                    return sum + (s ? calculateStablefordPoints(s, par) : 0);
+                    return sum + (s ? calculateStablefordPoints(s, par + (entry.strokeHoles[h] || 0)) : 0);
                   }, 0) || '-'}
                 </td>
               </tr>

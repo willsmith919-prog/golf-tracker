@@ -61,11 +61,12 @@ export default function LiveLeaderboard({
   // ==================== HANDICAP CALCULATIONS ====================
   const handicapEnabled = meta.handicap?.enabled || false;
   const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
+  const useSlope = meta.handicap?.useSlope ?? true;
 
   const handicapConfig = {
     handicapEnabled,
-    courseSlope: meta.courseSlope || null,
-    courseRating: meta.courseRating || null,
+    courseSlope: useSlope ? (meta.courseSlope || null) : null,
+    courseRating: useSlope ? (meta.courseRating || null) : null,
     coursePar,
     handicapAllowance: meta.handicap?.allowance || 100,
     courseStrokeIndexes: meta.courseStrokeIndexes || []
@@ -218,7 +219,7 @@ export default function LiveLeaderboard({
           }
 
           if (meta.scoringMethod === 'stableford') {
-            filteredStableford += calculateStablefordPoints(holeScore, par);
+            filteredStableford += calculateStablefordPoints(holeScore, par + (entry.strokeHoles[holeNum] || 0));
           }
         }
       }
