@@ -51,9 +51,21 @@ export default function EntryDetail({
           <tbody>
             <tr className="border-b border-gray-100">
               <td className="p-1 text-gray-500">Par</td>
-              {holes.map(h => (
-                <td key={h} className="text-center p-1 text-gray-500">{coursePars[h - 1]}</td>
-              ))}
+              {holes.map(h => {
+                const strokeCount = entry.strokeHoles[h] || 0;
+                return (
+                  <td key={h} className="text-center p-1 text-gray-500">
+                    {coursePars[h - 1]}
+                    {handicapEnabled && strokeCount > 0 && (
+                      <div className="flex justify-center gap-0.5 mt-0.5">
+                        {Array.from({ length: strokeCount }).map((_, i) => (
+                          <span key={i} className="inline-block w-1.5 h-1.5 rounded-full bg-[#00285e]" />
+                        ))}
+                      </div>
+                    )}
+                  </td>
+                );
+              })}
               <td className="text-center p-1 text-gray-600 font-semibold">
                 {holes.reduce((sum, h) => sum + (coursePars[h - 1] || 0), 0)}
               </td>
