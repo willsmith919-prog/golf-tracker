@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { ref, get, set, remove } from 'firebase/database';
 import { database } from '../../firebase';
 import {
@@ -19,6 +20,9 @@ export default function LeagueDashboardView({
   setEditingEvent,
   setCurrentEvent
 }) {
+  const [activeTab, setActiveTab] = useState('events');
+  const [editingHandicapUid, setEditingHandicapUid] = useState(null);
+  const [editingHandicapValue, setEditingHandicapValue] = useState('');
   const isCommissioner = currentLeague.userRole === 'commissioner';
   const members = Object.entries(currentLeague.members || {}).map(([uid, data]) => ({
     uid,
@@ -80,6 +84,38 @@ export default function LeagueDashboardView({
     } catch (error) {
       console.error('Error loading event:', error);
       setFeedback('Error loading event. Please try again.');
+      setTimeout(() => setFeedback(''), 3000);
+    }
+  };
+
+  const handleUpdateHandicap = async (uid) => {
+    const raw = editingHandicapValue.toString().trim();
+    const value = raw === '' ? null : parseFloat(raw);
+    if (raw !== '' && (isNaN(value) || value < 0 || value > 54)) {
+      setFeedback('Enter a handicap between 0 and 54');
+      setTimeout(() => setFeedback(''), 2500);
+      return;
+    }
+    try {
+      if (value === null) {
+        await remove(ref(database, `leagues/${currentLeague.id}/members/${uid}/handicap`));
+      } else {
+        await set(ref(database, `leagues/${currentLeague.id}/members/${uid}/handicap`), value);
+      }
+      const updatedMember = { ...currentLeague.members[uid] };
+      if (value === null) {
+        delete updatedMember.handicap;
+      } else {
+        updatedMember.handicap = value;
+      }
+      setCurrentLeague({
+        ...currentLeague,
+        members: { ...currentLeague.members, [uid]: updatedMember }
+      });
+      setEditingHandicapUid(null);
+    } catch (err) {
+      console.error('Error updating handicap:', err);
+      setFeedback('Error updating handicap');
       setTimeout(() => setFeedback(''), 3000);
     }
   };
@@ -318,155 +354,231 @@ export default function LeagueDashboardView({
           {feedback && <div className="mt-2 text-sm text-green-600">{feedback}</div>}
         </div>
 
-        {/* Members */}
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-          <h2 className="text-xl font-bold text-gray-900 mb-4">Members ({members.length})</h2>
-          <div className="space-y-3">
-            {members.map(member => (
-              <div key={member.uid} className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
-                <div>
-                  <div className="font-semibold text-gray-900 flex items-center gap-2">
-                    {member.displayName}
-                    {member.role === 'commissioner' && <span className="text-yellow-500">⭐</span>}
-                  </div>
-                  {member.handicap !== null && member.handicap !== undefined && (
-                    <div className="text-sm text-gray-600">Handicap: {member.handicap}</div>
-                  )}
-                </div>
-                {isCommissioner && member.uid !== currentUser.uid && (
-                  <button
-                    onClick={() => handleRemoveMember(member.uid, member.displayName)}
-                    className="text-red-600 hover:text-red-700 text-sm font-semibold"
-                  >
-                    Remove
-                  </button>
-                )}
-              </div>
+        {/* Tab Bar */}
+        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl mb-6 overflow-hidden">
+          <div className="flex border-b border-gray-200">
+            {['events', 'standings', 'members'].map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`flex-1 py-3 text-sm font-semibold capitalize transition-colors ${
+                  activeTab === tab
+                    ? 'text-[#00285e] border-b-2 border-[#00285e] bg-white'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                {tab === 'members' ? `Members (${members.length})` : tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
             ))}
           </div>
-        </div>
 
-        {/* ===== EVENTS SECTION ===== */}
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-bold text-gray-900">Events</h2>
-            {isCommissioner && (
-              <button
-                onClick={() => {
-                  setCreatingEventForLeague({
-                    leagueId: currentLeague.id,
-                    seasonId: Object.keys(currentLeague.seasons || {}).find(
-                      sid => currentLeague.seasons[sid].status === 'active'
-                    )
-                  });
-                  setView('create-event');
-                }}
-                className="bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold flex items-center gap-2"
-              >
-                <PlusIcon />
-                Create Event
-              </button>
-            )}
-          </div>
+          <div className="p-6">
 
-          {leagueEvents.length === 0 ? (
-            // No events at all
-            <div className="text-center py-8">
-              <CalendarIcon className="mx-auto mb-3 text-gray-400" />
-              <p className="text-gray-600 mb-4">No events yet</p>
-              {isCommissioner && (
-                <button
-                  onClick={() => {
-                    setCreatingEventForLeague({
-                      leagueId: currentLeague.id,
-                      seasonId: Object.keys(currentLeague.seasons || {}).find(
-                        sid => currentLeague.seasons[sid].status === 'active'
-                      )
-                    });
-                    setView('create-event');
-                  }}
-                  className="bg-[#00285e] text-white px-6 py-3 rounded-xl hover:bg-[#003a7d] font-semibold"
-                >
-                  Create First Event
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="space-y-6">
+            {/* ===== EVENTS TAB ===== */}
+            {activeTab === 'events' && (
+              <>
+                {isCommissioner && (
+                  <div className="flex justify-end mb-4">
+                    <button
+                      onClick={() => {
+                        setCreatingEventForLeague({
+                          leagueId: currentLeague.id,
+                          seasonId: Object.keys(currentLeague.seasons || {}).find(
+                            sid => currentLeague.seasons[sid].status === 'active'
+                          )
+                        });
+                        setView('create-event');
+                      }}
+                      className="bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold flex items-center gap-2"
+                    >
+                      <PlusIcon />
+                      Create Event
+                    </button>
+                  </div>
+                )}
 
-              {/* Live Events */}
-              {liveEvents.length > 0 && (
-                <div>
-                  <div className="text-sm font-semibold text-red-600 uppercase tracking-wide mb-2 flex items-center gap-2">
-                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
-                    In Progress
+                {leagueEvents.length === 0 ? (
+                  <div className="text-center py-8">
+                    <CalendarIcon className="mx-auto mb-3 text-gray-400" />
+                    <p className="text-gray-600 mb-4">No events yet</p>
+                    {isCommissioner && (
+                      <button
+                        onClick={() => {
+                          setCreatingEventForLeague({
+                            leagueId: currentLeague.id,
+                            seasonId: Object.keys(currentLeague.seasons || {}).find(
+                              sid => currentLeague.seasons[sid].status === 'active'
+                            )
+                          });
+                          setView('create-event');
+                        }}
+                        className="bg-[#00285e] text-white px-6 py-3 rounded-xl hover:bg-[#003a7d] font-semibold"
+                      >
+                        Create First Event
+                      </button>
+                    )}
                   </div>
-                  <div className="space-y-3">
-                    {liveEvents.map(event => renderEventCard(event, 'live'))}
-                  </div>
-                </div>
-              )}
-
-              {/* Upcoming Events */}
-              {upcomingEvents.length > 0 && (
-                <div>
-                  <div className="text-sm font-semibold text-[#00285e] uppercase tracking-wide mb-2">
-                    Upcoming
-                  </div>
-                  <div className="space-y-3">
-                    {upcomingEvents.map(event => renderEventCard(event, 'upcoming'))}
-                  </div>
-                </div>
-              )}
-
-              {/* Past Events */}
-              {pastEvents.length > 0 && (
-                <div>
-                  <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                    Completed
-                  </div>
-                  <div className="space-y-3">
-                    {pastEvents.map(event => renderEventCard(event, 'past'))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Standings */}
-        {activeSeason && (
-          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
-            <h2 className="text-xl font-bold text-gray-900 mb-4">
-              {activeSeason.name || 'Season'} Standings
-            </h2>
-            
-            {activeSeason.standings && Object.keys(activeSeason.standings).length > 0 ? (
-              <div className="space-y-2">
-                {Object.entries(activeSeason.standings)
-                  .sort(([, a], [, b]) => (b.points || 0) - (a.points || 0))
-                  .map(([uid, data], index) => {
-                    const member = members.find(m => m.uid === uid);
-                    return (
-                      <div key={uid} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                        <div className="flex items-center gap-3">
-                          <div className="text-lg font-bold text-gray-400 w-8">#{index + 1}</div>
-                          <div className="font-semibold text-gray-900">{member?.displayName || 'Unknown'}</div>
+                ) : (
+                  <div className="space-y-6">
+                    {liveEvents.length > 0 && (
+                      <div>
+                        <div className="text-sm font-semibold text-red-600 uppercase tracking-wide mb-2 flex items-center gap-2">
+                          <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse"></span>
+                          In Progress
                         </div>
-                        <div className="text-lg font-bold text-[#00285e]">{data.points || 0} pts</div>
+                        <div className="space-y-3">
+                          {liveEvents.map(event => renderEventCard(event, 'live'))}
+                        </div>
+                      </div>
+                    )}
+                    {upcomingEvents.length > 0 && (
+                      <div>
+                        <div className="text-sm font-semibold text-[#00285e] uppercase tracking-wide mb-2">
+                          Upcoming
+                        </div>
+                        <div className="space-y-3">
+                          {upcomingEvents.map(event => renderEventCard(event, 'upcoming'))}
+                        </div>
+                      </div>
+                    )}
+                    {pastEvents.length > 0 && (
+                      <div>
+                        <div className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                          Completed
+                        </div>
+                        <div className="space-y-3">
+                          {pastEvents.map(event => renderEventCard(event, 'past'))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ===== STANDINGS TAB ===== */}
+            {activeTab === 'standings' && (
+              <>
+                {activeSeason ? (
+                  <>
+                    <h2 className="text-base font-semibold text-gray-700 mb-4">
+                      {activeSeason.name || 'Season'} Standings
+                    </h2>
+                    {activeSeason.standings && Object.keys(activeSeason.standings).length > 0 ? (
+                      <div className="space-y-2">
+                        {Object.entries(activeSeason.standings)
+                          .sort(([, a], [, b]) => (b.points || 0) - (a.points || 0))
+                          .map(([uid, data], index) => {
+                            const member = members.find(m => m.uid === uid);
+                            return (
+                              <div key={uid} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                                <div className="flex items-center gap-3">
+                                  <div className="text-lg font-bold text-gray-400 w-8">#{index + 1}</div>
+                                  <div className="font-semibold text-gray-900">{member?.displayName || 'Unknown'}</div>
+                                </div>
+                                <div className="text-lg font-bold text-[#00285e]">{data.points || 0} pts</div>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    ) : (
+                      <div className="text-center py-8">
+                        <TrophyIcon className="mx-auto mb-3 text-gray-400" />
+                        <p className="text-gray-600">No standings yet</p>
+                        <p className="text-sm text-gray-500 mt-2">Standings appear after events are completed</p>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-8">
+                    <TrophyIcon className="mx-auto mb-3 text-gray-400" />
+                    <p className="text-gray-600">No active season</p>
+                  </div>
+                )}
+              </>
+            )}
+
+            {/* ===== MEMBERS TAB ===== */}
+            {activeTab === 'members' && (
+              <div className="space-y-2">
+                {[...members]
+                  .sort((a, b) => (a.displayName || '').localeCompare(b.displayName || ''))
+                  .map(member => {
+                    const isEditing = editingHandicapUid === member.uid;
+                    const hcp = member.handicap;
+                    return (
+                      <div key={member.uid} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                        {/* Name + commissioner star */}
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="font-semibold text-gray-900 truncate">{member.displayName}</span>
+                          {member.role === 'commissioner' && <span className="text-yellow-500 text-sm flex-shrink-0">⭐</span>}
+                        </div>
+
+                        {/* Right side: handicap + remove */}
+                        <div className="flex items-center gap-3 ml-3 flex-shrink-0">
+                          {isEditing ? (
+                            <>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={editingHandicapValue}
+                                onChange={e => setEditingHandicapValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === 'Enter') handleUpdateHandicap(member.uid); if (e.key === 'Escape') setEditingHandicapUid(null); }}
+                                className="w-16 text-center border-2 border-[#00285e] rounded-lg px-2 py-1 text-sm font-semibold focus:outline-none"
+                                placeholder="HCP"
+                                autoFocus
+                              />
+                              <button
+                                onClick={() => handleUpdateHandicap(member.uid)}
+                                className="text-sm font-semibold text-green-600 hover:text-green-700"
+                              >
+                                Save
+                              </button>
+                              <button
+                                onClick={() => setEditingHandicapUid(null)}
+                                className="text-sm font-semibold text-gray-400 hover:text-gray-600"
+                              >
+                                Cancel
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <div className="flex items-center gap-1.5">
+                                <span className={`text-sm font-semibold ${hcp != null ? 'text-[#00285e]' : 'text-gray-400'}`}>
+                                  {hcp != null ? `HCP ${hcp}` : '—'}
+                                </span>
+                                {isCommissioner && (
+                                  <button
+                                    onClick={() => { setEditingHandicapUid(member.uid); setEditingHandicapValue(hcp ?? ''); }}
+                                    className="text-gray-400 hover:text-[#00285e] transition-colors p-0.5"
+                                    title="Edit handicap"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                              {isCommissioner && member.uid !== currentUser.uid && (
+                                <button
+                                  onClick={() => handleRemoveMember(member.uid, member.displayName)}
+                                  className="text-red-500 hover:text-red-600 text-sm font-semibold"
+                                >
+                                  Remove
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </div>
                       </div>
                     );
                   })}
               </div>
-            ) : (
-              <div className="text-center py-8">
-                <TrophyIcon className="mx-auto mb-3 text-gray-400" />
-                <p className="text-gray-600">No standings yet</p>
-                <p className="text-sm text-gray-500 mt-2">Standings will appear after events are completed</p>
-              </div>
             )}
+
           </div>
-        )}
+        </div>
       </div>
     </div>
   );

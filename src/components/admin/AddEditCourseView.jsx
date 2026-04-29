@@ -1,7 +1,9 @@
-import React from 'react';
 import { ref, set } from 'firebase/database';
 import { database } from '../../firebase';
 import { PlusIcon, TrashIcon } from '../icons';
+
+const cell = 'w-full text-center text-sm py-1 px-0.5 border border-gray-200 rounded focus:border-[#00285e] focus:outline-none bg-white';
+const totalCell = 'p-1 text-center font-bold text-sm bg-gray-100 text-gray-700';
 
 export default function AddEditCourseView({
   currentUser,
@@ -14,16 +16,57 @@ export default function AddEditCourseView({
   setView,
   loadCourses
 }) {
+  const calcTotal = (arr, s, e) => arr.slice(s, e).reduce((sum, v) => sum + (parseInt(v) || 0), 0);
+
+  const sortTees = (tees) => [...tees].sort((a, b) => {
+    const ra = parseFloat(a.rating);
+    const rb = parseFloat(b.rating);
+    if (isNaN(ra) && isNaN(rb)) return 0;
+    if (isNaN(ra)) return 1;
+    if (isNaN(rb)) return -1;
+    return rb - ra;
+  });
+
+  const resortTees = () => setCourseForm(prev => ({ ...prev, tees: sortTees(prev.tees) }));
+
+  const updatePar = (holeIndex, value) => {
+    const newTees = courseForm.tees.map(tee => ({
+      ...tee,
+      pars: tee.pars.map((p, i) => i === holeIndex ? value : p)
+    }));
+    setCourseForm({ ...courseForm, tees: newTees });
+  };
+
+  const updateStrokeIndex = (holeIndex, value) => {
+    const newSI = [...courseForm.strokeIndex];
+    newSI[holeIndex] = value;
+    setCourseForm({ ...courseForm, strokeIndex: newSI });
+  };
+
+  const updateTeeField = (teeIndex, field, value) => {
+    const newTees = [...courseForm.tees];
+    newTees[teeIndex] = { ...newTees[teeIndex], [field]: value };
+    setCourseForm({ ...courseForm, tees: newTees });
+  };
+
+  const updateYardage = (teeIndex, holeIndex, value) => {
+    const newTees = [...courseForm.tees];
+    const newYardages = [...newTees[teeIndex].yardages];
+    newYardages[holeIndex] = value;
+    newTees[teeIndex] = { ...newTees[teeIndex], yardages: newYardages };
+    setCourseForm({ ...courseForm, tees: newTees });
+  };
+
   const addTee = () => {
-    const newTee = {
-      id: `tee-${Date.now()}`,
-      name: '',
-      rating: '',
-      slope: '',
-      pars: Array(18).fill(''),
-      yardages: Array(18).fill('')
-    };
-    setCourseForm({ ...courseForm, tees: [...courseForm.tees, newTee] });
+    setCourseForm(prev => ({
+      ...prev,
+      tees: sortTees([...prev.tees, {
+        id: `tee-${Date.now()}`,
+        name: '', rating: '', slope: '',
+        pars: prev.tees[0]?.pars ? [...prev.tees[0].pars] : Array(18).fill(''),
+        yardages: Array(18).fill('')
+      }])
+    }));
   };
 
   const removeTee = (index) => {
@@ -32,26 +75,7 @@ export default function AddEditCourseView({
       setTimeout(() => setFeedback(''), 2000);
       return;
     }
-    const newTees = courseForm.tees.filter((_, i) => i !== index);
-    setCourseForm({ ...courseForm, tees: newTees });
-  };
-
-  const updateTeeField = (teeIndex, field, value) => {
-    const newTees = [...courseForm.tees];
-    newTees[teeIndex][field] = value;
-    setCourseForm({ ...courseForm, tees: newTees });
-  };
-
-  const updateTeeHole = (teeIndex, holeIndex, field, value) => {
-    const newTees = [...courseForm.tees];
-    newTees[teeIndex][field][holeIndex] = value;
-    setCourseForm({ ...courseForm, tees: newTees });
-  };
-
-  const updateStrokeIndex = (holeIndex, value) => {
-    const newStrokeIndex = [...courseForm.strokeIndex];
-    newStrokeIndex[holeIndex] = value;
-    setCourseForm({ ...courseForm, strokeIndex: newStrokeIndex });
+    setCourseForm(prev => ({ ...prev, tees: sortTees(prev.tees.filter((_, i) => i !== index)) }));
   };
 
   const saveCourse = async () => {
@@ -65,59 +89,28 @@ export default function AddEditCourseView({
 
     for (let i = 0; i < courseForm.tees.length; i++) {
       const tee = courseForm.tees[i];
-      if (!tee.name) {
-        setFeedback(`Tee ${i + 1}: Name is required`);
-        setTimeout(() => setFeedback(''), 3000);
-        return;
-      }
-      if (!tee.rating || !tee.slope) {
-        setFeedback(`Tee ${i + 1}: Rating and slope are required`);
-        setTimeout(() => setFeedback(''), 3000);
-        return;
+      if (!tee.name) { setFeedback(`Tee ${i + 1}: Name is required`); setTimeout(() => setFeedback(''), 3000); return; }
+      if (!tee.rating || !tee.slope) { setFeedback(`Tee ${i + 1}: Rating and slope are required`); setTimeout(() => setFeedback(''), 3000); return; }
+      for (let h = 0; h < 18; h++) {
+        const p = parseInt(tee.pars[h]);
+        if (!p || p < 3 || p > 6) { setFeedback(`Hole ${h + 1}: Par must be 3–6`); setTimeout(() => setFeedback(''), 3000); return; }
       }
       for (let h = 0; h < 18; h++) {
-        if (!tee.pars[h] || parseInt(tee.pars[h]) < 3 || parseInt(tee.pars[h]) > 6) {
-          setFeedback(`Tee ${i + 1}, Hole ${h + 1}: Par must be between 3 and 6`);
-          setTimeout(() => setFeedback(''), 3000);
-          return;
-        }
-      }
-      for (let h = 0; h < 18; h++) {
-        if (!tee.yardages[h] || parseInt(tee.yardages[h]) < 50 || parseInt(tee.yardages[h]) > 700) {
-          setFeedback(`Tee ${i + 1}, Hole ${h + 1}: Yardage must be between 50 and 700`);
-          setTimeout(() => setFeedback(''), 3000);
-          return;
-        }
+        const y = parseInt(tee.yardages[h]);
+        if (!y || y < 50 || y > 700) { setFeedback(`${tee.name}, hole ${h + 1}: Yardage must be 50–700`); setTimeout(() => setFeedback(''), 3000); return; }
       }
     }
 
     const siSet = new Set();
     for (let i = 0; i < 18; i++) {
       const si = parseInt(courseForm.strokeIndex[i]);
-      if (!si || si < 1 || si > 18) {
-        setFeedback(`Hole ${i + 1}: Stroke index must be between 1 and 18`);
-        setTimeout(() => setFeedback(''), 3000);
-        return;
-      }
-      if (siSet.has(si)) {
-        setFeedback(`Stroke index ${si} is used more than once. Each value from 1-18 must be used exactly once.`);
-        setTimeout(() => setFeedback(''), 4000);
-        return;
-      }
+      if (!si || si < 1 || si > 18) { setFeedback(`Hole ${i + 1}: Stroke index must be 1–18`); setTimeout(() => setFeedback(''), 3000); return; }
+      if (siSet.has(si)) { setFeedback(`Stroke index ${si} used more than once — each value 1–18 must appear exactly once`); setTimeout(() => setFeedback(''), 4000); return; }
       siSet.add(si);
-    }
-
-    for (let i = 1; i <= 18; i++) {
-      if (!siSet.has(i)) {
-        setFeedback(`Stroke index ${i} is missing. Each value from 1-18 must be used exactly once.`);
-        setTimeout(() => setFeedback(''), 4000);
-        return;
-      }
     }
 
     try {
       const courseId = editingCourse?.id || `course-${Date.now()}`;
-      
       const teeData = {};
       courseForm.tees.forEach(tee => {
         teeData[tee.id] = {
@@ -128,410 +121,187 @@ export default function AddEditCourseView({
           yardages: tee.yardages.map(y => parseInt(y) || 0)
         };
       });
-
-      const courseData = {
+      await set(ref(database, `courses/${courseId}`), {
         name: courseForm.name,
         location: courseForm.location,
         strokeIndex: courseForm.strokeIndex.map(si => parseInt(si) || 0),
         tees: teeData,
         createdBy: currentUser.uid,
         createdAt: editingCourse?.createdAt || Date.now()
-      };
-
-      await set(ref(database, `courses/${courseId}`), courseData);
-      
+      });
       setFeedback('Course saved!');
-      setTimeout(async () => {
-        await loadCourses();
-        setView('manage-courses');
-        setFeedback('');
-      }, 1500);
-
+      setTimeout(async () => { await loadCourses(); setView('manage-courses'); setFeedback(''); }, 1500);
     } catch (error) {
-      console.error('Error saving course:', error);
       setFeedback('Error saving course: ' + error.message);
     }
   };
 
-  const calculateTotal = (array, start, end) => {
-    return array.slice(start, end).reduce((sum, val) => sum + (parseInt(val) || 0), 0);
-  };
+  const pars = courseForm.tees[0]?.pars || Array(18).fill('');
+  const holes = Array.from({ length: 18 }, (_, i) => i);
 
   return (
-    <div className="min-h-screen bg-[#00285e] p-6">
-      <div className="max-w-6xl mx-auto">
-        <button 
-          onClick={() => { 
-            setView('manage-courses'); 
-            setEditingCourse(null); 
-          }} 
+    <div className="min-h-screen bg-[#00285e] p-4 lg:p-8">
+      <div className="max-w-screen-2xl mx-auto">
+        <button
+          onClick={() => { setView('manage-courses'); setEditingCourse(null); }}
           className="text-white mb-6 hover:text-[#c8d6e5]"
         >
           ← Back
         </button>
-        
-        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-6">
+
+        <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 lg:p-8">
+          <h2 className="text-2xl font-bold text-gray-900 mb-6">
             {editingCourse ? 'Edit Course' : 'Add Course'}
           </h2>
 
           {/* Basic Info */}
-          <div className="mb-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Basic Information</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Course Name</label>
-                <input
-                  type="text"
-                  value={courseForm.name}
-                  onChange={(e) => setCourseForm({ ...courseForm, name: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                  placeholder="Glen Eagle Golf Course"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">Location</label>
-                <input
-                  type="text"
-                  value={courseForm.location}
-                  onChange={(e) => setCourseForm({ ...courseForm, location: e.target.value })}
-                  className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                  placeholder="Syracuse, UT"
-                />
-              </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8 max-w-2xl">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Course Name</label>
+              <input
+                type="text"
+                value={courseForm.name}
+                onChange={(e) => setCourseForm({ ...courseForm, name: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
+                placeholder="Glen Eagle Golf Course"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">Location</label>
+              <input
+                type="text"
+                value={courseForm.location}
+                onChange={(e) => setCourseForm({ ...courseForm, location: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
+                placeholder="Syracuse, UT"
+              />
             </div>
           </div>
 
-          {/* Tees */}
-          <div className="mb-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Tees</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b-2 border-gray-300">
-                    <th className="text-left p-2 text-sm font-semibold text-gray-700">Tee Name</th>
-                    <th className="text-left p-2 text-sm font-semibold text-gray-700">Rating</th>
-                    <th className="text-left p-2 text-sm font-semibold text-gray-700">Slope</th>
-                    <th className="w-12"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {courseForm.tees.map((tee, index) => (
-                    <tr key={tee.id} className="border-b border-gray-200">
-                      <td className="p-2">
-                        <input
-                          type="text"
-                          value={tee.name}
-                          onChange={(e) => updateTeeField(index, 'name', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                          placeholder="Black"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          step="0.1"
-                          value={tee.rating}
-                          onChange={(e) => updateTeeField(index, 'rating', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                          placeholder="72.1"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <input
-                          type="number"
-                          value={tee.slope}
-                          onChange={(e) => updateTeeField(index, 'slope', e.target.value)}
-                          className="w-full px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                          placeholder="131"
-                        />
-                      </td>
-                      <td className="p-2">
-                        <button
-                          onClick={() => removeTee(index)}
-                          className="text-red-600 hover:text-red-700 p-1"
-                          title="Delete tee"
-                        >
-                          <TrashIcon />
-                        </button>
-                      </td>
-                    </tr>
+          {/* Scorecard Table */}
+          <div className="overflow-x-auto">
+            <table className="border-collapse text-xs" style={{ minWidth: '900px' }}>
+              <thead>
+                <tr className="bg-[#00285e] text-white">
+                  <th className="p-2 text-left font-semibold rounded-tl-lg" style={{ minWidth: '110px' }}>Tee</th>
+                  <th className="p-2 text-center font-semibold" style={{ width: '62px' }}>Rating</th>
+                  <th className="p-2 text-center font-semibold" style={{ width: '56px' }}>Slope</th>
+                  {[1,2,3,4,5,6,7,8,9].map(h => <th key={h} className="p-2 text-center" style={{ width: '44px' }}>{h}</th>)}
+                  <th className="p-2 text-center font-bold" style={{ width: '46px' }}>OUT</th>
+                  {[10,11,12,13,14,15,16,17,18].map(h => <th key={h} className="p-2 text-center" style={{ width: '44px' }}>{h}</th>)}
+                  <th className="p-2 text-center font-bold" style={{ width: '46px' }}>IN</th>
+                  <th className="p-2 text-center font-bold" style={{ width: '50px' }}>TOT</th>
+                  <th style={{ width: '32px' }}></th>
+                </tr>
+              </thead>
+              <tbody>
+
+                {/* PAR row */}
+                <tr className="bg-amber-50 border-b-2 border-gray-300">
+                  <td colSpan={3} className="px-3 py-2 font-bold text-gray-700 text-xs uppercase tracking-widest">Par</td>
+                  {holes.slice(0, 9).map(i => (
+                    <td key={i} className="p-1">
+                      <input type="text" inputMode="numeric" value={pars[i] || ''} onChange={e => updatePar(i, e.target.value)} className={cell} />
+                    </td>
                   ))}
-                </tbody>
-              </table>
-            </div>
-            <button
-              onClick={addTee}
-              className="mt-3 bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold flex items-center gap-2"
-            >
-              <PlusIcon />
-              Add Tee
-            </button>
-          </div>
+                  <td className={totalCell}>{calcTotal(pars, 0, 9) || '—'}</td>
+                  {holes.slice(9, 18).map(i => (
+                    <td key={i} className="p-1">
+                      <input type="text" inputMode="numeric" value={pars[i] || ''} onChange={e => updatePar(i, e.target.value)} className={cell} />
+                    </td>
+                  ))}
+                  <td className={totalCell}>{calcTotal(pars, 9, 18) || '—'}</td>
+                  <td className={totalCell}>{calcTotal(pars, 0, 18) || '—'}</td>
+                  <td></td>
+                </tr>
 
-          {/* Stroke Index */}
-          <div className="mb-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Stroke Index (Handicap)</h3>
-            <p className="text-sm text-gray-600 mb-3">
-              Assign each hole a handicap stroke value from 1-18 (1 = hardest, 18 = easiest). Each value must be used exactly once.
-            </p>
-            
-            {/* Front 9 */}
-            <div className="mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="p-1 text-left min-w-[60px]"></th>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                        <th key={h} className="p-1 text-center w-16">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-200">
-                      <td className="p-1 text-gray-600">SI</td>
-                      {[...Array(9)].map((_, i) => (
-                        <td key={i} className="p-1">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={courseForm.strokeIndex[i]}
-                            onChange={(e) => updateStrokeIndex(i, e.target.value)}
-                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                {/* SI row */}
+                <tr className="bg-gray-50 border-b-2 border-gray-300">
+                  <td colSpan={3} className="px-3 py-2 font-bold text-gray-500 text-xs uppercase tracking-widest">Stroke Index</td>
+                  {holes.slice(0, 9).map(i => (
+                    <td key={i} className="p-1">
+                      <input type="text" inputMode="numeric" value={courseForm.strokeIndex[i] || ''} onChange={e => updateStrokeIndex(i, e.target.value)} className={cell} />
+                    </td>
+                  ))}
+                  <td className="bg-gray-200"></td>
+                  {holes.slice(9, 18).map(i => (
+                    <td key={i} className="p-1">
+                      <input type="text" inputMode="numeric" value={courseForm.strokeIndex[i] || ''} onChange={e => updateStrokeIndex(i, e.target.value)} className={cell} />
+                    </td>
+                  ))}
+                  <td className="bg-gray-200"></td>
+                  <td className="bg-gray-200"></td>
+                  <td></td>
+                </tr>
 
-            {/* Back 9 */}
-            <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="p-1 text-left min-w-[60px]"></th>
-                      {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                        <th key={h} className="p-1 text-center w-16">{h}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-200">
-                      <td className="p-1 text-gray-600">SI</td>
-                      {[...Array(9)].map((_, i) => (
-                        <td key={i} className="p-1">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={courseForm.strokeIndex[i + 9]}
-                            onChange={(e) => updateStrokeIndex(i + 9, e.target.value)}
-                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
-                          />
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-
-          {/* Pars */}
-          <div className="mb-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-4">Pars</h3>
-            
-            {/* Front 9 */}
-            <div className="mb-4">
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="p-1 text-left min-w-[60px]"></th>
-                      {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                        <th key={h} className="p-1 text-center w-16">{h}</th>
-                      ))}
-                      <th className="p-1 text-center w-16 font-bold">OUT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-200">
-                      <td className="p-1 text-gray-600">Par</td>
-                      {[...Array(9)].map((_, i) => (
-                        <td key={i} className="p-1">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            pattern="[0-9]*"
-                            value={courseForm.tees[0]?.pars[i] || ''}
-                            onChange={(e) => {
-                              const newTees = courseForm.tees.map(tee => ({
-                                ...tee,
-                                pars: tee.pars.map((p, idx) => idx === i ? e.target.value : p)
-                              }));
-                              setCourseForm({ ...courseForm, tees: newTees });
-                            }}
-                            className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
-                          />
-                        </td>
-                      ))}
-                      <td className="p-1 text-center font-bold bg-gray-200">
-                        {calculateTotal(courseForm.tees[0]?.pars || [], 0, 9)}
+                {/* Tee rows */}
+                {courseForm.tees.map((tee, ti) => (
+                  <tr key={tee.id} className={`border-b border-gray-200 ${ti % 2 === 0 ? 'bg-white' : 'bg-blue-50/40'}`}>
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        value={tee.name}
+                        onChange={e => updateTeeField(ti, 'name', e.target.value)}
+                        placeholder="Black"
+                        className="w-full px-2 py-1 text-sm border border-gray-200 rounded focus:border-[#00285e] focus:outline-none"
+                      />
+                    </td>
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        value={tee.rating}
+                        onChange={e => updateTeeField(ti, 'rating', e.target.value)}
+                        onBlur={resortTees}
+                        placeholder="72.1"
+                        className={cell}
+                      />
+                    </td>
+                    <td className="p-1">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={tee.slope}
+                        onChange={e => updateTeeField(ti, 'slope', e.target.value)}
+                        placeholder="131"
+                        className={cell}
+                      />
+                    </td>
+                    {holes.slice(0, 9).map(i => (
+                      <td key={i} className="p-1">
+                        <input type="text" inputMode="numeric" value={tee.yardages[i] || ''} onChange={e => updateYardage(ti, i, e.target.value)} className={cell} />
                       </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Back 9 */}
-            <div>
-              <h4 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h4>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse text-xs">
-                  <thead>
-                    <tr className="border-b-2 border-gray-300">
-                      <th className="p-1 text-left min-w-[60px]"></th>
-                      {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                        <th key={h} className="p-1 text-center w-16">{h}</th>
-                      ))}
-                      <th className="p-1 text-center w-16 font-bold">IN</th>
-                      <th className="p-1 text-center w-16 font-bold">TOT</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-gray-200">
-                      <td className="p-1 text-gray-600">Par</td>
-                      {[...Array(9)].map((_, i) => (
-                        <React.Fragment key={i}>
-                          <td className="p-1">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={courseForm.tees[0]?.pars[i + 9] || ''}
-                              onChange={(e) => {
-                                const newTees = courseForm.tees.map(tee => ({
-                                  ...tee,
-                                  pars: tee.pars.map((p, idx) => idx === i + 9 ? e.target.value : p)
-                                }));
-                                setCourseForm({ ...courseForm, tees: newTees });
-                              }}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
-                            />
-                          </td>
-                          {i === 8 && (
-                            <td className="p-1 text-center font-bold bg-gray-200">
-                              {calculateTotal(courseForm.tees[0]?.pars || [], 9, 18)}
-                            </td>
-                          )}
-                        </React.Fragment>
-                      ))}
-                      <td className="p-1 text-center font-bold bg-gray-200">
-                        {calculateTotal(courseForm.tees[0]?.pars || [], 0, 18)}
+                    ))}
+                    <td className={totalCell}>{calcTotal(tee.yardages, 0, 9) || '—'}</td>
+                    {holes.slice(9, 18).map(i => (
+                      <td key={i} className="p-1">
+                        <input type="text" inputMode="numeric" value={tee.yardages[i] || ''} onChange={e => updateYardage(ti, i, e.target.value)} className={cell} />
                       </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
+                    ))}
+                    <td className={totalCell}>{calcTotal(tee.yardages, 9, 18) || '—'}</td>
+                    <td className={totalCell}>{calcTotal(tee.yardages, 0, 18) || '—'}</td>
+                    <td className="p-1 text-center">
+                      <button onClick={() => removeTee(ti)} className="text-red-400 hover:text-red-600 p-1" title="Remove tee">
+                        <TrashIcon />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+
+              </tbody>
+            </table>
           </div>
 
-          {/* Yardages by Tee */}
-          {courseForm.tees.map((tee, teeIndex) => (
-            <div key={tee.id} className="mb-6 border-2 border-gray-200 rounded-xl p-4">
-              <h4 className="text-md font-bold text-gray-900 mb-3">
-                {tee.name || `Tee ${teeIndex + 1}`} - Yardages
-              </h4>
-              
-              {/* Front 9 */}
-              <div className="mb-4">
-                <h5 className="text-sm font-semibold text-gray-700 mb-2">Front 9</h5>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b-2 border-gray-300">
-                        <th className="p-1 text-left min-w-[60px]"></th>
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9].map(h => (
-                          <th key={h} className="p-1 text-center w-16">{h}</th>
-                        ))}
-                        <th className="p-1 text-center w-16 font-bold">OUT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-gray-200">
-                        <td className="p-1 text-gray-600">Yds</td>
-                        {[...Array(9)].map((_, i) => (
-                          <td key={i} className="p-1">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={tee.yardages[i]}
-                              onChange={(e) => updateTeeHole(teeIndex, i, 'yardages', e.target.value)}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
-                            />
-                          </td>
-                        ))}
-                        <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 0, 9)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
+          <button
+            onClick={addTee}
+            className="mt-3 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm font-semibold flex items-center gap-2 transition-colors"
+          >
+            <PlusIcon />
+            Add Tee
+          </button>
 
-              {/* Back 9 */}
-              <div>
-                <h5 className="text-sm font-semibold text-gray-700 mb-2">Back 9</h5>
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b-2 border-gray-300">
-                        <th className="p-1 text-left min-w-[60px]"></th>
-                        {[10, 11, 12, 13, 14, 15, 16, 17, 18].map(h => (
-                          <th key={h} className="p-1 text-center w-16">{h}</th>
-                        ))}
-                        <th className="p-1 text-center w-16 font-bold">IN</th>
-                        <th className="p-1 text-center w-16 font-bold">TOT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr className="border-b border-gray-200">
-                        <td className="p-1 text-gray-600">Yds</td>
-                        {[...Array(9)].map((_, i) => (
-                          <td key={i} className="p-1">
-                            <input
-                              type="text"
-                              inputMode="numeric"
-                              pattern="[0-9]*"
-                              value={tee.yardages[i + 9]}
-                              onChange={(e) => updateTeeHole(teeIndex, i + 9, 'yardages', e.target.value)}
-                              className="w-full px-1 py-1 text-center rounded border border-gray-300 focus:border-[#00285e] focus:outline-none"
-                            />
-                          </td>
-                        ))}
-                        <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 9, 18)}</td>
-                        <td className="p-1 text-center font-bold">{calculateTotal(tee.yardages, 0, 18)}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
-          ))}
-
-          {/* Feedback message right above Save button */}
           {feedback && (
-            <div className={`mb-4 p-4 rounded-xl text-center font-semibold ${
+            <div className={`mt-6 p-4 rounded-xl text-center font-semibold ${
               feedback.includes('Error') || feedback.includes('required') || feedback.includes('must') || feedback.includes('missing')
                 ? 'bg-red-50 border-2 border-red-500 text-red-800'
                 : 'bg-green-50 border-2 border-green-500 text-green-800'
@@ -542,7 +312,7 @@ export default function AddEditCourseView({
 
           <button
             onClick={saveCourse}
-            className="w-full bg-[#00285e] text-white py-4 rounded-xl font-semibold hover:bg-[#003a7d] text-lg"
+            className="mt-4 w-full bg-[#00285e] text-white py-3 rounded-xl font-semibold hover:bg-[#003a7d] text-lg"
           >
             Save Course
           </button>

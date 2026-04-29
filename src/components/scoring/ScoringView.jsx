@@ -124,7 +124,7 @@ export default function ScoringView({
   // ==================== HANDICAP STROKE HOLES ====================
   const handicapEnabled = !isSolo && currentEvent?.meta?.handicap?.enabled;
   const strokeHoles = (() => {
-    if (!handicapEnabled || format !== 'stableford') return {};
+    if (!handicapEnabled) return {};
     const playerHandicap = isTeamFormat
       ? (() => {
           const hcps = Object.keys(scoringUnit?.members || {})
@@ -350,6 +350,7 @@ export default function ScoringView({
     let totalScore = 0;
     let totalPutts = 0;
     let totalPoints = 0;
+    let netTotal = 0;
     let fairwaysHit = 0;
     let fairwaysPossible = 0;
     let greensInRegulation = 0;
@@ -364,6 +365,7 @@ export default function ScoringView({
         greensInRegulation += hole.gir ? 1 : 0;
 
         const par = coursePars[holeNum - 1];
+        const strokesOnHole = strokeHoles[holeNum] || 0;
         if (par >= 4) {
           fairwaysPossible++;
           if (hole.fairway === 'hit') {
@@ -371,8 +373,10 @@ export default function ScoringView({
           }
         }
         if (format === 'stableford') {
-          const strokesOnHole = strokeHoles[holeNum] || 0;
           totalPoints += calculateStablefordPoints(hole.score, par + strokesOnHole);
+        }
+        if (handicapEnabled) {
+          netTotal += hole.score - strokesOnHole;
         }
       }
     }
@@ -380,10 +384,12 @@ export default function ScoringView({
     const playedHoleNums = holeOrder.slice(0, holesPlayed);
     const parTotal = playedHoleNums.reduce((sum, h) => sum + (coursePars[h - 1] || 0), 0);
     const toPar = totalScore - parTotal;
+    const netToPar = handicapEnabled ? netTotal - parTotal : toPar;
 
     return {
       totalScore,
       toPar,
+      netToPar,
       totalPutts,
       fairwaysHit,
       fairwaysPossible,

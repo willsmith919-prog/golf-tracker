@@ -22,6 +22,7 @@ import ExpiredCodeView from './components/shared/ExpiredCodeView.jsx';
 import ScoringView from './components/scoring/ScoringView.jsx';
 import ManageCoursesView from './components/admin/ManageCoursesView.jsx';
 import AddEditCourseView from './components/admin/AddEditCourseView.jsx';
+import ImportCourseView from './components/admin/ImportCourseView.jsx';
 import SoloSetupView from './components/scoring/SoloSetupView.jsx';
 import RoundsHistoryView from './components/scoring/RoundsHistoryView.jsx';
 import SoloScorecardView from './components/scoring/SoloScorecardView.jsx';
@@ -703,6 +704,18 @@ function App() {
         setCourseForm={setCourseForm}
         editingCourse={editingCourse}
         setEditingCourse={setEditingCourse}
+        feedback={feedback}
+        setFeedback={setFeedback}
+        setView={setView}
+        loadCourses={loadCourses}
+      />
+    );
+  }
+
+  if (view === 'import-course') {
+    return (
+      <ImportCourseView
+        currentUser={currentUser}
         feedback={feedback}
         setFeedback={setFeedback}
         setView={setView}
