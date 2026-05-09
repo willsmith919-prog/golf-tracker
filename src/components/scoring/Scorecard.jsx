@@ -17,7 +17,9 @@ export default function Scorecard({
   goToHole,
   getScoreColor,
   isScoringForOther = false,
-  scoringDisplayName = ''
+  scoringDisplayName = '',
+  startingHandicap = 0,
+  isStartingScore = false
 }) {
   const renderSection = (holes, label) => (
     <div className={label === first9Label ? 'mb-6' : ''}>
@@ -118,6 +120,11 @@ export default function Scorecard({
       <h2 className="text-xl font-bold text-gray-900 mb-4">Scorecard</h2>
       {renderSection(first9, first9Label)}
       {second9.length > 0 && renderSection(second9, second9Label)}
+      {isStartingScore && startingHandicap > 0 && (
+        <div className="mt-4 bg-[#f0f4ff] border border-[#dce8f5] rounded-xl px-4 py-2 text-sm text-[#00285e] font-semibold text-center">
+          Starting score: -{startingHandicap} strokes · Score gross from here
+        </div>
+      )}
       <div className="mt-4 text-sm text-gray-600 text-center">
         {(isSolo || trackStats) && '● = Green in Regulation · '}
         {usesMulligans && '🎟️ = Mulligan used · '}

@@ -54,6 +54,9 @@ export default function AddEditFormatView({
   if (formatForm.competitionStructure === undefined) {
     formatForm.competitionStructure = 'full_field';
   }
+  if (formatForm.teamHandicapMethod === undefined) {
+    formatForm.teamHandicapMethod = 'average';
+  }
 
   // ==================== AUTO-GENERATED NAME & DESCRIPTION ====================
   // Builds a name like "2-Man Scramble - Stroke - HC: 35% Mulligans"
@@ -98,8 +101,9 @@ export default function AddEditFormatView({
         parts.push(`HC: ${formatForm.handicapAllowance}% Mulligans`);
       } else if (method === 'none') {
         parts.push('HC: Seeding Only');
+      } else if (method === 'starting_score') {
+        parts.push('HC: Starting Score');
       } else {
-        // Only show "Net" for traditional strokes to keep it short
         parts.push('Net');
       }
     }
@@ -146,6 +150,8 @@ export default function AddEditFormatView({
         lines.push(`Handicap as mulligans (${formatForm.handicapAllowance}% allowance, ${formatForm.mulliganConversion.strokesPerMulligan} strokes per mulligan).`);
       } else if (formatForm.handicapApplicationMethod === 'none') {
         lines.push('Handicap recorded for seeding only.');
+      } else if (formatForm.handicapApplicationMethod === 'starting_score') {
+        lines.push('Teams start at their handicap strokes under par and score gross from there.');
       } else {
         lines.push(`${formatForm.handicapAllowance}% handicap applied as strokes on hardest-rated holes.`);
       }
@@ -297,6 +303,9 @@ export default function AddEditFormatView({
           applicationMethod: formatForm.handicapEnabled
             ? formatForm.handicapApplicationMethod
             : 'strokes',
+          teamHandicapMethod: formatForm.teamSize > 1
+            ? formatForm.teamHandicapMethod
+            : 'average',
           mulliganConversion: (formatForm.handicapEnabled && formatForm.handicapApplicationMethod === 'mulligans')
             ? formatForm.mulliganConversion
             : null
@@ -623,7 +632,38 @@ export default function AddEditFormatView({
               {formatForm.handicapEnabled && (
                 <div className="mt-5 space-y-5">
 
-                  {/* Allowance slider */}
+                  {/* Team Handicap Formula — only for team formats */}
+                  {formatForm.teamSize > 1 && (
+                    <div>
+                      <SectionHeader
+                        title="Team Handicap Formula"
+                        description="How are team members' handicaps combined into a single team handicap?"
+                      />
+                      <div className="space-y-3">
+                        <RadioCard
+                          name="teamHandicapMethod"
+                          value="average"
+                          checked={formatForm.teamHandicapMethod === 'average'}
+                          onChange={() => setFormatForm({ ...formatForm, teamHandicapMethod: 'average' })}
+                          label="Simple Average"
+                          description="Average all players' handicaps, then apply the allowance % below."
+                        />
+                        {formatForm.teamSize === 2 && (
+                          <RadioCard
+                            name="teamHandicapMethod"
+                            value="usga_scramble"
+                            checked={formatForm.teamHandicapMethod === 'usga_scramble'}
+                            onChange={() => setFormatForm({ ...formatForm, teamHandicapMethod: 'usga_scramble' })}
+                            label="USGA Scramble (recommended for 2-person scramble)"
+                            description="35% of the lower handicap + 15% of the higher. The golf-standard formula — no additional allowance % needed."
+                          />
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Allowance slider — hidden when USGA formula handles it */}
+                  {formatForm.teamHandicapMethod !== 'usga_scramble' && (
                   <div>
                     <label className="block text-sm text-gray-600 mb-2">
                       Handicap Allowance (% of player handicap to apply)
@@ -643,9 +683,10 @@ export default function AddEditFormatView({
                       </span>
                     </div>
                     <p className="text-xs text-gray-500 mt-1">
-                      Common: 100% for best ball, 35% for scramble, 80% for shamble
+                      Common: 100% for best ball, 80% for shamble
                     </p>
                   </div>
+                  )}
 
                   {/* Application Method — NEW */}
                   <div>
@@ -669,6 +710,14 @@ export default function AddEditFormatView({
                         onChange={() => setFormatForm({ ...formatForm, handicapApplicationMethod: 'mulligans' })}
                         label="Mulligans (Do-Overs)"
                         description="Convert handicap strokes into mulligan shots. Instead of subtracting from your score, your team gets extra chances to re-hit a shot."
+                      />
+                      <RadioCard
+                        name="handicapApplicationMethod"
+                        value="starting_score"
+                        checked={formatForm.handicapApplicationMethod === 'starting_score'}
+                        onChange={() => setFormatForm({ ...formatForm, handicapApplicationMethod: 'starting_score' })}
+                        label="Starting Score"
+                        description="The team's full handicap is applied as a starting score offset on the leaderboard. Teams begin at their handicap strokes under par and score gross from there — no per-hole stroke allocation."
                       />
                       <RadioCard
                         name="handicapApplicationMethod"

@@ -123,16 +123,33 @@ export default function ScoringView({
 
   // ==================== HANDICAP STROKE HOLES ====================
   const handicapEnabled = !isSolo && currentEvent?.meta?.handicap?.enabled;
-  const strokeHoles = (() => {
-    if (!handicapEnabled) return {};
-    const playerHandicap = isTeamFormat
-      ? (() => {
-          const hcps = Object.keys(scoringUnit?.members || {})
-            .map(uid => currentEvent.players?.[uid]?.handicap)
-            .filter(h => h != null);
-          return hcps.length > 0 ? hcps.reduce((s, h) => s + h, 0) / hcps.length : null;
-        })()
-      : scoringUnit?.handicap;
+  const applicationMethod = !isSolo ? (currentEvent?.meta?.handicap?.applicationMethod || 'strokes') : 'strokes';
+  const isStartingScore = applicationMethod === 'starting_score';
+
+  const { strokeHoles, startingHandicap } = (() => {
+    if (!handicapEnabled) return { strokeHoles: {}, startingHandicap: 0 };
+    const teamMethod = currentEvent?.meta?.handicap?.teamHandicapMethod || 'average';
+    let playerHandicap;
+    let effectiveAllowance;
+    if (isTeamFormat) {
+      const hcps = Object.keys(scoringUnit?.members || {})
+        .map(uid => currentEvent.players?.[uid]?.handicap)
+        .filter(h => h != null);
+      if (hcps.length === 0) {
+        playerHandicap = null;
+      } else if (teamMethod === 'usga_scramble' && hcps.length === 2) {
+        const sorted = [...hcps].sort((a, b) => a - b);
+        playerHandicap = (sorted[0] * 0.35) + (sorted[1] * 0.15);
+        effectiveAllowance = 100;
+      } else {
+        playerHandicap = hcps.reduce((s, h) => s + h, 0) / hcps.length;
+      }
+    } else {
+      playerHandicap = scoringUnit?.handicap;
+    }
+    if (effectiveAllowance === undefined) {
+      effectiveAllowance = currentEvent?.meta?.handicap?.allowance || 100;
+    }
     const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
     const useSlope = currentEvent?.meta?.handicap?.useSlope ?? true;
     const courseHandicap = getPlayerCourseHandicap(playerHandicap, {
@@ -140,9 +157,12 @@ export default function ScoringView({
       courseSlope: useSlope ? (currentEvent?.meta?.courseSlope || null) : null,
       courseRating: useSlope ? (currentEvent?.meta?.courseRating || null) : null,
       coursePar,
-      handicapAllowance: currentEvent?.meta?.handicap?.allowance || 100
+      handicapAllowance: effectiveAllowance
     });
-    return getStrokeHoles(courseHandicap, { handicapEnabled, courseStrokeIndexes });
+    if (isStartingScore) {
+      return { strokeHoles: {}, startingHandicap: courseHandicap };
+    }
+    return { strokeHoles: getStrokeHoles(courseHandicap, { handicapEnabled, courseStrokeIndexes }), startingHandicap: 0 };
   })();
 
   const getNextHole = (current) => {
@@ -966,6 +986,8 @@ export default function ScoringView({
           getHoleData={getHoleData}
           goToHole={goToHole}
           getScoreColor={getScoreColor}
+          startingHandicap={startingHandicap}
+          isStartingScore={isStartingScore}
         />
 
       </div>

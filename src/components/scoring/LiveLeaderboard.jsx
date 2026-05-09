@@ -45,7 +45,10 @@ export default function LiveLeaderboard({
   const teamSize = meta.teamSize || 1;
 
   const isTeamFormat = teamSize > 1 && Object.keys(teams).length > 0;
-  const usesMulligans = meta.handicap?.enabled && meta.handicap?.applicationMethod === 'mulligans';
+  const applicationMethod = meta.handicap?.applicationMethod || 'strokes';
+  const isStartingScore = applicationMethod === 'starting_score';
+  const teamMethod = meta.handicap?.teamHandicapMethod || 'average';
+  const usesMulligans = meta.handicap?.enabled && applicationMethod === 'mulligans';
 
   // ==================== LEAGUE EVENT DETECTION ====================
   const leaguePoints = meta.leaguePoints || null;
@@ -92,26 +95,43 @@ export default function LiveLeaderboard({
       const memberHandicaps = Object.keys(team.members || {})
         .map(uid => players[uid]?.handicap)
         .filter(h => h != null);
-      const avgHandicap = memberHandicaps.length > 0
-        ? memberHandicaps.reduce((sum, h) => sum + h, 0) / memberHandicaps.length
-        : null;
 
-      const courseHandicap = getPlayerCourseHandicap(avgHandicap, handicapConfig);
-      const strokeHoles = getStrokeHoles(courseHandicap, handicapConfig);
+      let teamBaseHandicap;
+      let effectiveAllowance;
+      if (teamMethod === 'usga_scramble' && memberHandicaps.length === 2) {
+        const sorted = [...memberHandicaps].sort((a, b) => a - b);
+        teamBaseHandicap = (sorted[0] * 0.35) + (sorted[1] * 0.15);
+        effectiveAllowance = 100;
+      } else {
+        teamBaseHandicap = memberHandicaps.length > 0
+          ? memberHandicaps.reduce((sum, h) => sum + h, 0) / memberHandicaps.length
+          : null;
+        effectiveAllowance = meta.handicap?.allowance || 100;
+      }
+
+      const courseHandicap = getPlayerCourseHandicap(teamBaseHandicap, {
+        ...handicapConfig,
+        handicapAllowance: effectiveAllowance
+      });
+      const strokeHoles = isStartingScore ? {} : getStrokeHoles(courseHandicap, handicapConfig);
 
       let netTotal = 0;
       let netToPar = 0;
       let parForPlayed = 0;
 
-      if (handicapEnabled && holesPlayed > 0) {
-        for (const holeNum of holeOrder) {
-          const holeScore = team.scores?.[holeNum] || team.holes?.[holeNum]?.score;
-          if (holeScore) {
-            netTotal += getNetScore(holeScore, holeNum, strokeHoles, handicapEnabled);
-            parForPlayed += coursePars[holeNum - 1] || 0;
+      if (handicapEnabled) {
+        if (isStartingScore) {
+          netToPar = toPar - courseHandicap;
+        } else if (holesPlayed > 0) {
+          for (const holeNum of holeOrder) {
+            const holeScore = team.scores?.[holeNum] || team.holes?.[holeNum]?.score;
+            if (holeScore) {
+              netTotal += getNetScore(holeScore, holeNum, strokeHoles, handicapEnabled);
+              parForPlayed += coursePars[holeNum - 1] || 0;
+            }
           }
+          netToPar = netTotal - parForPlayed;
         }
-        netToPar = netTotal - parForPlayed;
       }
 
       return {
@@ -145,21 +165,25 @@ export default function LiveLeaderboard({
       const toPar = stats.toPar || 0;
 
       const courseHandicap = getPlayerCourseHandicap(player.handicap, handicapConfig);
-      const strokeHoles = getStrokeHoles(courseHandicap, handicapConfig);
+      const strokeHoles = isStartingScore ? {} : getStrokeHoles(courseHandicap, handicapConfig);
 
       let netTotal = 0;
       let netToPar = 0;
       let parForPlayed = 0;
 
-      if (handicapEnabled && holesPlayed > 0) {
-        for (const holeNum of holeOrder) {
-          const holeScore = player.scores?.[holeNum] || player.holes?.[holeNum]?.score;
-          if (holeScore) {
-            netTotal += getNetScore(holeScore, holeNum, strokeHoles, handicapEnabled);
-            parForPlayed += coursePars[holeNum - 1] || 0;
+      if (handicapEnabled) {
+        if (isStartingScore) {
+          netToPar = toPar - courseHandicap;
+        } else if (holesPlayed > 0) {
+          for (const holeNum of holeOrder) {
+            const holeScore = player.scores?.[holeNum] || player.holes?.[holeNum]?.score;
+            if (holeScore) {
+              netTotal += getNetScore(holeScore, holeNum, strokeHoles, handicapEnabled);
+              parForPlayed += coursePars[holeNum - 1] || 0;
+            }
           }
+          netToPar = netTotal - parForPlayed;
         }
-        netToPar = netTotal - parForPlayed;
       }
 
       return {
@@ -214,7 +238,7 @@ export default function LiveLeaderboard({
           const par = coursePars[holeNum - 1] || 0;
           filteredPar += par;
 
-          if (handicapEnabled) {
+          if (handicapEnabled && !isStartingScore) {
             filteredNetTotal += getNetScore(holeScore, holeNum, entry.strokeHoles, handicapEnabled);
           }
 
@@ -229,8 +253,10 @@ export default function LiveLeaderboard({
         totalScore: filteredScore,
         toPar: filteredScore - filteredPar,
         holesPlayed: filteredHolesPlayed,
-        netTotal: filteredNetTotal,
-        netToPar: filteredNetTotal - filteredPar,
+        netTotal: isStartingScore ? filteredScore : filteredNetTotal,
+        netToPar: isStartingScore
+          ? (filteredScore - filteredPar) - entry.courseHandicap
+          : filteredNetTotal - filteredPar,
         stablefordPoints: filteredStableford
       };
     });
@@ -347,7 +373,7 @@ export default function LiveLeaderboard({
         <span className="flex items-center gap-1">
           <span className="inline-block w-3 h-3 rounded bg-red-100"></span> Over par
         </span>
-        {handicapEnabled && display.showStrokeHoles !== false && (
+        {handicapEnabled && !isStartingScore && display.showStrokeHoles !== false && (
           <span className="flex items-center gap-1">
             <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#00285e]"></span> = 1 stroke
             <span className="ml-1 inline-flex gap-0.5">
@@ -355,6 +381,9 @@ export default function LiveLeaderboard({
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-[#00285e]"></span>
             </span> = 2 strokes
           </span>
+        )}
+        {isStartingScore && handicapEnabled && (
+          <span>Starting score = handicap strokes under par</span>
         )}
         <span>F = Finished</span>
         {usesMulligans && (

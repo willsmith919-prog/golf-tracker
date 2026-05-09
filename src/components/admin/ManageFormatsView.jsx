@@ -107,6 +107,7 @@ export default function ManageFormatsView({
       handicapEnabled: format.handicap?.enabled || false,
       handicapAllowance: format.handicap?.allowance || 100,
       handicapApplicationMethod: format.handicap?.applicationMethod || 'strokes',
+      teamHandicapMethod: format.handicap?.teamHandicapMethod || 'average',
       mulliganConversion: format.handicap?.mulliganConversion || {
         strokesPerMulligan: 3,
         maxMulligans: 10,
@@ -166,6 +167,7 @@ export default function ManageFormatsView({
       handicapEnabled: false,
       handicapAllowance: 100,
       handicapApplicationMethod: 'strokes',
+      teamHandicapMethod: 'average',
       mulliganConversion: {
         strokesPerMulligan: 3,
         maxMulligans: 10,
