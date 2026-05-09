@@ -31,7 +31,20 @@ export default function AddEditFormatView({
   // When editing an old format that was created before the new fields existed,
   // some fields might be undefined. These defaults prevent crashes.
   // The "?? value" syntax means: "use this value if the left side is null or undefined"
-  
+
+  if (formatForm.formatCategory === undefined) {
+    formatForm.formatCategory = 'main_game';
+  }
+  if (formatForm.sideGameType === undefined) {
+    formatForm.sideGameType = 'skins';
+  }
+  if (formatForm.sideGameVariant === undefined) {
+    formatForm.sideGameVariant = 'gross';
+  }
+  if (formatForm.sideGameCarryover === undefined) {
+    formatForm.sideGameCarryover = true;
+  }
+
   if (!formatForm.mulliganConversion) {
     formatForm.mulliganConversion = { strokesPerMulligan: 3, maxMulligans: 10, perHoleLimit: 1 };
   }
@@ -63,10 +76,20 @@ export default function AddEditFormatView({
   // and a description summarizing the format settings.
   // These update live as the user changes settings.
 
+  const isSideGameOnly = formatForm.formatCategory === 'side_game';
+
   const generateName = () => {
+    // Side-game-only formats auto-name from their type + variant
+    if (isSideGameOnly) {
+      if (formatForm.sideGameType === 'skins') {
+        const base = formatForm.sideGameVariant === 'net' ? 'Net Skins' : 'Gross Skins';
+        return formatForm.sideGameCarryover ? base : `${base} (No Carry)`;
+      }
+      return 'Side Game';
+    }
+
     const parts = [];
 
-    // Team size + combination (or competition structure if Wolf)
     if (formatForm.competitionStructure === 'wolf') {
       parts.push('Wolf');
     } else if (formatForm.teamSize === 1) {
@@ -82,19 +105,16 @@ export default function AddEditFormatView({
       parts.push(`${formatForm.teamSize}-Man ${comboLabels[formatForm.combinationMethod] || formatForm.combinationMethod}`);
     }
 
-    // Scoring method (skip for stroke play since it's the default)
     if (formatForm.scoringMethod === 'stableford') {
       parts.push('Stableford');
     } else if (formatForm.scoringMethod === 'match_play') {
       parts.push('Match Play');
     }
 
-    // Competition structure (skip full_field since it's the default)
     if (formatForm.competitionStructure === 'round_robin') {
       parts.push('Round Robin');
     }
 
-    // Handicap
     if (formatForm.handicapEnabled) {
       const method = formatForm.handicapApplicationMethod;
       if (method === 'mulligans') {
@@ -112,9 +132,21 @@ export default function AddEditFormatView({
   };
 
   const generateDescription = () => {
+    if (isSideGameOnly) {
+      if (formatForm.sideGameType === 'skins') {
+        const base = formatForm.sideGameVariant === 'net'
+          ? 'Lowest net score (after handicap strokes) wins each hole outright.'
+          : 'Lowest gross score wins each hole outright.';
+        const carry = formatForm.sideGameCarryover
+          ? ' Tied holes carry the skin to the next hole.'
+          : ' Tied holes are cancelled — no carryover.';
+        return base + carry;
+      }
+      return 'A side game played alongside the main event.';
+    }
+
     const lines = [];
 
-    // Team/play style
     if (formatForm.competitionStructure === 'wolf') {
       lines.push('4-player Wolf format. Each hole, one player is the Wolf who picks a partner or goes alone.');
     } else if (formatForm.teamSize === 1) {
@@ -130,7 +162,6 @@ export default function AddEditFormatView({
       lines.push(comboDescs[formatForm.combinationMethod] || '');
     }
 
-    // Scoring
     if (formatForm.scoringMethod === 'stableford') {
       lines.push('Stableford scoring (points based on score vs par).');
     } else if (formatForm.scoringMethod === 'match_play') {
@@ -139,12 +170,10 @@ export default function AddEditFormatView({
       lines.push('Stroke play (lowest total score wins).');
     }
 
-    // Competition
     if (formatForm.competitionStructure === 'round_robin') {
       lines.push(`Round robin: teams play each other over ${formatForm.roundRobin.holesPerMatch}-hole matchups.`);
     }
 
-    // Handicap
     if (formatForm.handicapEnabled) {
       if (formatForm.handicapApplicationMethod === 'mulligans') {
         lines.push(`Handicap as mulligans (${formatForm.handicapAllowance}% allowance, ${formatForm.mulliganConversion.strokesPerMulligan} strokes per mulligan).`);
@@ -289,15 +318,31 @@ export default function AddEditFormatView({
         ? editingFormat.id
         : `format-${Date.now()}`;
 
+      const formatCategory = formatForm.formatCategory || 'main_game';
+      const isSideOnly = formatCategory === 'side_game';
+
       const formatData = {
         name: finalName,
         description: finalDescription,
-        teamSize: formatForm.teamSize,
-        scoringMethod: formatForm.scoringMethod,
-        combinationMethod: formatForm.combinationMethod,
 
-        // Handicap — expanded
-        handicap: {
+        // Category — drives how this format appears in event creation
+        formatCategory,
+        sideGameType: (formatCategory === 'side_game' || formatCategory === 'both')
+          ? (formatForm.sideGameType || 'skins')
+          : null,
+        sideGameVariant: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'skins'
+          ? (formatForm.sideGameVariant || 'gross')
+          : null,
+        sideGameCarryover: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'skins'
+          ? (formatForm.sideGameCarryover !== false)
+          : null,
+
+        // Main-game fields — populated for main_game and both; null for pure side games
+        teamSize: isSideOnly ? null : formatForm.teamSize,
+        scoringMethod: isSideOnly ? null : formatForm.scoringMethod,
+        combinationMethod: isSideOnly ? null : formatForm.combinationMethod,
+
+        handicap: isSideOnly ? null : {
           enabled: formatForm.handicapEnabled,
           allowance: formatForm.handicapAllowance,
           applicationMethod: formatForm.handicapEnabled
@@ -311,13 +356,11 @@ export default function AddEditFormatView({
             : null
         },
 
-        // Stableford points — only when stableford scoring
-        stablefordPoints: formatForm.scoringMethod === 'stableford'
+        stablefordPoints: (!isSideOnly && formatForm.scoringMethod === 'stableford')
           ? formatForm.stablefordPoints
           : null,
 
-        // Competition structure
-        competition: {
+        competition: isSideOnly ? null : {
           structure: formatForm.competitionStructure,
           roundRobin: formatForm.competitionStructure === 'round_robin'
             ? formatForm.roundRobin
@@ -327,14 +370,15 @@ export default function AddEditFormatView({
             : null
         },
 
-        // Leaderboard display settings are configured per-event, not per-format.
-        // See CreateEventView for display options.
-
-        // Metadata
         createdBy: currentUser?.uid || null,
         createdAt: isEditing ? (editingFormat.createdAt || Date.now()) : Date.now(),
         updatedAt: Date.now()
       };
+
+      // Strip null values to satisfy Firebase
+      Object.keys(formatData).forEach(k => {
+        if (formatData[k] === null) delete formatData[k];
+      });
 
       await set(ref(database, `formats/${formatId}`), formatData);
 
@@ -446,6 +490,102 @@ export default function AddEditFormatView({
 
           <div className="space-y-8">
 
+            {/* ========== SECTION 0: FORMAT CATEGORY ========== */}
+            <div>
+              <SectionHeader
+                title="Format Category"
+                description="Is this a main game, a side game played alongside a main event, or both?"
+              />
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  { value: 'main_game', label: 'Main Game', icon: '🏌️' },
+                  { value: 'side_game', label: 'Side Game', icon: '🎯' },
+                  { value: 'both', label: 'Both', icon: '⛳' }
+                ].map(opt => (
+                  <label
+                    key={opt.value}
+                    className={`flex flex-col items-center justify-center p-4 rounded-xl border-2 cursor-pointer transition-colors text-center ${
+                      formatForm.formatCategory === opt.value
+                        ? 'border-[#00285e] bg-[#f0f4ff]'
+                        : 'border-gray-200 hover:bg-gray-50'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="formatCategory"
+                      value={opt.value}
+                      checked={formatForm.formatCategory === opt.value}
+                      onChange={() => setFormatForm({ ...formatForm, formatCategory: opt.value })}
+                      className="sr-only"
+                    />
+                    <span className="text-xl mb-1">{opt.icon}</span>
+                    <span className="text-sm font-medium text-gray-900">{opt.label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            {/* ========== SIDE GAME TYPE (shown when category includes side_game) ========== */}
+            {(formatForm.formatCategory === 'side_game' || formatForm.formatCategory === 'both') && (
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
+                <SectionHeader
+                  title="Side Game Type"
+                  description="What kind of side game is this?"
+                />
+                <div className="space-y-3">
+                  <RadioCard
+                    name="sideGameType"
+                    value="skins"
+                    checked={formatForm.sideGameType === 'skins'}
+                    onChange={() => setFormatForm({ ...formatForm, sideGameType: 'skins' })}
+                    label="Skins"
+                    description="Lowest score wins each hole. Ties carry the skin to the next hole."
+                  />
+                </div>
+
+                {formatForm.sideGameType === 'skins' && (
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Scoring Variant</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { value: 'gross', label: 'Gross Skins', desc: 'Lowest raw score wins the hole' },
+                          { value: 'net', label: 'Net Skins', desc: 'Lowest net score wins (after handicap strokes)' }
+                        ].map(opt => (
+                          <label
+                            key={opt.value}
+                            className={`flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-colors ${
+                              formatForm.sideGameVariant === opt.value
+                                ? 'border-[#00285e] bg-[#f0f4ff]'
+                                : 'border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="sideGameVariant"
+                              value={opt.value}
+                              checked={formatForm.sideGameVariant === opt.value}
+                              onChange={() => setFormatForm({ ...formatForm, sideGameVariant: opt.value })}
+                              className="sr-only"
+                            />
+                            <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+                            <span className="text-xs text-gray-500 mt-0.5">{opt.desc}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <ToggleSwitch
+                      label="Carry over ties"
+                      description="Tied hole — skin moves to the next hole and doubles up"
+                      checked={formatForm.sideGameCarryover}
+                      onChange={(e) => setFormatForm({ ...formatForm, sideGameCarryover: e.target.checked })}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* ========== SECTION 1: BASICS ========== */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2">
@@ -490,6 +630,9 @@ export default function AddEditFormatView({
                 </button>
               )}
             </div>
+
+            {/* ========== SECTIONS 2–6: MAIN GAME SETTINGS (hidden for pure side games) ========== */}
+            {!isSideGameOnly && <>
 
             {/* ========== SECTION 2: TEAM SIZE ========== */}
             <div>
@@ -948,6 +1091,8 @@ export default function AddEditFormatView({
                 </div>
               )}
             </div>
+
+            </>}
 
             {/* ========== FEEDBACK ========== */}
             {feedback && (

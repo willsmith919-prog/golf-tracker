@@ -6,6 +6,7 @@ import { sortLeaderboard, assignPositions } from '../../utils/leaderboard';
 import ThroughHoleFilter from './ThroughHoleFilter';
 import LeaderboardRow from './LeaderboardRow';
 import LeagueStandingsPanel from './LeagueStandingsPanel';
+import SideGameLeaderboard from './SideGameLeaderboard';
 
 // ============================================================
 // LIVE LEADERBOARD COMPONENT
@@ -34,6 +35,7 @@ export default function LiveLeaderboard({
   const [expandedEntry, setExpandedEntry] = useState(null);
   const [throughHole, setThroughHole] = useState(null);
   const [showAllHoles, setShowAllHoles] = useState(false);
+  const [activeGameTab, setActiveGameTab] = useState('main');
 
   const meta = currentEvent?.meta || {};
   const players = currentEvent?.players || {};
@@ -43,6 +45,10 @@ export default function LiveLeaderboard({
   const numHoles = meta.numHoles || 18;
   const startingHole = meta.startingHole || 1;
   const teamSize = meta.teamSize || 1;
+
+  const sideGames = meta.sideGames || [];
+  const hasSideGames = sideGames.length > 0;
+  const hasTabs = hasSideGames || isLeagueEvent;
 
   const isTeamFormat = teamSize > 1 && Object.keys(teams).length > 0;
   const applicationMethod = meta.handicap?.applicationMethod || 'strokes';
@@ -284,6 +290,83 @@ export default function LiveLeaderboard({
 
   return (
     <div>
+      {/* Game tab bar — shown when side games or league standings exist */}
+      {hasTabs && (
+        <div className="flex bg-gray-100 rounded-xl p-1 mb-5 overflow-x-auto gap-1">
+          <button
+            onClick={() => setActiveGameTab('main')}
+            className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+              activeGameTab === 'main'
+                ? 'bg-white text-gray-900 shadow-md'
+                : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+            }`}
+          >
+            🏌️ Main Game
+          </button>
+          {sideGames.map((sg) => (
+            <button
+              key={sg.id}
+              onClick={() => setActiveGameTab(sg.id)}
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                activeGameTab === sg.id
+                  ? 'bg-white text-gray-900 shadow-md'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+              }`}
+            >
+              🎯 {sg.name}
+            </button>
+          ))}
+          {isLeagueEvent && (
+            <button
+              onClick={() => setActiveGameTab('standings')}
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                activeGameTab === 'standings'
+                  ? 'bg-white text-gray-900 shadow-md'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+              }`}
+            >
+              🏆 League
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* League standings tab content */}
+      {isLeagueEvent && activeGameTab === 'standings' && (
+        <LeagueStandingsPanel
+          leagueId={leagueId}
+          seasonId={seasonId}
+          leaguePoints={leaguePoints}
+          leaderboardData={leaderboardData}
+          teams={teams}
+          teamSize={teamSize}
+          players={players}
+          currentEventId={currentEvent?.id}
+          sideGames={sideGames}
+          holeOrder={holeOrder}
+          coursePars={coursePars}
+          inline={true}
+        />
+      )}
+
+      {/* Side game tab content */}
+      {hasSideGames && activeGameTab !== 'main' && activeGameTab !== 'standings' && (() => {
+        const sg = sideGames.find(s => s.id === activeGameTab);
+        if (!sg) return null;
+        return (
+          <SideGameLeaderboard
+            sideGame={sg}
+            leaderboardEntries={leaderboardData}
+            currentEvent={currentEvent}
+            currentUser={currentUser}
+            players={players}
+          />
+        );
+      })()}
+
+      {/* Main game content — hidden when on a side game or standings tab */}
+      {activeGameTab === 'main' && <>
+
       {/* Leaderboard Header */}
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-xl font-bold text-gray-900">Live Leaderboard</h2>
@@ -352,19 +435,6 @@ export default function LiveLeaderboard({
         ))}
       </div>
 
-      {isLeagueEvent && (
-        <LeagueStandingsPanel
-          leagueId={leagueId}
-          seasonId={seasonId}
-          leaguePoints={leaguePoints}
-          leaderboardData={leaderboardData}
-          teams={teams}
-          teamSize={teamSize}
-          players={players}
-          currentEventId={currentEvent?.id}
-        />
-      )}
-
       {/* Legend */}
       <div className="mt-4 flex flex-wrap gap-3 text-xs text-gray-400 justify-center">
         <span className="flex items-center gap-1">
@@ -392,6 +462,8 @@ export default function LiveLeaderboard({
           </span>
         )}
       </div>
+
+      </>}
     </div>
   );
 }

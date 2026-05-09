@@ -6,7 +6,8 @@
       "Bash(grep -r \"className=\" /c/Users/Will/Documents/GitHub/golf-tracker/src/components/*.jsx)",
       "Bash(xargs sed:*)",
       "Bash(grep -rn '\\\\bblue-[0-9]' c:/Users/Will/Documents/GitHub/golf-tracker/src --include=\"*.jsx\" --exclude-path=\"*/backups/*\")",
-      "Bash(grep -r \"blue-[0-9]\" src --include=\"*.jsx\" ! -path \"*/backups/*\")"
+      "Bash(grep -r \"blue-[0-9]\" src --include=\"*.jsx\" ! -path \"*/backups/*\")",
+      "Bash(npm run *)"
     ]
   }
 }

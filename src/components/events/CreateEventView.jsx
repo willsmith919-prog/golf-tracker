@@ -76,7 +76,8 @@ const eventCode = await createCode('event', eventId);
           seasonId: creatingEventForLeague?.seasonId || null,
           createdAt: Date.now(),
           eventCode: eventCode,
-          leaguePoints: formData.leaguePoints || null
+          leaguePoints: formData.leaguePoints || null,
+          sideGames: formData.sideGames?.length > 0 ? formData.sideGames : null
         },
         players: {
           [currentUser.uid]: {

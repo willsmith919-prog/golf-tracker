@@ -68,7 +68,8 @@ export default function EventForm({
         showRelativeToPar: true, showHoleByHole: true, showStrokeHoles: true,
         showMulligansRemaining: false, showMatchStatus: false, showRoundRobinGrid: false
       },
-      leaguePoints: initialLeaguePoints
+      leaguePoints: initialLeaguePoints,
+      sideGames: mergedData.sideGames || []
     });
 
   const selectedCourseId = formData.selectedCourseId || '';
@@ -308,6 +309,132 @@ export default function EventForm({
           </div>
         </div>
       )}
+
+      {/* ===== SIDE GAMES — shown after a format is selected ===== */}
+      {formData.formatId && (() => {
+        const sideGameFormats = formats.filter(f =>
+          f.formatCategory === 'side_game' || f.formatCategory === 'both'
+        );
+        const handicapEnabled = formData.handicap?.enabled && formData.handicap?.applicationMethod === 'strokes';
+
+        const addSideGame = (formatId) => {
+          if (!formatId) return;
+          const fmt = sideGameFormats.find(f => f.id === formatId);
+          if (!fmt) return;
+          const newSg = {
+            id: `sg-${Date.now()}`,
+            formatId: fmt.id,
+            name: fmt.name,
+            sideGameType: fmt.sideGameType || 'skins',
+            variant: fmt.sideGameVariant || 'gross',
+            pointsPerSkin: 1,
+            carryover: fmt.sideGameCarryover !== false
+          };
+          setFormData({ ...formData, sideGames: [...(formData.sideGames || []), newSg] });
+        };
+
+        const updateSideGame = (id, updates) => {
+          setFormData({
+            ...formData,
+            sideGames: (formData.sideGames || []).map(sg => sg.id === id ? { ...sg, ...updates } : sg)
+          });
+        };
+
+        const removeSideGame = (id) => {
+          setFormData({ ...formData, sideGames: (formData.sideGames || []).filter(sg => sg.id !== id) });
+        };
+
+        return (
+          <div className="border-2 border-amber-200 bg-amber-50 rounded-xl p-5">
+            <div className="flex items-center justify-between mb-1">
+              <label className="text-sm font-semibold text-gray-700">🎯 Side Games</label>
+              {sideGameFormats.length === 0 && (
+                <span className="text-xs text-gray-400">Create a Side Game format in Admin first</span>
+              )}
+            </div>
+            <p className="text-sm text-gray-500 mb-4">
+              Optional games played alongside the main event. Skins, for example.
+            </p>
+
+            {/* Existing side games */}
+            {(formData.sideGames || []).map((sg) => (
+              <div key={sg.id} className="bg-white rounded-xl border-2 border-amber-200 p-4 mb-3">
+                <div className="flex items-center justify-between mb-3">
+                  <span className="font-semibold text-gray-900 text-sm">{sg.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => removeSideGame(sg.id)}
+                    className="text-red-500 hover:text-red-700 text-xs font-semibold"
+                  >
+                    Remove
+                  </button>
+                </div>
+
+                {sg.sideGameType === 'skins' && (
+                  <div className="space-y-3">
+                    {/* Variant label (set on the format, not editable per-event) */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-gray-500">Variant:</span>
+                      <span className="text-xs font-semibold text-gray-700">
+                        {sg.variant === 'net' ? 'Net Skins' : 'Gross Skins'}
+                      </span>
+                      {sg.variant === 'net' && !handicapEnabled && (
+                        <span className="text-xs text-amber-600">(enable handicap strokes for net to apply)</span>
+                      )}
+                    </div>
+
+                    {/* Points per skin */}
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <span className="text-xs font-medium text-gray-600">Points per skin</span>
+                        <p className="text-xs text-gray-400">Awarded to winner of each hole</p>
+                      </div>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        value={sg.pointsPerSkin}
+                        onChange={(e) => {
+                          const val = e.target.value.replace(/[^0-9]/g, '');
+                          updateSideGame(sg.id, { pointsPerSkin: val === '' ? 1 : parseInt(val) });
+                        }}
+                        className="w-16 px-2 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-amber-400 focus:outline-none text-sm"
+                      />
+                    </div>
+
+                    {/* Carryover — set on the format, shown as label */}
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-medium text-gray-500">Carryover:</span>
+                      <span className="text-xs font-semibold text-gray-700">
+                        {sg.carryover ? 'Yes — tied holes carry to next' : 'No — tied holes cancelled'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* Add Side Game button */}
+            {sideGameFormats.length > 0 && (formData.sideGames || []).length < 3 && (
+              <div className="flex items-center gap-2">
+                <select
+                  defaultValue=""
+                  onChange={(e) => { addSideGame(e.target.value); e.target.value = ''; }}
+                  className="flex-1 px-3 py-2 rounded-xl border-2 border-amber-200 focus:border-amber-400 focus:outline-none text-sm bg-white"
+                >
+                  <option value="">+ Add a side game...</option>
+                  {sideGameFormats
+                    .filter(f => !(formData.sideGames || []).some(sg => sg.formatId === f.id))
+                    .map(f => (
+                      <option key={f.id} value={f.id}>{f.name}</option>
+                    ))
+                  }
+                </select>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ===== LEAGUE POINTS — only shown when creating from a league ===== */}
       {formData.leaguePoints && (

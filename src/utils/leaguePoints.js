@@ -160,9 +160,10 @@ export function calculateEventPoints(leaderboardData, leaguePoints, teams = {}, 
  * @param {string} leagueId - the league's ID
  * @param {string} seasonId - the active season's ID
  * @param {string} eventId - the event's ID
- * @param {Object} playerPoints - map of { uid → pointsEarned } from calculateEventPoints
+ * @param {Object} playerPoints - map of { uid → totalPointsEarned }
+ * @param {Object} breakdowns - optional { uid → { mainGame, participation, skins: {sgId: pts}, total } }
  */
-export async function writeStandingsToFirebase(leagueId, seasonId, eventId, playerPoints) {
+export async function writeStandingsToFirebase(leagueId, seasonId, eventId, playerPoints, breakdowns = {}) {
   if (!leagueId || !seasonId || !eventId) {
     console.error('writeStandingsToFirebase: missing leagueId, seasonId, or eventId');
     return;
@@ -171,22 +172,23 @@ export async function writeStandingsToFirebase(leagueId, seasonId, eventId, play
   const standingsRef = ref(database, `leagues/${leagueId}/seasons/${seasonId}/standings`);
 
   try {
-    // Read current standings
     const snapshot = await get(standingsRef);
     const currentStandings = snapshot.val() || {};
 
-    // Update standings for each player
     for (const [uid, pointsEarned] of Object.entries(playerPoints)) {
       const playerStanding = currentStandings[uid] || { points: 0, events: {} };
 
-      // Subtract any previous points from THIS event (in case of re-finalization)
       const previousPointsForEvent = playerStanding.events?.[eventId] || 0;
       const basePoints = (playerStanding.points || 0) - previousPointsForEvent;
 
-      // Add the new points
       playerStanding.points = basePoints + pointsEarned;
       playerStanding.events = playerStanding.events || {};
       playerStanding.events[eventId] = pointsEarned;
+
+      if (breakdowns[uid]) {
+        playerStanding.breakdowns = playerStanding.breakdowns || {};
+        playerStanding.breakdowns[eventId] = breakdowns[uid];
+      }
 
       currentStandings[uid] = playerStanding;
     }

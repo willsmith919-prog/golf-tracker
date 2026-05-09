@@ -18,11 +18,12 @@ export default function ManageFormatsView({
 }) {
   // ==================== FILTER STATE ====================
   const [filters, setFilters] = useState({
-    teamSize: null,        // null = any, or 1/2/3/4
-    scoringMethod: null,   // null = any, or 'stroke'/'stableford'/'match_play'
-    combinationMethod: null, // null = any, or 'scramble'/'shamble'/etc.
-    competition: null,     // null = any, or 'full_field'/'round_robin'/'wolf'
-    handicap: null         // null = any, 'enabled', or 'disabled'
+    teamSize: null,
+    scoringMethod: null,
+    combinationMethod: null,
+    competition: null,
+    handicap: null,
+    category: null   // null = any, 'main_game', 'side_game', 'both'
   });
 
   const toggleFilter = (key, value) => {
@@ -33,7 +34,7 @@ export default function ManageFormatsView({
   };
 
   const clearFilters = () => {
-    setFilters({ teamSize: null, scoringMethod: null, combinationMethod: null, competition: null, handicap: null });
+    setFilters({ teamSize: null, scoringMethod: null, combinationMethod: null, competition: null, handicap: null, category: null });
   };
 
   const hasActiveFilters = Object.values(filters).some(v => v !== null);
@@ -49,17 +50,25 @@ export default function ManageFormatsView({
     }
     if (filters.handicap === 'enabled' && !format.handicap?.enabled) return false;
     if (filters.handicap === 'disabled' && format.handicap?.enabled) return false;
+    if (filters.category !== null) {
+      const cat = format.formatCategory || 'main_game';
+      if (cat !== filters.category) return false;
+    }
     return true;
   });
 
-  // Build chip options from what actually exists in the format list
-  // (so we only show filter options that would match at least one format)
-  const existingTeamSizes = [...new Set(formats.map(f => f.teamSize))].sort();
-  const existingScoringMethods = [...new Set(formats.map(f => f.scoringMethod))];
-  const existingCombinations = [...new Set(formats.filter(f => f.teamSize > 1).map(f => f.combinationMethod))];
-  const existingCompetitions = [...new Set(formats.map(f => f.competition?.structure || 'full_field'))];
-  const hasHandicapFormats = formats.some(f => f.handicap?.enabled);
-  const hasNonHandicapFormats = formats.some(f => !f.handicap?.enabled);
+  const hasSideGameFormats = formats.some(f => f.formatCategory === 'side_game' || f.formatCategory === 'both');
+
+  // Build chip options from what actually exists in the format list.
+  // Side game formats have no teamSize/scoringMethod, so exclude them from
+  // main-game filter chip generation to avoid blank/undefined buttons.
+  const mainGameOnlyFormats = formats.filter(f => (f.formatCategory || 'main_game') !== 'side_game');
+  const existingTeamSizes = [...new Set(mainGameOnlyFormats.map(f => f.teamSize))].filter(v => v != null).sort();
+  const existingScoringMethods = [...new Set(mainGameOnlyFormats.map(f => f.scoringMethod))].filter(Boolean);
+  const existingCombinations = [...new Set(mainGameOnlyFormats.filter(f => f.teamSize > 1).map(f => f.combinationMethod))].filter(Boolean);
+  const existingCompetitions = [...new Set(mainGameOnlyFormats.map(f => f.competition?.structure || 'full_field'))];
+  const hasHandicapFormats = mainGameOnlyFormats.some(f => f.handicap?.enabled);
+  const hasNonHandicapFormats = mainGameOnlyFormats.some(f => !f.handicap?.enabled);
 
   // ==================== LABEL MAPS ====================
   // ==================== LABEL MAPS ====================
@@ -101,6 +110,10 @@ export default function ManageFormatsView({
     setFormatForm({
       name: format.name || '',
       description: format.description || '',
+      formatCategory: format.formatCategory || 'main_game',
+      sideGameType: format.sideGameType || 'skins',
+      sideGameVariant: format.sideGameVariant || 'gross',
+      sideGameCarryover: format.sideGameCarryover !== false,
       teamSize: format.teamSize || 2,
       scoringMethod: format.scoringMethod || 'stroke',
       combinationMethod: format.combinationMethod || 'scramble',
@@ -161,6 +174,10 @@ export default function ManageFormatsView({
     setFormatForm({
       name: '',
       description: '',
+      formatCategory: 'main_game',
+      sideGameType: 'skins',
+      sideGameVariant: 'gross',
+      sideGameCarryover: true,
       teamSize: 2,
       scoringMethod: 'stroke',
       combinationMethod: 'scramble',
@@ -333,6 +350,32 @@ export default function ManageFormatsView({
                         </button>
                       </>
                     )}
+
+                    {/* Category chips */}
+                    {hasSideGameFormats && (
+                      <>
+                        <button
+                          onClick={() => toggleFilter('category', 'main_game')}
+                          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                            filters.category === 'main_game'
+                              ? 'bg-[#00285e] text-white border-[#00285e]'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          Main Game
+                        </button>
+                        <button
+                          onClick={() => toggleFilter('category', 'side_game')}
+                          className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                            filters.category === 'side_game'
+                              ? 'bg-amber-600 text-white border-amber-600'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          Side Game
+                        </button>
+                      </>
+                    )}
                   </div>
                   {hasActiveFilters && (
                     <p className="text-xs text-gray-500">
@@ -356,25 +399,49 @@ export default function ManageFormatsView({
                       <h3 className="text-lg font-bold text-gray-900">{format.name}</h3>
                       <p className="text-sm text-gray-600 mt-1">{format.description}</p>
                       <div className="flex flex-wrap gap-2 mt-3">
-                        <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
-                          {teamSizeLabels[format.teamSize] || `${format.teamSize}-Person`}
-                        </span>
-                        <span className="inline-block bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
-                          {scoringMethodLabels[format.scoringMethod] || format.scoringMethod}
-                        </span>
-                        {format.teamSize > 1 && (
-                          <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
-                            {combinationLabels[format.combinationMethod] || format.combinationMethod}
+                        {/* Category badge — only shown for non-default categories */}
+                        {format.formatCategory === 'side_game' && (
+                          <span className="inline-block bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                            🎯 Side Game
                           </span>
                         )}
-                        {format.handicap?.enabled && (
-                          <span className="inline-block bg-orange-100 text-orange-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
-                            HC: {format.handicap.allowance}% {format.handicap.applicationMethod === 'mulligans' ? 'Mulligans' : format.handicap.applicationMethod === 'none' ? 'Seeding Only' : 'Strokes'}
+                        {format.formatCategory === 'both' && (
+                          <span className="inline-block bg-amber-100 text-amber-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                            ⛳ Main + Side
                           </span>
                         )}
-                        {competitionLabels[format.competition?.structure] && (
-                          <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
-                            {competitionLabels[format.competition.structure]}
+
+                        {/* Main game badges — skip for pure side games */}
+                        {format.formatCategory !== 'side_game' && (
+                          <>
+                            <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
+                              {teamSizeLabels[format.teamSize] || `${format.teamSize}-Person`}
+                            </span>
+                            <span className="inline-block bg-green-100 text-green-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                              {scoringMethodLabels[format.scoringMethod] || format.scoringMethod}
+                            </span>
+                            {format.teamSize > 1 && (
+                              <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
+                                {combinationLabels[format.combinationMethod] || format.combinationMethod}
+                              </span>
+                            )}
+                            {format.handicap?.enabled && (
+                              <span className="inline-block bg-orange-100 text-orange-800 text-xs font-semibold px-2.5 py-1 rounded-lg">
+                                HC: {format.handicap.allowance}% {format.handicap.applicationMethod === 'mulligans' ? 'Mulligans' : format.handicap.applicationMethod === 'none' ? 'Seeding Only' : 'Strokes'}
+                              </span>
+                            )}
+                            {competitionLabels[format.competition?.structure] && (
+                              <span className="inline-block bg-[#f0f4ff] text-[#007a78] text-xs font-semibold px-2.5 py-1 rounded-lg">
+                                {competitionLabels[format.competition.structure]}
+                              </span>
+                            )}
+                          </>
+                        )}
+
+                        {/* Side game type badge */}
+                        {format.sideGameType && (
+                          <span className="inline-block bg-amber-50 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-lg border border-amber-200">
+                            {format.sideGameType === 'skins' ? 'Skins' : format.sideGameType}
                           </span>
                         )}
                       </div>

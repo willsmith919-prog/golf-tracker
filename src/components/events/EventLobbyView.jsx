@@ -9,6 +9,8 @@ import TeamsList from './TeamsList';
 import HostControls from './HostControls';
 import { calculateEventPoints, writeStandingsToFirebase } from '../../utils/leaguePoints';
 import { sortLeaderboard, assignPositions } from '../../utils/leaderboard';
+import { calculateSkins, buildSkinsEntries } from '../../utils/skins';
+import { buildHoleOrder } from '../../utils/holes';
 
 export default function EventLobbyView({
   currentUser,
@@ -120,8 +122,55 @@ export default function EventLobbyView({
         } catch (err) {
           console.error('Error loading league members:', err);
         }
-        const playerPoints = calculateEventPoints(leaderboard, lpMeta.leaguePoints, currentEvent.teams || {}, lpMeta.teamSize || 1, currentEvent.players || {}, leagueMembersData);
-        await writeStandingsToFirebase(lpMeta.leagueId, lpMeta.seasonId, currentEvent.id, playerPoints);
+
+        // Main game points (includes participation)
+        const mainGamePoints = calculateEventPoints(
+          leaderboard, lpMeta.leaguePoints,
+          currentEvent.teams || {}, lpMeta.teamSize || 1,
+          currentEvent.players || {}, leagueMembersData
+        );
+        const participationPts = lpMeta.leaguePoints.participationPoints || 0;
+
+        // Skins points per side game
+        const sideGames = lpMeta.sideGames || [];
+        const skinsEntries = sideGames.length > 0 ? buildSkinsEntries(currentEvent) : [];
+        const holeOrder = buildHoleOrder(lpMeta.numHoles || 18, lpMeta.startingHole || 1);
+        const coursePars = lpMeta.coursePars || [];
+
+        const skinsByPlayer = {}; // { uid: { [sgId]: points } }
+        for (const sg of sideGames) {
+          const { pointTotals } = calculateSkins(skinsEntries, holeOrder, coursePars, sg);
+          for (const [uid, pts] of Object.entries(pointTotals)) {
+            if (!skinsByPlayer[uid]) skinsByPlayer[uid] = {};
+            skinsByPlayer[uid][sg.id] = pts;
+          }
+        }
+
+        // Combined total points (main + skins)
+        const combinedPoints = { ...mainGamePoints };
+        for (const [uid, byGame] of Object.entries(skinsByPlayer)) {
+          const skinsTotal = Object.values(byGame).reduce((s, v) => s + v, 0);
+          if (skinsTotal > 0) {
+            combinedPoints[uid] = (combinedPoints[uid] || 0) + skinsTotal;
+          }
+        }
+
+        // Build breakdowns for storage
+        const breakdowns = {};
+        const allUids = new Set([...Object.keys(combinedPoints), ...Object.keys(skinsByPlayer)]);
+        for (const uid of allUids) {
+          const mainTotal = mainGamePoints[uid] || 0;
+          const skinsTotal = Object.values(skinsByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
+          const participation = mainTotal > 0 ? participationPts : 0;
+          breakdowns[uid] = {
+            mainGame: mainTotal,
+            participation,
+            skins: skinsByPlayer[uid] || {},
+            total: combinedPoints[uid] || 0
+          };
+        }
+
+        await writeStandingsToFirebase(lpMeta.leagueId, lpMeta.seasonId, currentEvent.id, combinedPoints, breakdowns);
         setFeedback('Event ended! League standings updated.');
       } catch (err) {
         console.error('Error updating standings:', err);

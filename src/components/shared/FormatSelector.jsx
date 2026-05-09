@@ -44,8 +44,14 @@ export default function FormatSelector({
 
   const hasActiveFilters = Object.values(filters).some(v => v !== null);
 
+  // Exclude pure side-game formats from the main format picker
+  const mainGameFormats = formats.filter(f => {
+    const cat = f.formatCategory || 'main_game';
+    return cat === 'main_game' || cat === 'both';
+  });
+
   // Apply filters
-  const filteredFormats = formats.filter(format => {
+  const filteredFormats = mainGameFormats.filter(format => {
     if (filters.teamSize !== null && format.teamSize !== filters.teamSize) return false;
     if (filters.scoringMethod !== null && format.scoringMethod !== filters.scoringMethod) return false;
     if (filters.combinationMethod !== null && format.combinationMethod !== filters.combinationMethod) return false;
@@ -58,13 +64,13 @@ export default function FormatSelector({
     return true;
   });
 
-  // Build chip options from what exists in the full format list
-  const existingTeamSizes = [...new Set(formats.map(f => f.teamSize))].sort();
-  const existingScoringMethods = [...new Set(formats.map(f => f.scoringMethod))];
-  const existingCombinations = [...new Set(formats.filter(f => f.teamSize > 1).map(f => f.combinationMethod))];
-  const existingCompetitions = [...new Set(formats.map(f => f.competition?.structure || 'full_field'))];
-  const hasHandicapFormats = formats.some(f => f.handicap?.enabled);
-  const hasNonHandicapFormats = formats.some(f => !f.handicap?.enabled);
+  // Build chip options from what exists in the main-game format list
+  const existingTeamSizes = [...new Set(mainGameFormats.map(f => f.teamSize))].sort();
+  const existingScoringMethods = [...new Set(mainGameFormats.map(f => f.scoringMethod))];
+  const existingCombinations = [...new Set(mainGameFormats.filter(f => f.teamSize > 1).map(f => f.combinationMethod))];
+  const existingCompetitions = [...new Set(mainGameFormats.map(f => f.competition?.structure || 'full_field'))];
+  const hasHandicapFormats = mainGameFormats.some(f => f.handicap?.enabled);
+  const hasNonHandicapFormats = mainGameFormats.some(f => !f.handicap?.enabled);
 
   // Label maps
   const teamSizeLabels = { 1: 'Individual', 2: '2-Person', 3: '3-Person', 4: '4-Person' };
@@ -82,7 +88,7 @@ export default function FormatSelector({
   const selectedFormat = formats.find(f => f.id === selectedFormatId) || null;
 
   // Only show filter chips when there are enough formats to warrant it
-  const showFilters = formats.length > 3;
+  const showFilters = mainGameFormats.length > 3;
 
   return (
     <div className="mb-6">
@@ -190,7 +196,7 @@ export default function FormatSelector({
           </div>
           {hasActiveFilters && (
             <p className="text-xs text-gray-500">
-              {filteredFormats.length} of {formats.length} formats
+              {filteredFormats.length} of {mainGameFormats.length} formats
             </p>
           )}
         </div>
@@ -210,7 +216,7 @@ export default function FormatSelector({
         <option value="">
           {hasActiveFilters
             ? `Select a format (${filteredFormats.length} shown)`
-            : 'Select a format'}
+            : mainGameFormats.length === 0 ? 'No formats yet — create one in Admin' : 'Select a format'}
         </option>
         
         {teamFormats.length > 0 && (

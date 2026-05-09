@@ -55,7 +55,8 @@ export default function EditEventView({
         numHoles: eventNumHoles,
         startingHole: eventStartingHole,
         endingHole: eventEndingHole,
-        leaguePoints: formData.leaguePoints || null
+        leaguePoints: formData.leaguePoints || null,
+        sideGames: formData.sideGames?.length > 0 ? formData.sideGames : null
       };
 
       await update(ref(database, `events/${currentEvent.id}/meta`), updatedMeta);
