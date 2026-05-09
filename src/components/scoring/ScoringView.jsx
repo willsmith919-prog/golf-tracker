@@ -7,6 +7,7 @@ import RoundCompleteModal from './RoundCompleteModal';
 import ScoringHeader from './ScoringHeader';
 import HoleCard from './HoleCard';
 import Scorecard from './Scorecard';
+import LiveLeaderboard from './LiveLeaderboard';
 
 // ============================================================
 // UNIFIED SCORING VIEW
@@ -267,6 +268,7 @@ export default function ScoringView({
   const [confirmingMulligan, setConfirmingMulligan] = useState(false);
   const [showCustomScore, setShowCustomScore] = useState(false);
   const [showRoundComplete, setShowRoundComplete] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
 
   const savedTrackStats = !isSolo && !isTeamFormat
     ? (currentEvent?.players?.[selectedTeam]?.trackStats || false)
@@ -768,15 +770,40 @@ export default function ScoringView({
           <button onClick={handleBack} className="text-white hover:text-[#c8d6e5]">
             ← {isSolo ? 'Back' : 'Back to Lobby'}
           </button>
-          {isSolo && (
-            <button
-              onClick={endRound}
-              className="text-white hover:text-[#c8d6e5] font-semibold"
-            >
-              End Round
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {!isSolo && (
+              <button
+                onClick={() => setShowLeaderboard(prev => !prev)}
+                className={`text-sm font-semibold px-3 py-1.5 rounded-lg transition-colors ${
+                  showLeaderboard
+                    ? 'bg-white text-[#00285e]'
+                    : 'text-white/80 hover:text-white'
+                }`}
+              >
+                🏆 {showLeaderboard ? 'Back to Scores' : 'Leaderboard'}
+              </button>
+            )}
+            {isSolo && (
+              <button onClick={endRound} className="text-white hover:text-[#c8d6e5] font-semibold">
+                End Round
+              </button>
+            )}
+          </div>
         </div>
+
+        {/* Leaderboard toggle — event mode only */}
+        {!isSolo && showLeaderboard && (
+          <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6">
+            <LiveLeaderboard
+              currentEvent={currentEvent}
+              currentUser={currentUser}
+              setSelectedTeam={setSelectedTeam}
+              setView={setView}
+            />
+          </div>
+        )}
+
+        {!showLeaderboard && <>
 
         {/* Scored-by notification — shown to the player when someone else entered their scores */}
         {scoredByLog && !scoredByDismissed && (
@@ -989,6 +1016,8 @@ export default function ScoringView({
           startingHandicap={startingHandicap}
           isStartingScore={isStartingScore}
         />
+
+        </>}
 
       </div>
     </div>
