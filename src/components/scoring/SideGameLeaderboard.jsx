@@ -55,11 +55,10 @@ export default function SideGameLeaderboard({
 
   // Color per hole status
   const holeBg = (hole) => {
-    if (hole.status === 'won') return 'bg-green-100 border-green-300';
+    if (hole.status === 'won' || hole.status === 'leading') return 'bg-green-100 border-green-300';
     if (hole.status === 'tied') {
-      return sideGame.carryover
-        ? 'bg-amber-50 border-amber-300'
-        : 'bg-gray-100 border-gray-300';
+      if (hole.provisional) return 'bg-amber-50 border-amber-200';
+      return sideGame.carryover ? 'bg-amber-50 border-amber-300' : 'bg-gray-100 border-gray-300';
     }
     return 'bg-gray-50 border-gray-200';
   };
@@ -240,8 +239,9 @@ export default function SideGameLeaderboard({
                   const par = coursePars[hole.holeNum - 1];
                   const winnerName = hole.winnerId ? getDisplayName(hole.winnerId) : null;
                   const isExpanded = expandedHole === hole.holeNum;
-                  const isCancelledTie = hole.status === 'tied' && !sideGame.carryover;
-                  const isCarryTie = hole.status === 'tied' && sideGame.carryover;
+                  const isCarryTie = hole.status === 'tied' && !hole.provisional && sideGame.carryover;
+                  const isCancelledTie = hole.status === 'tied' && !hole.provisional && !sideGame.carryover;
+                  const isProvisionalTie = hole.status === 'tied' && hole.provisional;
 
                   return (
                     <button
@@ -270,8 +270,20 @@ export default function SideGameLeaderboard({
                             </div>
                           </>
                         )}
+                        {hole.status === 'leading' && (
+                          <>
+                            <div className="text-green-600 font-bold text-xs">✓</div>
+                            <div className="text-xs font-semibold text-gray-700 leading-tight truncate w-full px-0.5">
+                              {winnerName?.split(' ')[0]}
+                            </div>
+                            <div className="text-xs text-green-700 font-bold">
+                              +{hole.pot * sideGame.pointsPerSkin}
+                            </div>
+                          </>
+                        )}
                         {isCarryTie && <div className="text-amber-600 font-bold text-sm leading-none">→</div>}
                         {isCancelledTie && <div className="text-gray-400 font-bold text-xs leading-none">✕</div>}
+                        {isProvisionalTie && <div className="text-amber-500 font-bold text-sm leading-none">=</div>}
                         {hole.status === 'pending' && <div className="text-gray-300 text-xs">–</div>}
                       </div>
                     </button>
@@ -306,19 +318,29 @@ export default function SideGameLeaderboard({
                       Skin won · +{expandedResult.pot * sideGame.pointsPerSkin} pts
                     </span>
                   )}
-                  {expandedResult.status === 'tied' && sideGame.carryover && (
+                  {expandedResult.status === 'leading' && (
+                    <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
+                      Skin won · +{expandedResult.pot * sideGame.pointsPerSkin} pts
+                    </span>
+                  )}
+                  {expandedResult.status === 'tied' && !expandedResult.provisional && sideGame.carryover && (
                     <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
                       Tied → carries over
                     </span>
                   )}
-                  {expandedResult.status === 'tied' && !sideGame.carryover && (
+                  {expandedResult.status === 'tied' && !expandedResult.provisional && !sideGame.carryover && (
                     <span className="text-xs font-semibold text-gray-600 bg-gray-100 px-2 py-0.5 rounded-full">
                       Tied · cancelled
                     </span>
                   )}
+                  {expandedResult.status === 'tied' && expandedResult.provisional && (
+                    <span className="text-xs font-semibold text-amber-700 bg-amber-100 px-2 py-0.5 rounded-full">
+                      Tied so far · others still playing
+                    </span>
+                  )}
                   {expandedResult.status === 'pending' && (
-                    <span className="text-xs font-semibold text-amber-600 bg-amber-50 px-2 py-0.5 rounded-full">
-                      In progress
+                    <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                      Waiting for 2+ scores
                     </span>
                   )}
                   <button

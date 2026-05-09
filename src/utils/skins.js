@@ -49,27 +49,44 @@ export function calculateSkins(entries, holeOrder, coursePars, sideGame) {
 
     const scoredIds = Object.keys(holeScores);
 
-    if (scoredIds.length < activeEntries.length) {
-      // Not everyone has a score yet — hole is still in play
-      holeResults.push({ holeNum, status: 'pending', pot, scores: holeScores, winnerId: null });
+    // Need at least 2 scores to make a meaningful comparison
+    if (scoredIds.length < 2) {
+      holeResults.push({ holeNum, status: 'pending', provisional: false, pot, scores: holeScores, winnerId: null });
+      pot = 1;
       continue;
     }
 
+    const allScored = scoredIds.length === activeEntries.length;
     const minScore = Math.min(...scoredIds.map(id => holeScores[id]));
-    const winners = scoredIds.filter(id => holeScores[id] === minScore);
+    const leaders = scoredIds.filter(id => holeScores[id] === minScore);
 
-    if (winners.length === 1) {
-      const winnerId = winners[0];
+    if (leaders.length === 1) {
+      // One clear leader among those who have scored — award provisionally
+      const winnerId = leaders[0];
       const pointsWon = pot * pointsPerSkin;
       pointTotals[winnerId] = (pointTotals[winnerId] || 0) + pointsWon;
       skinCounts[winnerId] = (skinCounts[winnerId] || 0) + pot;
-      holeResults.push({ holeNum, status: 'won', pot, scores: holeScores, winnerId });
+
+      if (allScored) {
+        holeResults.push({ holeNum, status: 'won', provisional: false, pot, scores: holeScores, winnerId });
+      } else {
+        // 'leading' = provisional win, still others to play
+        holeResults.push({ holeNum, status: 'leading', provisional: true, pot, scores: holeScores, winnerId });
+      }
       pot = 1;
     } else {
-      holeResults.push({ holeNum, status: 'tied', pot, scores: holeScores, winnerId: null });
-      if (carryover) {
-        pot++;
+      // Tied among those who have scored
+      if (allScored) {
+        // Final tie — commit to carryover decision
+        holeResults.push({ holeNum, status: 'tied', provisional: false, pot, scores: holeScores, winnerId: null });
+        if (carryover) {
+          pot++;
+        } else {
+          pot = 1;
+        }
       } else {
+        // Provisional tie — others yet to score, don't carry yet
+        holeResults.push({ holeNum, status: 'tied', provisional: true, pot, scores: holeScores, winnerId: null });
         pot = 1;
       }
     }
