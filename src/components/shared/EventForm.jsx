@@ -328,7 +328,8 @@ export default function EventForm({
             sideGameType: fmt.sideGameType || 'skins',
             variant: fmt.sideGameVariant || 'gross',
             pointsPerSkin: 1,
-            carryover: fmt.sideGameCarryover !== false
+            carryover: fmt.sideGameCarryover !== false,
+            splitTies: fmt.sideGameSplitTies === true
           };
           setFormData({ ...formData, sideGames: [...(formData.sideGames || []), newSg] });
         };
@@ -409,6 +410,16 @@ export default function EventForm({
                         {sg.carryover ? 'Yes — tied holes carry to next' : 'No — tied holes cancelled'}
                       </span>
                     </div>
+
+                    {/* Split ties — set on the format, shown as label */}
+                    {sg.splitTies && (
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">Split ties:</span>
+                        <span className="text-xs font-semibold text-gray-700">
+                          2-way ties split the skin points evenly
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>

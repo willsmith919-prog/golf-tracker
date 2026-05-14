@@ -47,6 +47,17 @@ export default function JoinEventConfirm({
         const isJoined = eventData.players && eventData.players[currentUser.uid];
         setAlreadyJoined(!!isJoined);
 
+        // Block joining a full 1v1 match play event
+        if (!isJoined) {
+          const isMatchPlay1v1 = eventData.meta?.scoringMethod === 'match_play' && (eventData.meta?.teamSize || 1) === 1;
+          const playerCount = Object.keys(eventData.players || {}).length;
+          if (isMatchPlay1v1 && playerCount >= 2) {
+            setError('This match is full — it\'s a 1v1 event and both spots are taken.');
+            setLoading(false);
+            return;
+          }
+        }
+
       } catch (err) {
         console.error('Error fetching event:', err);
         setError('Something went wrong. Please try again.');

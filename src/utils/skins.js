@@ -21,6 +21,7 @@ export function calculateSkins(entries, holeOrder, coursePars, sideGame) {
   const variant = sideGame.variant || 'gross';
   const pointsPerSkin = Number(sideGame.pointsPerSkin) || 1;
   const carryover = sideGame.carryover !== false;
+  const splitTies = sideGame.splitTies === true;
 
   const activeEntries = entries.filter(e => e.holesPlayed > 0);
   if (activeEntries.length < 2) {
@@ -76,8 +77,21 @@ export function calculateSkins(entries, holeOrder, coursePars, sideGame) {
       pot = 1;
     } else {
       // Tied among those who have scored
-      if (allScored) {
-        // Final tie — commit to carryover decision
+      if (leaders.length === 2 && splitTies) {
+        // Exactly 2 players tied with split enabled — award half the pot to each
+        const halfPot = pot / 2;
+        const halfPoints = halfPot * pointsPerSkin;
+        for (const id of leaders) {
+          pointTotals[id] = (pointTotals[id] || 0) + halfPoints;
+          skinCounts[id] = (skinCounts[id] || 0) + halfPot;
+        }
+        holeResults.push({
+          holeNum, status: 'split', provisional: !allScored,
+          pot, scores: holeScores, winnerId: null, splitWinnerIds: leaders
+        });
+        pot = 1;
+      } else if (allScored) {
+        // Final tie (3+ players, or 2-way with split disabled) — commit to carryover decision
         holeResults.push({ holeNum, status: 'tied', provisional: false, pot, scores: holeScores, winnerId: null });
         if (carryover) {
           pot++;

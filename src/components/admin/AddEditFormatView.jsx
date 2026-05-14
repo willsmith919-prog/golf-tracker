@@ -44,6 +44,9 @@ export default function AddEditFormatView({
   if (formatForm.sideGameCarryover === undefined) {
     formatForm.sideGameCarryover = true;
   }
+  if (formatForm.sideGameSplitTies === undefined) {
+    formatForm.sideGameSplitTies = false;
+  }
 
   if (!formatForm.mulliganConversion) {
     formatForm.mulliganConversion = { strokesPerMulligan: 3, maxMulligans: 10, perHoleLimit: 1 };
@@ -140,7 +143,10 @@ export default function AddEditFormatView({
         const carry = formatForm.sideGameCarryover
           ? ' Tied holes carry the skin to the next hole.'
           : ' Tied holes are cancelled — no carryover.';
-        return base + carry;
+        const split = formatForm.sideGameSplitTies
+          ? ' If exactly 2 players tie, they split the skin points evenly.'
+          : '';
+        return base + carry + split;
       }
       return 'A side game played alongside the main event.';
     }
@@ -335,6 +341,9 @@ export default function AddEditFormatView({
           : null,
         sideGameCarryover: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'skins'
           ? (formatForm.sideGameCarryover !== false)
+          : null,
+        sideGameSplitTies: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'skins'
+          ? (formatForm.sideGameSplitTies === true)
           : null,
 
         // Main-game fields — populated for main_game and both; null for pure side games
@@ -581,6 +590,13 @@ export default function AddEditFormatView({
                       checked={formatForm.sideGameCarryover}
                       onChange={(e) => setFormatForm({ ...formatForm, sideGameCarryover: e.target.checked })}
                     />
+
+                    <ToggleSwitch
+                      label="Split 2-way ties"
+                      description="If exactly 2 players tie for best score, they each get half the skin points. 3-way+ ties still follow the carry/cancel rule above."
+                      checked={formatForm.sideGameSplitTies}
+                      onChange={(e) => setFormatForm({ ...formatForm, sideGameSplitTies: e.target.checked })}
+                    />
                   </div>
                 )}
               </div>
@@ -672,6 +688,14 @@ export default function AddEditFormatView({
                 </p>
               )}
             </div>
+
+            {/* 1v1 match play callout */}
+            {formatForm.scoringMethod === 'match_play' && formatForm.teamSize === 1 && (
+              <div className="bg-amber-50 border-2 border-amber-200 rounded-xl p-4 text-sm text-amber-900">
+                <div className="font-semibold mb-1">⚔️ 1v1 Match Play</div>
+                <p className="text-xs">Events using this format are capped at 2 players — a third person trying to join will be blocked. The leaderboard shows hole-by-hole match status instead of a stroke play standings table.</p>
+              </div>
+            )}
 
             {/* ========== SECTION 3: SCORING METHOD ========== */}
             <div>

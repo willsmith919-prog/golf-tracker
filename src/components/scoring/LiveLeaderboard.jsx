@@ -7,6 +7,7 @@ import ThroughHoleFilter from './ThroughHoleFilter';
 import LeaderboardRow from './LeaderboardRow';
 import LeagueStandingsPanel from './LeagueStandingsPanel';
 import SideGameLeaderboard from './SideGameLeaderboard';
+import MatchPlayLeaderboard from './MatchPlayLeaderboard';
 
 // ============================================================
 // LIVE LEADERBOARD COMPONENT
@@ -48,7 +49,6 @@ export default function LiveLeaderboard({
 
   const sideGames = meta.sideGames || [];
   const hasSideGames = sideGames.length > 0;
-  const hasTabs = hasSideGames || isLeagueEvent;
 
   const isTeamFormat = teamSize > 1 && Object.keys(teams).length > 0;
   const applicationMethod = meta.handicap?.applicationMethod || 'strokes';
@@ -61,6 +61,10 @@ export default function LiveLeaderboard({
   const leagueId = meta.leagueId || null;
   const seasonId = meta.seasonId || null;
   const isLeagueEvent = !!(leaguePoints && leagueId && seasonId);
+  const hasTabs = hasSideGames || isLeagueEvent;
+
+  // ==================== MATCH PLAY DETECTION ====================
+  const isMatchPlay1v1 = meta.scoringMethod === 'match_play' && (meta.teamSize || 1) === 1;
 
   // ==================== HOLE ORDER ====================
   const holeOrder = buildHoleOrder(numHoles, startingHole);
@@ -272,10 +276,63 @@ export default function LiveLeaderboard({
   const primarySort = display.primarySort || 'gross';
   const sortOpts = { scoringMethod: meta.scoringMethod, primarySort, handicapEnabled };
   const isStableford = meta.scoringMethod === 'stableford';
-  sortLeaderboard(leaderboardData, sortOpts);
-  assignPositions(leaderboardData, sortOpts);
+  if (!isMatchPlay1v1) {
+    sortLeaderboard(leaderboardData, sortOpts);
+    assignPositions(leaderboardData, sortOpts);
+  }
 
   // ==================== RENDER ====================
+
+  // Match play 1v1 — render dedicated view (no normal leaderboard needed)
+  if (isMatchPlay1v1) {
+    return (
+      <div>
+        {hasTabs && (
+          <div className="flex bg-gray-100 rounded-xl p-1 mb-5 overflow-x-auto gap-1">
+            <button
+              onClick={() => setActiveGameTab('main')}
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                activeGameTab === 'main' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+              }`}
+            >
+              ⚔️ Match Play
+            </button>
+            {sideGames.map((sg) => (
+              <button key={sg.id} onClick={() => setActiveGameTab(sg.id)}
+                className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                  activeGameTab === sg.id ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                }`}
+              >
+                🎯 {sg.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {activeGameTab === 'main' && (
+          <MatchPlayLeaderboard
+            leaderboardData={leaderboardData}
+            currentEvent={currentEvent}
+            currentUser={currentUser}
+          />
+        )}
+
+        {hasSideGames && activeGameTab !== 'main' && (() => {
+          const sg = sideGames.find(s => s.id === activeGameTab);
+          if (!sg) return null;
+          return (
+            <SideGameLeaderboard
+              sideGame={sg}
+              leaderboardEntries={leaderboardData}
+              currentEvent={currentEvent}
+              currentUser={currentUser}
+              players={players}
+            />
+          );
+        })()}
+      </div>
+    );
+  }
 
   if (leaderboardData.length === 0) {
     return (

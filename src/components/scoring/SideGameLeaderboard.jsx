@@ -56,6 +56,7 @@ export default function SideGameLeaderboard({
   // Color per hole status
   const holeBg = (hole) => {
     if (hole.status === 'won' || hole.status === 'leading') return 'bg-green-100 border-green-300';
+    if (hole.status === 'split') return hole.provisional ? 'bg-purple-50 border-purple-200' : 'bg-purple-100 border-purple-300';
     if (hole.status === 'tied') {
       if (hole.provisional) return 'bg-amber-50 border-amber-200';
       return sideGame.carryover ? 'bg-amber-50 border-amber-300' : 'bg-gray-100 border-gray-300';
@@ -88,6 +89,7 @@ export default function SideGameLeaderboard({
       const strokes = isNet ? (entry.strokeHoles?.[holeNum] || 0) : 0;
       const hasScore = computedScore != null;
       const isWinner = expandedResult.winnerId === entry.id;
+      const isSplit = expandedResult.status === 'split' && hasScore && (expandedResult.splitWinnerIds || []).includes(entry.id);
       const isTied = expandedResult.status === 'tied' && hasScore && computedScore === minScore;
 
       return {
@@ -99,6 +101,7 @@ export default function SideGameLeaderboard({
         strokes,
         hasScore,
         isWinner,
+        isSplit,
         isTied
       };
     }).sort((a, b) => {
@@ -134,6 +137,7 @@ export default function SideGameLeaderboard({
           <p className="text-xs text-gray-500 mt-0.5">
             {isNet ? 'Net' : 'Gross'} · {sideGame.pointsPerSkin} pt{sideGame.pointsPerSkin !== 1 ? 's' : ''}/skin
             {sideGame.carryover ? ' · Carries over' : ' · No carryover'}
+            {sideGame.splitTies ? ' · Splits 2-way' : ''}
           </p>
         </div>
         <button
@@ -151,7 +155,10 @@ export default function SideGameLeaderboard({
           <div className="font-semibold mb-2">How Skins Work</div>
           <ul className="space-y-1 text-xs">
             <li>• The player with the lowest {isNet ? 'net' : 'gross'} score on each hole wins the skin.</li>
-            <li>• If two or more players tie, {sideGame.carryover ? 'the skin carries to the next hole' : 'nobody wins that hole'}.</li>
+            {sideGame.splitTies
+              ? <li>• If exactly 2 players tie, they split the points. If 3+ tie, {sideGame.carryover ? 'the skin carries to the next hole' : 'nobody wins that hole'}.</li>
+              : <li>• If two or more players tie, {sideGame.carryover ? 'the skin carries to the next hole' : 'nobody wins that hole'}.</li>
+            }
             <li>• Each skin is worth {sideGame.pointsPerSkin} point{sideGame.pointsPerSkin !== 1 ? 's' : ''}.</li>
             {sideGame.carryover && <li>• Carried skins stack — a 3-hole carry is worth {3 * sideGame.pointsPerSkin} points.</li>}
           </ul>
@@ -239,6 +246,7 @@ export default function SideGameLeaderboard({
                   const par = coursePars[hole.holeNum - 1];
                   const winnerName = hole.winnerId ? getDisplayName(hole.winnerId) : null;
                   const isExpanded = expandedHole === hole.holeNum;
+                  const isSplitHole = hole.status === 'split';
                   const isCarryTie = hole.status === 'tied' && !hole.provisional && sideGame.carryover;
                   const isCancelledTie = hole.status === 'tied' && !hole.provisional && !sideGame.carryover;
                   const isProvisionalTie = hole.status === 'tied' && hole.provisional;
@@ -281,6 +289,16 @@ export default function SideGameLeaderboard({
                             </div>
                           </>
                         )}
+                        {isSplitHole && (
+                          <>
+                            <div className="text-purple-600 font-bold text-xs leading-none">½</div>
+                            {(hole.splitWinnerIds || []).map(id => (
+                              <div key={id} className="text-xs font-semibold text-gray-700 leading-tight truncate w-full px-0.5" style={{ fontSize: '0.6rem' }}>
+                                {getDisplayName(id)?.split(' ')[0]}
+                              </div>
+                            ))}
+                          </>
+                        )}
                         {isCarryTie && <div className="text-amber-600 font-bold text-sm leading-none">→</div>}
                         {isCancelledTie && <div className="text-gray-400 font-bold text-xs leading-none">✕</div>}
                         {isProvisionalTie && <div className="text-amber-500 font-bold text-sm leading-none">=</div>}
@@ -313,14 +331,14 @@ export default function SideGameLeaderboard({
                   )}
                 </div>
                 <div className="flex items-center gap-2">
-                  {expandedResult.status === 'won' && (
+                  {(expandedResult.status === 'won' || expandedResult.status === 'leading') && (
                     <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
                       Skin won · +{expandedResult.pot * sideGame.pointsPerSkin} pts
                     </span>
                   )}
-                  {expandedResult.status === 'leading' && (
-                    <span className="text-xs font-semibold text-green-700 bg-green-100 px-2 py-0.5 rounded-full">
-                      Skin won · +{expandedResult.pot * sideGame.pointsPerSkin} pts
+                  {expandedResult.status === 'split' && (
+                    <span className="text-xs font-semibold text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                      Split · +{expandedResult.pot * sideGame.pointsPerSkin / 2} pts each
                     </span>
                   )}
                   {expandedResult.status === 'tied' && !expandedResult.provisional && sideGame.carryover && (
@@ -359,19 +377,21 @@ export default function SideGameLeaderboard({
                     className={`flex items-center justify-between px-3 py-2 rounded-lg text-sm ${
                       row.isWinner
                         ? 'bg-green-50 border border-green-200'
-                        : row.isTied
-                          ? 'bg-amber-50 border border-amber-200'
-                          : row.hasScore
-                            ? 'bg-gray-50 border border-gray-100'
-                            : 'bg-gray-50/50 border border-gray-100 opacity-50'
+                        : row.isSplit
+                          ? 'bg-purple-50 border border-purple-200'
+                          : row.isTied
+                            ? 'bg-amber-50 border border-amber-200'
+                            : row.hasScore
+                              ? 'bg-gray-50 border border-gray-100'
+                              : 'bg-gray-50/50 border border-gray-100 opacity-50'
                     }`}
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       {/* Outcome icon */}
                       <span className="flex-shrink-0 text-xs w-4">
-                        {row.isWinner ? '✓' : row.isTied ? '=' : row.hasScore ? '' : '–'}
+                        {row.isWinner ? '✓' : row.isSplit ? '½' : row.isTied ? '=' : row.hasScore ? '' : '–'}
                       </span>
-                      <span className={`font-semibold truncate ${row.isWinner ? 'text-green-800' : row.isTied ? 'text-amber-800' : 'text-gray-700'}`}>
+                      <span className={`font-semibold truncate ${row.isWinner ? 'text-green-800' : row.isSplit ? 'text-purple-800' : row.isTied ? 'text-amber-800' : 'text-gray-700'}`}>
                         {row.displayName}
                         {row.isMyEntry && (
                           <span className="ml-1.5 text-xs bg-[#00285e] text-white px-1.5 py-0.5 rounded-full font-medium">You</span>
@@ -387,7 +407,7 @@ export default function SideGameLeaderboard({
                             <span className="text-green-600 ml-1">(-{row.strokes})</span>
                           </span>
                         ) : (
-                          <span className={`font-bold text-sm ${row.isWinner ? 'text-green-800' : row.isTied ? 'text-amber-800' : 'text-gray-700'}`}>
+                          <span className={`font-bold text-sm ${row.isWinner ? 'text-green-800' : row.isSplit ? 'text-purple-800' : row.isTied ? 'text-amber-800' : 'text-gray-700'}`}>
                             {row.computedScore}
                           </span>
                         )
@@ -406,6 +426,12 @@ export default function SideGameLeaderboard({
             <span className="flex items-center gap-1">
               <span className="inline-block w-3 h-3 rounded bg-green-100 border border-green-300"></span> Skin won
             </span>
+            {sideGame.splitTies && (
+              <span className="flex items-center gap-1">
+                <span className="inline-block w-3 h-3 rounded bg-purple-100 border border-purple-300"></span>
+                2-way split
+              </span>
+            )}
             {sideGame.carryover ? (
               <span className="flex items-center gap-1">
                 <span className="inline-block w-3 h-3 rounded bg-amber-50 border border-amber-300"></span>
