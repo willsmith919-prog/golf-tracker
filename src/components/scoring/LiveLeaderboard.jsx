@@ -297,15 +297,19 @@ export default function LiveLeaderboard({
             >
               ⚔️ Match Play
             </button>
-            {sideGames.map((sg) => (
-              <button key={sg.id} onClick={() => setActiveGameTab(sg.id)}
-                className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                  activeGameTab === sg.id ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-                }`}
-              >
-                🎯 {sg.name}
-              </button>
-            ))}
+            {sideGames.map((sg) => {
+              const shortName = sg.name.replace(/\s*\([^)]*\)/g, '').trim() || sg.name;
+              return (
+                <button key={sg.id} onClick={() => setActiveGameTab(sg.id)}
+                  title={sg.name}
+                  className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    activeGameTab === sg.id ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                  }`}
+                >
+                  🎯 {shortName}
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -360,19 +364,23 @@ export default function LiveLeaderboard({
           >
             🏌️ Main Game
           </button>
-          {sideGames.map((sg) => (
-            <button
-              key={sg.id}
-              onClick={() => setActiveGameTab(sg.id)}
-              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
-                activeGameTab === sg.id
-                  ? 'bg-white text-gray-900 shadow-md'
-                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
-              }`}
-            >
-              🎯 {sg.name}
-            </button>
-          ))}
+          {sideGames.map((sg) => {
+            const shortName = sg.name.replace(/\s*\([^)]*\)/g, '').trim() || sg.name;
+            return (
+              <button
+                key={sg.id}
+                onClick={() => setActiveGameTab(sg.id)}
+                title={sg.name}
+                className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                  activeGameTab === sg.id
+                    ? 'bg-white text-gray-900 shadow-md'
+                    : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                }`}
+              >
+                🎯 {shortName}
+              </button>
+            );
+          })}
           {isLeagueEvent && (
             <button
               onClick={() => setActiveGameTab('standings')}

@@ -113,7 +113,6 @@ export default function SideGameLeaderboard({
     });
   })();
 
-  // Split holeResults into rows of 9 to avoid horizontal scrolling on mobile
   const holeChunks = [];
   for (let i = 0; i < holeResults.length; i += 9) {
     holeChunks.push(holeResults.slice(i, i + 9));
@@ -131,10 +130,10 @@ export default function SideGameLeaderboard({
   return (
     <div>
       {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <h2 className="text-xl font-bold text-gray-900">{sideGame.name}</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
+      <div className="flex items-start justify-between mb-4 gap-2">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-lg font-bold text-gray-900 leading-tight break-words">{sideGame.name}</h2>
+          <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
             {isNet ? 'Net' : 'Gross'} · {sideGame.pointsPerSkin} pt{sideGame.pointsPerSkin !== 1 ? 's' : ''}/skin
             {sideGame.carryover ? ' · Carries over' : ' · No carryover'}
             {sideGame.splitTies ? ' · Splits 2-way' : ''}
@@ -234,81 +233,83 @@ export default function SideGameLeaderboard({
 
       {showHoleGrid && (
         <>
-          {/* Hole grid — split into rows of 9 to fit mobile without side-scrolling */}
-          <div className="space-y-1.5 mb-2">
-            {holeChunks.map((chunk, chunkIndex) => (
-              <div
-                key={chunkIndex}
-                className="grid gap-1"
-                style={{ gridTemplateColumns: `repeat(${chunk.length}, 1fr)` }}
-              >
-                {chunk.map((hole) => {
-                  const par = coursePars[hole.holeNum - 1];
-                  const winnerName = hole.winnerId ? getDisplayName(hole.winnerId) : null;
-                  const isExpanded = expandedHole === hole.holeNum;
-                  const isSplitHole = hole.status === 'split';
-                  const isCarryTie = hole.status === 'tied' && !hole.provisional && sideGame.carryover;
-                  const isCancelledTie = hole.status === 'tied' && !hole.provisional && !sideGame.carryover;
-                  const isProvisionalTie = hole.status === 'tied' && hole.provisional;
+          {/* Hole grid — 9+9 rows, horizontally scrollable */}
+          <div className="overflow-x-auto -mx-1 px-1 pb-1 mb-1">
+            <div className="space-y-1.5" style={{ minWidth: 'max-content' }}>
+              {holeChunks.map((chunk, chunkIndex) => (
+                <div
+                  key={chunkIndex}
+                  className="grid gap-1"
+                  style={{ gridTemplateColumns: `repeat(${chunk.length}, 48px)` }}
+                >
+                  {chunk.map((hole) => {
+                const par = coursePars[hole.holeNum - 1];
+                const winnerName = hole.winnerId ? getDisplayName(hole.winnerId) : null;
+                const isExpanded = expandedHole === hole.holeNum;
+                const isSplitHole = hole.status === 'split';
+                const isCarryTie = hole.status === 'tied' && !hole.provisional && sideGame.carryover;
+                const isCancelledTie = hole.status === 'tied' && !hole.provisional && !sideGame.carryover;
+                const isProvisionalTie = hole.status === 'tied' && hole.provisional;
 
-                  return (
-                    <button
-                      key={hole.holeNum}
-                      onClick={() => setExpandedHole(isExpanded ? null : hole.holeNum)}
-                      className={`flex flex-col items-center rounded-lg border-2 py-1.5 px-0.5 w-full transition-all ${holeBg(hole)} ${
-                        isExpanded ? 'ring-2 ring-[#00285e] ring-offset-1' : 'hover:opacity-80'
-                      }`}
-                    >
-                      <div className="text-xs font-bold text-gray-500">{hole.holeNum}</div>
-                      {par && <div className="text-xs text-gray-400">P{par}</div>}
+                return (
+                  <button
+                    key={hole.holeNum}
+                    onClick={() => setExpandedHole(isExpanded ? null : hole.holeNum)}
+                    className={`flex flex-col items-center rounded-lg border-2 py-1.5 px-0.5 w-full transition-all ${holeBg(hole)} ${
+                      isExpanded ? 'ring-2 ring-[#00285e] ring-offset-1' : 'hover:opacity-80'
+                    }`}
+                  >
+                    <div className="text-xs font-bold text-gray-500">{hole.holeNum}</div>
+                    {par && <div className="text-xs text-gray-400">P{par}</div>}
 
-                      {hole.pot > 1 && hole.status !== 'won' && (
-                        <div className="text-xs font-bold text-amber-600">×{hole.pot}</div>
+                    {hole.pot > 1 && hole.status !== 'won' && (
+                      <div className="text-xs font-bold text-amber-600">×{hole.pot}</div>
+                    )}
+
+                    <div className="mt-0.5 text-center w-full">
+                      {hole.status === 'won' && (
+                        <>
+                          <div className="text-green-600 font-bold text-xs">✓</div>
+                          <div className="text-xs font-semibold text-gray-700 leading-tight break-words px-0.5">
+                            {winnerName?.split(' ')[0]}
+                          </div>
+                          <div className="text-xs text-green-700 font-bold">
+                            +{hole.pot * sideGame.pointsPerSkin}
+                          </div>
+                        </>
                       )}
-
-                      <div className="mt-0.5 text-center">
-                        {hole.status === 'won' && (
-                          <>
-                            <div className="text-green-600 font-bold text-xs">✓</div>
-                            <div className="text-xs font-semibold text-gray-700 leading-tight truncate w-full px-0.5">
-                              {winnerName?.split(' ')[0]}
+                      {hole.status === 'leading' && (
+                        <>
+                          <div className="text-green-600 font-bold text-xs">✓</div>
+                          <div className="text-xs font-semibold text-gray-700 leading-tight break-words px-0.5">
+                            {winnerName?.split(' ')[0]}
+                          </div>
+                          <div className="text-xs text-green-700 font-bold">
+                            +{hole.pot * sideGame.pointsPerSkin}
+                          </div>
+                        </>
+                      )}
+                      {isSplitHole && (
+                        <>
+                          <div className="text-purple-600 font-bold text-xs leading-none">½</div>
+                          {(hole.splitWinnerIds || []).map(id => (
+                            <div key={id} className="font-semibold text-gray-700 leading-tight break-words px-0.5" style={{ fontSize: '0.6rem' }}>
+                              {getDisplayName(id)?.split(' ')[0]}
                             </div>
-                            <div className="text-xs text-green-700 font-bold">
-                              +{hole.pot * sideGame.pointsPerSkin}
-                            </div>
-                          </>
-                        )}
-                        {hole.status === 'leading' && (
-                          <>
-                            <div className="text-green-600 font-bold text-xs">✓</div>
-                            <div className="text-xs font-semibold text-gray-700 leading-tight truncate w-full px-0.5">
-                              {winnerName?.split(' ')[0]}
-                            </div>
-                            <div className="text-xs text-green-700 font-bold">
-                              +{hole.pot * sideGame.pointsPerSkin}
-                            </div>
-                          </>
-                        )}
-                        {isSplitHole && (
-                          <>
-                            <div className="text-purple-600 font-bold text-xs leading-none">½</div>
-                            {(hole.splitWinnerIds || []).map(id => (
-                              <div key={id} className="text-xs font-semibold text-gray-700 leading-tight truncate w-full px-0.5" style={{ fontSize: '0.6rem' }}>
-                                {getDisplayName(id)?.split(' ')[0]}
-                              </div>
-                            ))}
-                          </>
-                        )}
-                        {isCarryTie && <div className="text-amber-600 font-bold text-sm leading-none">→</div>}
-                        {isCancelledTie && <div className="text-gray-400 font-bold text-xs leading-none">✕</div>}
-                        {isProvisionalTie && <div className="text-amber-500 font-bold text-sm leading-none">=</div>}
-                        {hole.status === 'pending' && <div className="text-gray-300 text-xs">–</div>}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
+                          ))}
+                        </>
+                      )}
+                      {isCarryTie && <div className="text-amber-600 font-bold text-sm leading-none">→</div>}
+                      {isCancelledTie && <div className="text-gray-400 font-bold text-xs leading-none">✕</div>}
+                      {isProvisionalTie && <div className="text-amber-500 font-bold text-sm leading-none">=</div>}
+                      {hole.status === 'pending' && <div className="text-gray-300 text-xs">–</div>}
+                    </div>
+                  </button>
+                );
+                  })}
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Hole drill-down panel */}
