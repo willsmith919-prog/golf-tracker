@@ -397,7 +397,10 @@ export default function EventForm({
                         value={sg.pointsPerSkin}
                         onChange={(e) => {
                           const val = e.target.value.replace(/[^0-9]/g, '');
-                          updateSideGame(sg.id, { pointsPerSkin: val === '' ? 1 : parseInt(val) });
+                          updateSideGame(sg.id, { pointsPerSkin: val === '' ? '' : parseInt(val) });
+                        }}
+                        onBlur={() => {
+                          if (!sg.pointsPerSkin) updateSideGame(sg.id, { pointsPerSkin: 1 });
                         }}
                         className="w-16 px-2 py-2 text-center rounded-lg border-2 border-gray-200 focus:border-amber-400 focus:outline-none text-sm"
                       />

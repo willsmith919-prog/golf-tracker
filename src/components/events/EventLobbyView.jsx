@@ -39,6 +39,22 @@ export default function EventLobbyView({
     return () => off(eventRef, 'value', listener);
   }, [currentEvent?.id]);
 
+  // Sync current user's profile handicap into the event — only while the event is open (lobby).
+  // Once scoring starts (active/completed) the handicap is locked; only a host/admin can change it manually.
+  useEffect(() => {
+    if (!currentUser?.uid || !currentEvent?.id) return;
+    if (eventStatus !== 'open') return;
+    const profileHandicapRef = ref(database, `users/${currentUser.uid}/profile/handicap`);
+    const unsub = onValue(profileHandicapRef, (snap) => {
+      const profileHandicap = snap.val() ?? null;
+      const eventHandicap = currentEvent?.players?.[currentUser.uid]?.handicap ?? null;
+      if (profileHandicap !== eventHandicap) {
+        set(ref(database, `events/${currentEvent.id}/players/${currentUser.uid}/handicap`), profileHandicap);
+      }
+    });
+    return unsub;
+  }, [currentUser?.uid, currentEvent?.id, eventStatus]);
+
   // Auto-switch to leaderboard when event goes active
   useEffect(() => {
     if (eventStatus === 'active' && activeTab !== 'leaderboard') {

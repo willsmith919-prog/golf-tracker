@@ -20,7 +20,7 @@ export function sortLeaderboard(entries, { scoringMethod, primarySort, handicapE
     if (b.holesPlayed === 0 && a.holesPlayed > 0) return -1;
     if (a.holesPlayed === 0 && b.holesPlayed === 0) return 0;
 
-    if (scoringMethod === 'stableford') {
+    if (scoringMethod === 'stableford' && primarySort !== 'gross') {
       return b.stablefordPoints - a.stablefordPoints;
     }
 
@@ -58,7 +58,7 @@ export function assignPositions(entries, { primarySort, handicapEnabled, scoring
       const prev = entries[index - 1];
       const sameScore = primarySort === 'net' && handicapEnabled
         ? entry.netToPar === prev.netToPar
-        : scoringMethod === 'stableford'
+        : scoringMethod === 'stableford' && primarySort !== 'gross'
           ? entry.stablefordPoints === prev.stablefordPoints
           : entry.toPar === prev.toPar;
 

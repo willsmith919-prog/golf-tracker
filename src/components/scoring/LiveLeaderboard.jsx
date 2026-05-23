@@ -37,6 +37,7 @@ export default function LiveLeaderboard({
   const [throughHole, setThroughHole] = useState(null);
   const [showAllHoles, setShowAllHoles] = useState(false);
   const [activeGameTab, setActiveGameTab] = useState('main');
+  const [sortOverride, setSortOverride] = useState(null);
 
   const meta = currentEvent?.meta || {};
   const players = currentEvent?.players || {};
@@ -273,7 +274,8 @@ export default function LiveLeaderboard({
   }
 
   // ==================== SORTING ====================
-  const primarySort = display.primarySort || 'gross';
+  const metaPrimarySort = display.primarySort || 'gross';
+  const primarySort = sortOverride ?? metaPrimarySort;
   const sortOpts = { scoringMethod: meta.scoringMethod, primarySort, handicapEnabled };
   const isStableford = meta.scoringMethod === 'stableford';
   if (!isMatchPlay1v1) {
@@ -437,15 +439,33 @@ export default function LiveLeaderboard({
         <h2 className="text-xl font-bold text-gray-900">Live Leaderboard</h2>
         <div className="flex items-center gap-2">
           {handicapEnabled && (
-            <span className="text-xs bg-[#f0f4ff] text-[#00285e] px-2 py-1 rounded-full">
-              {primarySort === 'net' ? 'Net' : 'Gross'}
-            </span>
+            sortOverride === 'gross' ? (
+              <button
+                onClick={() => setSortOverride(null)}
+                className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full hover:bg-gray-200 transition-colors font-medium"
+              >
+                ← Net Scores
+              </button>
+            ) : (
+              <button
+                onClick={() => setSortOverride('gross')}
+                className="text-xs bg-[#f0f4ff] text-[#00285e] px-2 py-1 rounded-full hover:bg-[#00285e] hover:text-white transition-colors font-medium"
+              >
+                View Gross Scores
+              </button>
+            )
           )}
           <span className="text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded-full">
             {meta.formatName || meta.format}
           </span>
         </div>
       </div>
+
+      {sortOverride === 'gross' && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4 text-xs text-amber-700 text-center">
+          Reference only · gross scores don't affect standings or league points
+        </div>
+      )}
 
       <ThroughHoleFilter
         throughHole={throughHole}
@@ -460,16 +480,18 @@ export default function LiveLeaderboard({
 
       {/* Column headers */}
       <div className="grid grid-cols-[32px_1fr_60px_60px_48px] items-center px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
-        <div>#</div>
+        <div>{sortOverride !== 'gross' && '#'}</div>
         <div>{isTeamFormat ? 'Team' : 'Player'}</div>
         <div className="text-center">
-          {isStableford ? 'Pts' : display.showRelativeToPar !== false ? (primarySort === 'net' && handicapEnabled ? 'Net' : 'To Par') : 'Score'}
+          {isStableford && primarySort !== 'gross' ? 'Pts' : display.showRelativeToPar !== false ? (primarySort === 'net' && handicapEnabled ? 'Net' : 'To Par') : 'Score'}
         </div>
-        {!isStableford && handicapEnabled && display.showNet !== false && display.showGross !== false && (
+        {sortOverride === 'gross' && isStableford ? (
+          <div className="text-center text-gray-400">Strokes</div>
+        ) : (!isStableford && handicapEnabled && display.showNet !== false && display.showGross !== false) ? (
           <div className="text-center text-gray-400">
             {primarySort === 'net' ? 'Gross' : 'Net'}
           </div>
-        )}
+        ) : null}
         <div className="text-center">Thru</div>
       </div>
 
@@ -486,6 +508,7 @@ export default function LiveLeaderboard({
             display={display}
             primarySort={primarySort}
             isStableford={isStableford}
+            hideRank={sortOverride === 'gross'}
             numHoles={numHoles}
             throughHole={throughHole}
             holeOrder={holeOrder}

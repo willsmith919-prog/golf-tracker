@@ -25,6 +25,7 @@ export default function LeaderboardRow({
   display,
   primarySort,
   isStableford,
+  hideRank,
   numHoles,
   throughHole,
   holeOrder,
@@ -55,7 +56,7 @@ export default function LeaderboardRow({
           entry.position === 3 ? 'text-amber-600' :
           'text-gray-500'
         }`}>
-          {entry.position}
+          {hideRank ? '' : entry.position}
         </div>
 
         {/* Name + subtitle + progress */}
@@ -104,27 +105,35 @@ export default function LeaderboardRow({
         {/* Primary score */}
         <div className="text-center">
           {entry.holesPlayed > 0 ? (
-            <span className={`text-lg font-bold ${
-              isStableford
-                ? 'text-[#00285e]'
-                : display.showRelativeToPar !== false
-                  ? getToParColor(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
-                  : 'text-gray-900'
-            }`}>
-              {isStableford
-                ? entry.stablefordPoints
-                : display.showRelativeToPar !== false
-                  ? formatToPar(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
-                  : (primarySort === 'net' && handicapEnabled ? entry.netTotal : entry.totalScore)
-              }
-            </span>
+            <>
+              <span className={`text-lg font-bold ${
+                isStableford && primarySort !== 'gross'
+                  ? 'text-[#00285e]'
+                  : display.showRelativeToPar !== false
+                    ? getToParColor(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
+                    : 'text-gray-900'
+              }`}>
+                {isStableford && primarySort !== 'gross'
+                  ? entry.stablefordPoints
+                  : display.showRelativeToPar !== false
+                    ? formatToPar(primarySort === 'net' && handicapEnabled ? entry.netToPar : entry.toPar)
+                    : (primarySort === 'net' && handicapEnabled ? entry.netTotal : entry.totalScore)
+                }
+              </span>
+            </>
           ) : (
             <span className="text-gray-400">-</span>
           )}
         </div>
 
-        {/* Secondary score (only if handicap shows both, and not stableford) */}
-        {!isStableford && handicapEnabled && display.showNet !== false && display.showGross !== false && (
+        {/* Secondary score: strokes in gross view, or net/gross for non-stableford handicap events */}
+        {hideRank && isStableford ? (
+          <div className="text-center">
+            <span className="text-sm text-gray-500 opacity-70">
+              {entry.holesPlayed > 0 ? entry.totalScore : '-'}
+            </span>
+          </div>
+        ) : (!isStableford && handicapEnabled && display.showNet !== false && display.showGross !== false) ? (
           <div className="text-center">
             {entry.holesPlayed > 0 ? (
               <span className={`text-sm ${
@@ -139,7 +148,7 @@ export default function LeaderboardRow({
               <span className="text-gray-400">-</span>
             )}
           </div>
-        )}
+        ) : null}
 
         {/* Thru */}
         <div className="text-center text-sm text-gray-600">
