@@ -42,6 +42,9 @@ export default function HoleCard({
   onCustomScoreDecrease,
   onCustomScoreIncrease,
   onCustomScoreConfirm,
+  statMode = 'traditional',
+  currentPractical = { teeShot: null, secondShot: null, approach: null, wedgePlay: null, threePutt: null, putt610: null, putt36: null },
+  onPracticalSelect = () => {},
   onFairwaySelect,
   onPuttsSelect,
   onConfirmAndNext,
@@ -233,8 +236,8 @@ export default function HoleCard({
           )}
         </div>
 
-        {/* Fairway Entry — solo or when tracking stats */}
-        {useStatFlow && currentScore && !showCustomScore && currentPar >= 4 && (
+        {/* Traditional: Fairway Entry */}
+        {useStatFlow && statMode === 'traditional' && currentScore && !showCustomScore && currentPar >= 4 && (
           <div className="mb-4">
             <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Fairway</h3>
             <div className="grid grid-cols-4 gap-3">
@@ -253,8 +256,8 @@ export default function HoleCard({
           </div>
         )}
 
-        {/* Putts Entry — solo or when tracking stats */}
-        {useStatFlow && currentScore && !showCustomScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
+        {/* Traditional: Putts Entry */}
+        {useStatFlow && statMode === 'traditional' && currentScore && !showCustomScore && (currentPar < 4 || currentFairway) && puttOptions.length > 0 && (
           <div className="mb-4">
             <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Putts</h3>
             <div className="grid grid-cols-4 gap-3">
@@ -276,6 +279,142 @@ export default function HoleCard({
           </div>
         )}
 
+        {/* Practical: Sequential stat entry */}
+        {useStatFlow && statMode === 'practical' && currentScore && !showCustomScore && (
+          <>
+            {/* Tee Shot — par 4/5 only */}
+            {currentPar >= 4 && (
+              <div className="mb-4">
+                <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Tee Shot</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => onPracticalSelect('teeShot', 'hit')}
+                    className={`${currentPractical.teeShot === 'hit' ? 'ring-4 ring-[#003a7d]' : ''} bg-green-500 hover:bg-green-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✓</button>
+                  <button
+                    onClick={() => onPracticalSelect('teeShot', 'miss')}
+                    className={`${currentPractical.teeShot === 'miss' ? 'ring-4 ring-[#003a7d]' : ''} bg-red-500 hover:bg-red-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✗</button>
+                </div>
+              </div>
+            )}
+
+            {/* Second Shot — par 5 only, after tee shot */}
+            {currentPar === 5 && currentPractical.teeShot !== null && (
+              <div className="mb-4">
+                <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Second Shot</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => onPracticalSelect('secondShot', 'hit')}
+                    className={`${currentPractical.secondShot === 'hit' ? 'ring-4 ring-[#003a7d]' : ''} bg-green-500 hover:bg-green-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✓</button>
+                  <button
+                    onClick={() => onPracticalSelect('secondShot', 'miss')}
+                    className={`${currentPractical.secondShot === 'miss' ? 'ring-4 ring-[#003a7d]' : ''} bg-red-500 hover:bg-red-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✗</button>
+                </div>
+              </div>
+            )}
+
+            {/* Approach — all pars, unlocks after tee/second shot or immediately for par 3 */}
+            {(currentPar < 4 || (currentPar === 4 && currentPractical.teeShot !== null) || (currentPar === 5 && currentPractical.secondShot !== null)) && (
+              <div className="mb-4">
+                <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Approach</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => onPracticalSelect('approach', 'hit')}
+                    className={`${currentPractical.approach === 'hit' ? 'ring-4 ring-[#003a7d]' : ''} bg-green-500 hover:bg-green-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✓</button>
+                  <button
+                    onClick={() => onPracticalSelect('approach', 'miss')}
+                    className={`${currentPractical.approach === 'miss' ? 'ring-4 ring-[#003a7d]' : ''} bg-red-500 hover:bg-red-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✗</button>
+                </div>
+              </div>
+            )}
+
+            {/* Wedge Play — after approach */}
+            {currentPractical.approach !== null && (
+              <div className="mb-4">
+                <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Wedge Play</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => onPracticalSelect('wedgePlay', 'hit')}
+                    className={`${currentPractical.wedgePlay === 'hit' ? 'ring-4 ring-[#003a7d]' : ''} bg-green-500 hover:bg-green-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✓</button>
+                  <button
+                    onClick={() => onPracticalSelect('wedgePlay', 'miss')}
+                    className={`${currentPractical.wedgePlay === 'miss' ? 'ring-4 ring-[#003a7d]' : ''} bg-red-500 hover:bg-red-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✗</button>
+                  <button
+                    onClick={() => onPracticalSelect('wedgePlay', 'na')}
+                    className={`${currentPractical.wedgePlay === 'na' ? 'ring-4 ring-[#003a7d]' : ''} bg-gray-400 hover:bg-gray-500 text-white py-6 rounded-xl font-semibold text-sm shadow-lg transition-all`}
+                  >N/A</button>
+                </div>
+              </div>
+            )}
+
+            {/* 3 Putt — after wedge play */}
+            {currentPractical.wedgePlay !== null && (
+              <div className="mb-4">
+                <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">3 Putt?</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => onPracticalSelect('threePutt', false)}
+                    className={`${currentPractical.threePutt === false ? 'ring-4 ring-[#003a7d]' : ''} bg-green-500 hover:bg-green-600 text-white py-6 rounded-xl font-bold text-xl shadow-lg transition-all`}
+                  >No</button>
+                  <button
+                    onClick={() => onPracticalSelect('threePutt', true)}
+                    className={`${currentPractical.threePutt === true ? 'ring-4 ring-[#003a7d]' : ''} bg-red-500 hover:bg-red-600 text-white py-6 rounded-xl font-bold text-xl shadow-lg transition-all`}
+                  >Yes</button>
+                </div>
+              </div>
+            )}
+
+            {/* Putt 6–10 ft — after 3 putt */}
+            {currentPractical.threePutt !== null && (
+              <div className="mb-4">
+                <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Putt 6–10 ft</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => onPracticalSelect('putt610', 'hit')}
+                    className={`${currentPractical.putt610 === 'hit' ? 'ring-4 ring-[#003a7d]' : ''} bg-green-500 hover:bg-green-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✓</button>
+                  <button
+                    onClick={() => onPracticalSelect('putt610', 'miss')}
+                    className={`${currentPractical.putt610 === 'miss' ? 'ring-4 ring-[#003a7d]' : ''} bg-red-500 hover:bg-red-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✗</button>
+                  <button
+                    onClick={() => onPracticalSelect('putt610', 'na')}
+                    className={`${currentPractical.putt610 === 'na' ? 'ring-4 ring-[#003a7d]' : ''} bg-gray-400 hover:bg-gray-500 text-white py-6 rounded-xl font-semibold text-sm shadow-lg transition-all`}
+                  >N/A</button>
+                </div>
+              </div>
+            )}
+
+            {/* Putt 3–6 ft — only if 6–10 ft was missed or N/A (a make there means no 3–6 footer) */}
+            {currentPractical.putt610 !== null && currentPractical.putt610 !== 'hit' && (
+              <div className="mb-4">
+                <h3 className="text-center text-sm font-semibold text-gray-700 mb-3">Putt 3–6 ft</h3>
+                <div className="grid grid-cols-3 gap-3">
+                  <button
+                    onClick={() => onPracticalSelect('putt36', 'hit')}
+                    className={`${currentPractical.putt36 === 'hit' ? 'ring-4 ring-[#003a7d]' : ''} bg-green-500 hover:bg-green-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✓</button>
+                  <button
+                    onClick={() => onPracticalSelect('putt36', 'miss')}
+                    className={`${currentPractical.putt36 === 'miss' ? 'ring-4 ring-[#003a7d]' : ''} bg-red-500 hover:bg-red-600 text-white py-6 rounded-xl font-bold text-2xl shadow-lg transition-all`}
+                  >✗</button>
+                  <button
+                    onClick={() => onPracticalSelect('putt36', 'na')}
+                    className={`${currentPractical.putt36 === 'na' ? 'ring-4 ring-[#003a7d]' : ''} bg-gray-400 hover:bg-gray-500 text-white py-6 rounded-xl font-semibold text-sm shadow-lg transition-all`}
+                  >N/A</button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
+
         {/* Save & Next / Clear Confirmation Bar */}
         {currentScore && !showCustomScore && (
           <div className="mb-4 bg-[#f0f4ff] border-2 border-[#dce8f5] rounded-xl p-4">
@@ -285,12 +424,14 @@ export default function HoleCard({
               </div>
               <div className="text-2xl font-bold text-gray-900">
                 {currentScore} ({currentScore < currentPar ? currentScore - currentPar : currentScore === currentPar ? 'E' : '+' + (currentScore - currentPar)})
-                {useStatFlow && currentFairway && ` · ${currentFairway === 'hit' ? 'FW' : currentFairway.charAt(0).toUpperCase() + currentFairway.slice(1)}`}
-                {useStatFlow && currentPutts !== null && ` · ${currentPutts}P`}
+                {useStatFlow && statMode === 'traditional' && currentFairway && ` · ${currentFairway === 'hit' ? 'FW' : currentFairway.charAt(0).toUpperCase() + currentFairway.slice(1)}`}
+                {useStatFlow && statMode === 'traditional' && currentPutts !== null && ` · ${currentPutts}P`}
               </div>
               {!isReadyToSave && useStatFlow && (
                 <div className="text-xs text-amber-600 mt-1">
-                  {currentPar >= 4 && !currentFairway ? 'Select fairway →' : 'Select putts →'}
+                  {statMode === 'practical'
+                    ? 'Complete all stats above →'
+                    : currentPar >= 4 && !currentFairway ? 'Select fairway →' : 'Select putts →'}
                 </div>
               )}
             </div>

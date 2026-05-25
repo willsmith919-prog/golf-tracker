@@ -275,6 +275,16 @@ export default function ScoringView({
     : false;
   const [trackStats, setTrackStats] = useState(savedTrackStats);
 
+  const savedStatMode = isSolo
+    ? (currentSoloRound?.statMode || 'traditional')
+    : !isTeamFormat
+      ? (currentEvent?.players?.[selectedTeam]?.statMode || 'traditional')
+      : 'traditional';
+  const [statMode, setStatMode] = useState(savedStatMode);
+
+  const emptyPractical = { teeShot: null, secondShot: null, approach: null, wedgePlay: null, threePutt: null, putt610: null, putt36: null };
+  const [currentPractical, setCurrentPractical] = useState(emptyPractical);
+
   // Handler for the Track Stats toggle — saves preference to Firebase
   const handleTrackStatsToggle = async () => {
     const newValue = !trackStats;
@@ -290,6 +300,29 @@ export default function ScoringView({
         console.error('Error saving trackStats preference:', err);
       }
     }
+  };
+
+  const handleStatModeChange = async (mode) => {
+    setStatMode(mode);
+    if (isSolo) {
+      try {
+        const updatedRound = { ...currentSoloRound, statMode: mode };
+        setCurrentSoloRound(updatedRound);
+        await set(ref(database, `soloRounds/${currentSoloRound.id}/statMode`), mode);
+      } catch (err) {
+        console.error('Error saving statMode:', err);
+      }
+    } else if (!isTeamFormat && currentEvent?.id && selectedTeam) {
+      try {
+        await set(ref(database, `events/${currentEvent.id}/players/${selectedTeam}/statMode`), mode);
+      } catch (err) {
+        console.error('Error saving statMode:', err);
+      }
+    }
+  };
+
+  const handlePracticalStatSelect = (field, value) => {
+    setCurrentPractical(prev => ({ ...prev, [field]: value }));
   };
 
   // ==================== HOLE DATA ACCESS ====================
@@ -320,11 +353,21 @@ export default function ScoringView({
       setCurrentFairway(holeData.fairway);
       setCurrentPutts(holeData.putts);
       setNotes(holeData.notes || '');
+      setCurrentPractical({
+        teeShot: holeData.practical?.teeShot ?? null,
+        secondShot: holeData.practical?.secondShot ?? null,
+        approach: holeData.practical?.approach ?? null,
+        wedgePlay: holeData.practical?.wedgePlay ?? null,
+        threePutt: holeData.practical?.threePutt ?? null,
+        putt610: holeData.practical?.putt610 ?? null,
+        putt36: holeData.practical?.putt36 ?? null,
+      });
     } else {
       setCurrentScore(null);
       setCurrentFairway(null);
       setCurrentPutts(null);
       setNotes('');
+      setCurrentPractical({ teeShot: null, secondShot: null, approach: null, wedgePlay: null, threePutt: null, putt610: null, putt36: null });
     }
     setConfirmingMulligan(false);
     setShowCustomScore(false);
@@ -421,6 +464,34 @@ export default function ScoringView({
     };
   };
 
+  const calculatePracticalStats = (justSavedHole, justSavedPractical) => {
+    let teeShotHits = 0, teeShotAttempts = 0;
+    let approachHits = 0, approachAttempts = 0;
+    let threePutts = 0;
+    let holesPlayed = 0;
+
+    for (const holeNum of holeOrder) {
+      const hole = holeNum === justSavedHole
+        ? { score: true, practical: justSavedPractical }
+        : getHoleData(holeNum);
+      if (!hole?.score || !hole?.practical) continue;
+      holesPlayed++;
+      const practical = hole.practical;
+      const par = coursePars[holeNum - 1];
+      if (par >= 4 && practical.teeShot != null) {
+        teeShotAttempts++;
+        if (practical.teeShot === 'hit') teeShotHits++;
+      }
+      if (practical.approach != null) {
+        approachAttempts++;
+        if (practical.approach === 'hit') approachHits++;
+      }
+      if (practical.threePutt === true) threePutts++;
+    }
+
+    return { teeShotHits, teeShotAttempts, approachHits, approachAttempts, threePutts, holesPlayed };
+  };
+
   // ==================== HANDLERS ====================
 
   const useStatFlow = isSolo || trackStats;
@@ -462,6 +533,16 @@ export default function ScoringView({
   const isReadyToSave = (() => {
     if (!currentScore) return false;
     if (!useStatFlow) return true;
+    if (statMode === 'practical') {
+      if (currentPar >= 4 && currentPractical.teeShot === null) return false;
+      if (currentPar === 5 && currentPractical.secondShot === null) return false;
+      if (currentPractical.approach === null) return false;
+      if (currentPractical.wedgePlay === null) return false;
+      if (currentPractical.threePutt === null) return false;
+      if (currentPractical.putt610 === null) return false;
+      if (currentPractical.putt610 !== 'hit' && currentPractical.putt36 === null) return false;
+      return true;
+    }
     if (currentPar === 3 && currentScore === 1) return true;
     if (currentPar >= 4 && !currentFairway) return false;
     const opts = getPuttOptions(currentPar, currentScore);
@@ -472,24 +553,30 @@ export default function ScoringView({
   const handleConfirmAndNext = () => {
     if (!isReadyToSave) return;
 
+    if (statMode === 'practical' && useStatFlow) {
+      saveHoleData(currentScore, null, null, currentPractical);
+      return;
+    }
+
     const finalPutts = useStatFlow
       ? (currentPar === 3 && currentScore === 1 ? 1 : currentPutts)
       : null;
     const finalFairway = useStatFlow ? currentFairway : null;
 
-    saveHoleData(currentScore, finalFairway, finalPutts);
+    saveHoleData(currentScore, finalFairway, finalPutts, null);
   };
 
   const handleClearScore = () => {
     setCurrentScore(null);
     setCurrentFairway(null);
     setCurrentPutts(null);
+    setCurrentPractical({ teeShot: null, secondShot: null, approach: null, wedgePlay: null, threePutt: null, putt610: null, putt36: null });
     setShowCustomScore(false);
   };
 
   // ==================== SAVE ====================
 
-  const saveHoleData = async (score, fairway, putts) => {
+  const saveHoleData = async (score, fairway, putts, practical) => {
     if (!score || score < 1 || score > 15) {
       setFeedback('Please enter a valid score');
       setTimeout(() => setFeedback(''), 2000);
@@ -510,8 +597,16 @@ export default function ScoringView({
       holeEntry.scoredBy = currentUser.uid;
     }
 
+    if (practical && useStatFlow && statMode === 'practical') {
+      const cleanPractical = {};
+      Object.entries(practical).forEach(([k, v]) => {
+        if (v !== null && v !== undefined) cleanPractical[k] = v;
+      });
+      if (Object.keys(cleanPractical).length > 0) holeEntry.practical = cleanPractical;
+    }
+
     Object.keys(holeEntry).forEach(key => {
-      if (holeEntry[key] === null || holeEntry[key] === undefined) {
+      if (key !== 'practical' && (holeEntry[key] === null || holeEntry[key] === undefined)) {
         delete holeEntry[key];
       }
     });
@@ -522,6 +617,9 @@ export default function ScoringView({
         updatedRound.holes[currentHole] = holeEntry;
         const stats = calculateStats(currentHole, holeEntry);
         updatedRound.stats = stats;
+        if (statMode === 'practical' && practical && useStatFlow) {
+          updatedRound.practicalStats = calculatePracticalStats(currentHole, practical);
+        }
 
         await set(ref(database, `soloRounds/${updatedRound.id}`), updatedRound);
         await set(ref(database, `users/${user.uid}/soloRounds/${updatedRound.id}`), {
@@ -561,6 +659,10 @@ export default function ScoringView({
           ref(database, `${scoringBasePath}/stats`),
           updatedStats
         );
+        if (statMode === 'practical' && practical && useStatFlow) {
+          const updatedPracticalStats = calculatePracticalStats(currentHole, practical);
+          await set(ref(database, `${scoringBasePath}/practicalStats`), updatedPracticalStats);
+        }
 
         // Update scoredByLog so the player and host can see who entered scores
         if (isScoringForOther && currentUser?.uid) {
@@ -717,6 +819,7 @@ export default function ScoringView({
   // ==================== DISPLAY HELPERS ====================
 
   const stats = calculateStats(null, null);
+  const practicalStats = calculatePracticalStats(null, null);
 
   const strokesOnCurrentHole = strokeHoles[currentHole] || 0;
   const maxHoleScore = (() => {
@@ -945,6 +1048,9 @@ export default function ScoringView({
           mulligansTotal={mulligansTotal}
           trackStats={trackStats}
           onTrackStatsToggle={handleTrackStatsToggle}
+          statMode={statMode}
+          onStatModeChange={handleStatModeChange}
+          practicalStats={practicalStats}
           isScoringForOther={isScoringForOther}
         />
 
@@ -984,6 +1090,9 @@ export default function ScoringView({
           onCustomScoreDecrease={() => setCurrentScore(Math.max(currentPar + 3, currentScore - 1))}
           onCustomScoreIncrease={() => setCurrentScore(Math.min(maxHoleScore ?? 15, currentScore + 1))}
           onCustomScoreConfirm={handleCustomScoreConfirm}
+          statMode={statMode}
+          currentPractical={currentPractical}
+          onPracticalSelect={handlePracticalStatSelect}
           onFairwaySelect={handleFairwaySelect}
           onPuttsSelect={handlePuttsSelect}
           onConfirmAndNext={handleConfirmAndNext}

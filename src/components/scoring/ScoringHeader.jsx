@@ -5,12 +5,15 @@ export default function ScoringHeader({
   scoringDisplayName,
   teamMemberNames,
   stats,
+  practicalStats = null,
   format,
   usesMulligans,
   mulligansRemaining,
   mulligansTotal,
   trackStats,
   onTrackStatsToggle,
+  statMode = 'traditional',
+  onStatModeChange = () => {},
   isScoringForOther = false
 }) {
   const gridCols = (isSolo || trackStats)
@@ -69,7 +72,7 @@ export default function ScoringHeader({
             <div className="text-sm text-gray-600">of {mulligansTotal}</div>
           </div>
         )}
-        {(isSolo || trackStats) && (
+        {(isSolo || trackStats) && statMode === 'traditional' && (
           <>
             <div className="text-center">
               <div className="text-sm text-gray-600">Putts</div>
@@ -99,27 +102,91 @@ export default function ScoringHeader({
             </div>
           </>
         )}
+        {(isSolo || trackStats) && statMode === 'practical' && (
+          <>
+            <div className="text-center">
+              <div className="text-sm text-gray-600">3 Putts</div>
+              <div className={`text-3xl font-bold ${(practicalStats?.threePutts ?? 0) > 0 ? 'text-red-600' : 'text-gray-900'}`}>
+                {practicalStats?.threePutts ?? 0}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm text-gray-600">Approach</div>
+              <div className="text-3xl font-bold text-gray-900">
+                {practicalStats?.approachHits ?? 0}/{practicalStats?.approachAttempts ?? 0}
+              </div>
+              <div className="text-xs text-gray-500">
+                {(practicalStats?.approachAttempts ?? 0) > 0
+                  ? `${((practicalStats.approachHits / practicalStats.approachAttempts) * 100).toFixed(0)}%`
+                  : '0%'}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-sm text-gray-600">Tee Shot</div>
+              <div className="text-3xl font-bold text-gray-900">
+                {practicalStats?.teeShotHits ?? 0}/{practicalStats?.teeShotAttempts ?? 0}
+              </div>
+              <div className="text-xs text-gray-500">
+                {(practicalStats?.teeShotAttempts ?? 0) > 0
+                  ? `${((practicalStats.teeShotHits / practicalStats.teeShotAttempts) * 100).toFixed(0)}%`
+                  : '0%'}
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Track Stats Toggle — event mode only (individual, non-team) */}
-      {!isSolo && !isTeamFormat && (
-        <div className="mt-4 pt-4 border-t border-gray-200 flex items-center justify-between">
-          <div>
-            <div className="text-sm font-semibold text-gray-700">Track Stats</div>
-            <div className="text-xs text-gray-500">Fairways, putts, GIR</div>
-          </div>
-          <button
-            onClick={onTrackStatsToggle}
-            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
-              trackStats ? 'bg-green-500' : 'bg-gray-300'
-            }`}
-          >
-            <span
-              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
-                trackStats ? 'translate-x-6' : 'translate-x-1'
-              }`}
-            />
-          </button>
+      {/* Track Stats section — solo always shows tabs; event individual shows toggle + tabs */}
+      {!isTeamFormat && (
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          {!isSolo && (
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <div className="text-sm font-semibold text-gray-700">Track Stats</div>
+                <div className="text-xs text-gray-500">
+                  {trackStats
+                    ? statMode === 'practical' ? 'Practical metrics' : 'Fairways, putts, GIR'
+                    : 'Off'}
+                </div>
+              </div>
+              <button
+                onClick={onTrackStatsToggle}
+                className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+                  trackStats ? 'bg-green-500' : 'bg-gray-300'
+                }`}
+              >
+                <span
+                  className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                    trackStats ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
+          {(isSolo || trackStats) && (
+            <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
+              <button
+                onClick={() => onStatModeChange('traditional')}
+                className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
+                  statMode === 'traditional'
+                    ? 'bg-white text-[#00285e] shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Traditional
+              </button>
+              <button
+                onClick={() => onStatModeChange('practical')}
+                className={`flex-1 text-sm font-semibold py-2 rounded-lg transition-all ${
+                  statMode === 'practical'
+                    ? 'bg-white text-[#00285e] shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                Practical
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>
