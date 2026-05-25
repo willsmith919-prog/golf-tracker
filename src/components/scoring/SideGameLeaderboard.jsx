@@ -20,13 +20,11 @@ export default function SideGameLeaderboard({
   const holeOrder = buildHoleOrder(numHoles, startingHole);
   const isTeamFormat = (meta.teamSize || 1) > 1;
   const isNet = sideGame.variant === 'net';
+  const isSkins = sideGame.sideGameType === 'skins' || !sideGame.sideGameType;
 
-  const { holeResults, pointTotals, skinCounts } = calculateSkins(
-    leaderboardEntries,
-    holeOrder,
-    coursePars,
-    sideGame
-  );
+  const { holeResults, pointTotals, skinCounts } = isSkins
+    ? calculateSkins(leaderboardEntries, holeOrder, coursePars, sideGame)
+    : { holeResults: [], pointTotals: {}, skinCounts: {} };
 
   const getDisplayName = (id) => {
     const entry = leaderboardEntries.find(e => e.id === id);
@@ -116,6 +114,116 @@ export default function SideGameLeaderboard({
   const holeChunks = [];
   for (let i = 0; i < holeResults.length; i += 9) {
     holeChunks.push(holeResults.slice(i, i + 9));
+  }
+
+  // ==================== STROKE PLAY SIDE GAME RENDER ====================
+  if (sideGame.sideGameType === 'stroke_play') {
+    const isNetVariant = sideGame.variant === 'net';
+
+    const strokePlayEntries = leaderboardEntries
+      .filter(e => e.holesPlayed > 0)
+      .map(e => ({ ...e }))
+      .sort((a, b) => {
+        const aScore = isNetVariant ? a.netToPar : a.toPar;
+        const bScore = isNetVariant ? b.netToPar : b.toPar;
+        return aScore - bScore;
+      });
+
+    // Assign positions (ties share position, next skips)
+    for (let i = 0; i < strokePlayEntries.length; i++) {
+      if (i === 0) {
+        strokePlayEntries[i].position = 1;
+      } else {
+        const prev = isNetVariant ? strokePlayEntries[i - 1].netToPar : strokePlayEntries[i - 1].toPar;
+        const curr = isNetVariant ? strokePlayEntries[i].netToPar : strokePlayEntries[i].toPar;
+        strokePlayEntries[i].position = curr === prev ? strokePlayEntries[i - 1].position : i + 1;
+      }
+    }
+
+    const formatScore = (toPar) => {
+      if (toPar === 0) return 'E';
+      return toPar > 0 ? `+${toPar}` : `${toPar}`;
+    };
+
+    if (strokePlayEntries.length === 0) {
+      return (
+        <div className="text-center py-12">
+          <div className="text-4xl mb-3">🎯</div>
+          <p className="text-gray-500 text-sm">No scores entered yet.</p>
+        </div>
+      );
+    }
+
+    return (
+      <div>
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl font-bold text-gray-900">{sideGame.name}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {isNetVariant ? 'Net' : 'Gross'} Stroke Play
+              {sideGame.competitionMode === 'main_game_exclusion' && ' · Best Of (allocation at end of round)'}
+            </p>
+          </div>
+          <span className="text-xs bg-amber-100 text-amber-800 px-2 py-1 rounded-full font-medium">
+            {isNetVariant ? 'Net' : 'Gross'}
+          </span>
+        </div>
+
+        {/* Column headers */}
+        <div className="grid grid-cols-[32px_1fr_60px_48px] items-center px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+          <div>#</div>
+          <div>Player</div>
+          <div className="text-center">{isNetVariant ? 'Net' : 'To Par'}</div>
+          <div className="text-center">Thru</div>
+        </div>
+
+        <div className="space-y-2">
+          {strokePlayEntries.map((entry) => {
+            const score = isNetVariant ? entry.netToPar : entry.toPar;
+            const scoreLabel = formatScore(score);
+            const isUnder = score < 0;
+            const isOver = score > 0;
+
+            return (
+              <div
+                key={entry.id}
+                className={`grid grid-cols-[32px_1fr_60px_48px] items-center px-3 py-3 rounded-xl border-2 ${
+                  entry.isMyEntry ? 'border-[#00285e] bg-[#f0f4ff]' : 'border-gray-100 bg-white'
+                }`}
+              >
+                <div className="text-sm font-bold text-gray-500">{entry.position}</div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-gray-900 text-sm truncate">
+                    {entry.displayName}
+                    {entry.isMyEntry && (
+                      <span className="ml-1.5 text-xs bg-[#00285e] text-white px-1.5 py-0.5 rounded-full font-medium">You</span>
+                    )}
+                  </div>
+                  {entry.subtitle && (
+                    <div className="text-xs text-gray-400 truncate">{entry.subtitle}</div>
+                  )}
+                </div>
+                <div className={`text-center text-sm font-bold ${isUnder ? 'text-green-700' : isOver ? 'text-red-600' : 'text-gray-700'}`}>
+                  <span className={`inline-block px-2 py-0.5 rounded ${isUnder ? 'bg-green-100' : isOver ? 'bg-red-100' : ''}`}>
+                    {scoreLabel}
+                  </span>
+                </div>
+                <div className="text-center text-sm text-gray-500">
+                  {entry.holesPlayed >= meta.numHoles ? 'F' : entry.holesPlayed}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {sideGame.competitionMode === 'main_game_exclusion' && (
+          <div className="mt-4 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-700 text-center">
+            Points allocation (Main Game vs. this Side Game) resolves at end of round
+          </div>
+        )}
+      </div>
+    );
   }
 
   if (activeEntries.length === 0) {

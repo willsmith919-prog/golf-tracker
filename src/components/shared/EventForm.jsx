@@ -321,15 +321,23 @@ export default function EventForm({
           if (!formatId) return;
           const fmt = sideGameFormats.find(f => f.id === formatId);
           if (!fmt) return;
+          const isSkins = (fmt.sideGameType || 'skins') === 'skins';
           const newSg = {
             id: `sg-${Date.now()}`,
             formatId: fmt.id,
             name: fmt.name,
             sideGameType: fmt.sideGameType || 'skins',
             variant: fmt.sideGameVariant || 'gross',
-            pointsPerSkin: 1,
-            carryover: fmt.sideGameCarryover !== false,
-            splitTies: fmt.sideGameSplitTies === true
+            ...(isSkins ? {
+              pointsPerSkin: 1,
+              carryover: fmt.sideGameCarryover !== false,
+              splitTies: fmt.sideGameSplitTies === true
+            } : {
+              competitionMode: fmt.sideGameCompetitionMode || 'full_field',
+              positions: formData.leaguePoints?.positions
+                ? { ...formData.leaguePoints.positions }
+                : { 1: 0 }
+            })
           };
           setFormData({ ...formData, sideGames: [...(formData.sideGames || []), newSg] });
         };
@@ -423,6 +431,87 @@ export default function EventForm({
                         </span>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {sg.sideGameType === 'stroke_play' && (
+                  <div className="space-y-3">
+                    {/* Variant + mode labels */}
+                    <div className="flex flex-wrap gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">Scoring:</span>
+                        <span className="text-xs font-semibold text-gray-700">
+                          {sg.variant === 'net' ? 'Net' : 'Gross'}
+                        </span>
+                        {sg.variant === 'net' && !handicapEnabled && (
+                          <span className="text-xs text-amber-600">(enable handicap strokes for net to apply)</span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">Mode:</span>
+                        <span className="text-xs font-semibold text-gray-700">
+                          {sg.competitionMode === 'main_game_exclusion' ? 'Main Game Exclusion' : 'Full Field'}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Points by finishing position */}
+                    <div className="bg-gray-50 rounded-lg p-3">
+                      <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Points by Finishing Position</div>
+                      <div className="space-y-2">
+                        {Object.keys(sg.positions || {})
+                          .sort((a, b) => Number(a) - Number(b))
+                          .map((place) => {
+                            const n = Number(place);
+                            const s = ['th', 'st', 'nd', 'rd'];
+                            const v = n % 100;
+                            const ord = n + (s[(v - 20) % 10] || s[v] || s[0]);
+                            return (
+                              <div key={place} className="flex items-center gap-3">
+                                <div className="w-12 text-xs font-medium text-gray-600">{ord}</div>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={(sg.positions || {})[place]}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/[^0-9]/g, '');
+                                    const updated = { ...(sg.positions || {}), [place]: val === '' ? 0 : parseInt(val) };
+                                    updateSideGame(sg.id, { positions: updated });
+                                  }}
+                                  className="w-16 px-2 py-1.5 text-center rounded-lg border-2 border-gray-200 focus:border-amber-400 focus:outline-none text-sm"
+                                />
+                              </div>
+                            );
+                          })}
+                      </div>
+                      <div className="flex gap-3 mt-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const pos = sg.positions || {};
+                            const next = Object.keys(pos).length + 1;
+                            updateSideGame(sg.id, { positions: { ...pos, [next]: 0 } });
+                          }}
+                          className="text-xs text-amber-700 hover:text-amber-900 font-semibold"
+                        >
+                          + Add Position
+                        </button>
+                        {Object.keys(sg.positions || {}).length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const pos = { ...(sg.positions || {}) };
+                              delete pos[Object.keys(pos).length];
+                              updateSideGame(sg.id, { positions: pos });
+                            }}
+                            className="text-xs text-red-500 hover:text-red-700 font-semibold"
+                          >
+                            − Remove Last
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

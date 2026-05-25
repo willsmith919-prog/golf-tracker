@@ -203,6 +203,147 @@ export async function writeStandingsToFirebase(leagueId, seasonId, eventId, play
 }
 
 /**
+ * Allocates league points between a gross Main Game and a net Stroke Play Side Game
+ * using a "Best Of" rule: each player earns points from whichever competition awards
+ * them more. Gross wins ties. Removing a player from one leaderboard causes others
+ * to move up, so this runs iteratively until assignments stabilize.
+ *
+ * @param {Array}  grossLeaderboard  - Entries already sorted/positioned for gross play,
+ *                                     each with { id, holesPlayed, toPar, netToPar, position }
+ * @param {Object} leaguePoints      - Main game's { positions, participationPoints, nonLeagueHandling }
+ * @param {Object} sideGame          - Stroke Play side game: { id, variant, positions }
+ * @param {Object} players           - Event players object (for guest detection)
+ * @param {Object} leagueMembers     - League members object (null = treat all as members)
+ * @returns {Object} { [uid]: { competition: 'gross'|'net', points: N } }
+ */
+export function allocateStrokePlayPoints(grossLeaderboard, leaguePoints, sideGame, players = {}, leagueMembers = null) {
+  const isLeagueMember = (uid) => {
+    if (!uid || uid.startsWith('guest-')) return false;
+    if (!leagueMembers) return true;
+    return !!leagueMembers[uid];
+  };
+
+  const isNet = sideGame.variant === 'net';
+  const participationPoints = leaguePoints.participationPoints || 0;
+  const nonLeagueHandling = leaguePoints.nonLeagueHandling || 'skip';
+
+  // Only players who have scored at least one hole participate
+  const active = grossLeaderboard.filter(e => e.holesPlayed > 0);
+  if (active.length === 0) return {};
+
+  // Sort a subset by gross or net toPar and assign positions with tie sharing
+  const sortAndAssign = (entries, byNet) => {
+    const sorted = [...entries].sort((a, b) => {
+      return byNet ? a.netToPar - b.netToPar : a.toPar - b.toPar;
+    });
+    for (let i = 0; i < sorted.length; i++) {
+      if (i === 0) {
+        sorted[i].position = 1;
+      } else {
+        const prev = byNet ? sorted[i - 1].netToPar : sorted[i - 1].toPar;
+        const curr = byNet ? sorted[i].netToPar : sorted[i].toPar;
+        sorted[i].position = curr === prev ? sorted[i - 1].position : i + 1;
+      }
+    }
+    return sorted;
+  };
+
+  // Points for a given subset on the gross leaderboard (respects nonLeagueHandling)
+  const calcGrossPoints = (group) => {
+    const sorted = sortAndAssign(group, false);
+    const result = {};
+    if (nonLeagueHandling === 'award_around') {
+      let leaguePos = 1;
+      for (const e of sorted) {
+        if (!isLeagueMember(e.id)) continue;
+        const pts = (leaguePoints.positions[String(leaguePos)] || 0) + participationPoints;
+        result[e.id] = pts;
+        leaguePos++;
+      }
+    } else {
+      for (const e of sorted) {
+        if (!isLeagueMember(e.id)) continue;
+        const pts = (leaguePoints.positions[String(e.position)] || 0) + participationPoints;
+        result[e.id] = pts;
+      }
+    }
+    return result;
+  };
+
+  // Points for a given subset on the net stroke play side game ('skip' only — side game has no award_around)
+  const calcNetPoints = (group) => {
+    const sorted = sortAndAssign(group, isNet);
+    const result = {};
+    for (const e of sorted) {
+      if (!isLeagueMember(e.id)) continue;
+      const pts = (sideGame.positions || {})[String(e.position)] || 0;
+      result[e.id] = pts;
+    }
+    return result;
+  };
+
+  // Iterative allocation — repeat until no player wants to switch
+  let assignments = {}; // uid → 'gross' | 'net'
+  // Seed: everyone starts on gross
+  for (const e of active) assignments[e.id] = 'gross';
+
+  for (let iter = 0; iter < 10; iter++) {
+    const grossGroup = active.filter(e => assignments[e.id] === 'gross');
+    const netGroup = active.filter(e => assignments[e.id] === 'net');
+
+    const grossPts = calcGrossPoints(grossGroup);
+    const netPts = calcNetPoints(netGroup);
+
+    // First pass: everyone re-evaluates against BOTH boards (with everyone on them)
+    // using the current assignment context — compare their own points
+    const grossAll = calcGrossPoints(active);
+    const netAll = calcNetPoints(active);
+
+    let changed = false;
+    const newAssignments = {};
+    for (const e of active) {
+      const g = grossAll[e.id] || 0;
+      const n = netAll[e.id] || 0;
+      // Net wins only if strictly greater; gross wins ties
+      newAssignments[e.id] = n > g ? 'net' : 'gross';
+      if (newAssignments[e.id] !== assignments[e.id]) changed = true;
+    }
+    assignments = newAssignments;
+    if (!changed) break;
+
+    // After initial split, re-evaluate within each group
+    const gGroup = active.filter(e => assignments[e.id] === 'gross');
+    const nGroup = active.filter(e => assignments[e.id] === 'net');
+    const gPts = calcGrossPoints(gGroup);
+    const nPts = calcNetPoints(nGroup);
+
+    let changed2 = false;
+    const refined = {};
+    for (const e of active) {
+      const g = gPts[e.id] || 0;
+      const n = nPts[e.id] || 0;
+      refined[e.id] = n > g ? 'net' : 'gross';
+      if (refined[e.id] !== assignments[e.id]) changed2 = true;
+    }
+    assignments = refined;
+    if (!changed2) break;
+  }
+
+  // Final point calculation with stable assignments
+  const grossFinal = calcGrossPoints(active.filter(e => assignments[e.id] === 'gross'));
+  const netFinal = calcNetPoints(active.filter(e => assignments[e.id] === 'net'));
+
+  const result = {};
+  for (const e of active) {
+    if (!isLeagueMember(e.id)) continue;
+    const comp = assignments[e.id];
+    const pts = comp === 'net' ? (netFinal[e.id] || 0) : (grossFinal[e.id] || 0);
+    result[e.id] = { competition: comp, points: pts };
+  }
+  return result;
+}
+
+/**
  * Convenience function: given a full event object, calculates points
  * and writes standings in one call. Used by "End Event" flow.
  *

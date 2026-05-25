@@ -7,7 +7,7 @@ import EventHeader from './EventHeader';
 import PlayersList from './PlayersList';
 import TeamsList from './TeamsList';
 import HostControls from './HostControls';
-import { calculateEventPoints, writeStandingsToFirebase } from '../../utils/leaguePoints';
+import { calculateEventPoints, writeStandingsToFirebase, allocateStrokePlayPoints } from '../../utils/leaguePoints';
 import { sortLeaderboard, assignPositions } from '../../utils/leaderboard';
 import { calculateSkins, buildSkinsEntries } from '../../utils/skins';
 import { buildHoleOrder } from '../../utils/holes';
@@ -147,14 +147,18 @@ export default function EventLobbyView({
         );
         const participationPts = lpMeta.leaguePoints.participationPoints || 0;
 
-        // Skins points per side game
+        // Side game points
         const sideGames = lpMeta.sideGames || [];
-        const skinsEntries = sideGames.length > 0 ? buildSkinsEntries(currentEvent) : [];
+        const skinsSideGames = sideGames.filter(sg => sg.sideGameType === 'skins' || !sg.sideGameType);
+        const strokePlaySideGames = sideGames.filter(sg => sg.sideGameType === 'stroke_play');
+
+        // Skins
+        const skinsEntries = skinsSideGames.length > 0 ? buildSkinsEntries(currentEvent) : [];
         const holeOrder = buildHoleOrder(lpMeta.numHoles || 18, lpMeta.startingHole || 1);
         const coursePars = lpMeta.coursePars || [];
 
         const skinsByPlayer = {}; // { uid: { [sgId]: points } }
-        for (const sg of sideGames) {
+        for (const sg of skinsSideGames) {
           const { pointTotals } = calculateSkins(skinsEntries, holeOrder, coursePars, sg);
           for (const [uid, pts] of Object.entries(pointTotals)) {
             if (!skinsByPlayer[uid]) skinsByPlayer[uid] = {};
@@ -162,26 +166,92 @@ export default function EventLobbyView({
           }
         }
 
-        // Combined total points (main + skins)
-        const combinedPoints = { ...mainGamePoints };
-        for (const [uid, byGame] of Object.entries(skinsByPlayer)) {
-          const skinsTotal = Object.values(byGame).reduce((s, v) => s + v, 0);
-          if (skinsTotal > 0) {
-            combinedPoints[uid] = (combinedPoints[uid] || 0) + skinsTotal;
+        // Stroke Play side games — Full Field (independent, additive)
+        // and Main Game Exclusion (allocation replaces main game points for some players)
+        const strokePlayByPlayer = {}; // { uid: { [sgId]: { competition, points } } }
+        for (const sg of strokePlaySideGames) {
+          if (sg.competitionMode === 'main_game_exclusion') {
+            const allocation = allocateStrokePlayPoints(
+              leaderboard, lpMeta.leaguePoints, sg,
+              currentEvent.players || {}, leagueMembersData
+            );
+            for (const [uid, alloc] of Object.entries(allocation)) {
+              if (!strokePlayByPlayer[uid]) strokePlayByPlayer[uid] = {};
+              strokePlayByPlayer[uid][sg.id] = alloc;
+            }
+          } else {
+            // Full Field: compute net stroke play points and add them independently
+            const sorted = [...leaderboard.filter(e => e.holesPlayed > 0)].sort((a, b) => {
+              return sg.variant === 'net' ? a.netToPar - b.netToPar : a.toPar - b.toPar;
+            });
+            for (let i = 0; i < sorted.length; i++) {
+              if (i === 0) sorted[i]._sgPos = 1;
+              else {
+                const prev = sg.variant === 'net' ? sorted[i - 1].netToPar : sorted[i - 1].toPar;
+                const curr = sg.variant === 'net' ? sorted[i].netToPar : sorted[i].toPar;
+                sorted[i]._sgPos = curr === prev ? sorted[i - 1]._sgPos : i + 1;
+              }
+            }
+            for (const e of sorted) {
+              const pts = (sg.positions || {})[String(e._sgPos)] || 0;
+              if (!strokePlayByPlayer[e.id]) strokePlayByPlayer[e.id] = {};
+              strokePlayByPlayer[e.id][sg.id] = { competition: 'net', points: pts };
+            }
           }
+        }
+
+        // Build combined points
+        // For exclusion side games: the allocation result replaces the player's gross points.
+        // For everyone else, main game points stand and skins/full-field stroke play add on top.
+        const exclusionSideGames = strokePlaySideGames.filter(sg => sg.competitionMode === 'main_game_exclusion');
+        const combinedPoints = {};
+
+        // Collect all UIDs across all point sources
+        const allUids = new Set([
+          ...Object.keys(mainGamePoints),
+          ...Object.keys(skinsByPlayer),
+          ...Object.keys(strokePlayByPlayer)
+        ]);
+
+        for (const uid of allUids) {
+          // Check if this player was allocated away from the main game by any exclusion side game
+          let removedFromMainGame = false;
+          let exclusionPoints = 0;
+          for (const sg of exclusionSideGames) {
+            const alloc = strokePlayByPlayer[uid]?.[sg.id];
+            if (alloc?.competition === 'net') {
+              removedFromMainGame = true;
+              exclusionPoints += alloc.points;
+            }
+          }
+
+          const base = removedFromMainGame ? 0 : (mainGamePoints[uid] || 0);
+          const skinsTotal = Object.values(skinsByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
+          const fullFieldTotal = strokePlaySideGames
+            .filter(sg => sg.competitionMode !== 'main_game_exclusion')
+            .reduce((sum, sg) => sum + (strokePlayByPlayer[uid]?.[sg.id]?.points || 0), 0);
+
+          combinedPoints[uid] = base + skinsTotal + exclusionPoints + fullFieldTotal;
         }
 
         // Build breakdowns for storage
         const breakdowns = {};
-        const allUids = new Set([...Object.keys(combinedPoints), ...Object.keys(skinsByPlayer)]);
         for (const uid of allUids) {
           const mainTotal = mainGamePoints[uid] || 0;
           const skinsTotal = Object.values(skinsByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
           const participation = mainTotal > 0 ? participationPts : 0;
+
+          const strokePlayBreakdown = {};
+          for (const sg of strokePlaySideGames) {
+            const alloc = strokePlayByPlayer[uid]?.[sg.id];
+            if (alloc) strokePlayBreakdown[sg.id] = alloc;
+          }
+
           breakdowns[uid] = {
             mainGame: mainTotal,
             participation,
             skins: skinsByPlayer[uid] || {},
+            strokePlay: strokePlayBreakdown,
             total: combinedPoints[uid] || 0
           };
         }

@@ -49,6 +49,7 @@ export default function LeagueStandingsPanel({
     if (!sideGames.length || !holeOrder.length) return {};
     const result = {}; // { uid: { [sgId]: points } }
     for (const sg of sideGames) {
+      if (sg.sideGameType === 'stroke_play') continue; // allocation happens at event end
       const { pointTotals } = calculateSkins(leaderboardData, holeOrder, coursePars, sg);
       for (const [uid, pts] of Object.entries(pointTotals)) {
         if (!result[uid]) result[uid] = {};
@@ -57,6 +58,10 @@ export default function LeagueStandingsPanel({
     }
     return result;
   };
+
+  const hasExclusionSideGame = sideGames.some(
+    sg => sg.sideGameType === 'stroke_play' && sg.competitionMode === 'main_game_exclusion'
+  );
 
   return (
     <div className={inline ? '' : 'mt-6'}>
@@ -164,6 +169,11 @@ export default function LeagueStandingsPanel({
                 <div className="text-xs text-[#00285e] mb-3 font-medium">
                   If the round ended now, here's how league standings would change:
                 </div>
+                {hasExclusionSideGame && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 text-xs text-amber-700">
+                    Projected points reflect the Main Game only. Net Stroke Play allocation (Best Of) resolves at end of round.
+                  </div>
+                )}
                 <div className="space-y-2">
                   {projectionRows.map((row, index) => {
                     const newRank = index + 1;
@@ -283,7 +293,7 @@ export default function LeagueStandingsPanel({
                         Participation: {leaguePoints.participationPoints}pts
                       </span>
                     )}
-                    {sideGames.map(sg => (
+                    {sideGames.filter(sg => sg.sideGameType !== 'stroke_play').map(sg => (
                       <span key={sg.id} className="text-xs bg-amber-50 text-amber-800 px-2 py-1 rounded-full border border-amber-200">
                         {sg.name}: {sg.pointsPerSkin}pt/skin
                       </span>

@@ -47,6 +47,9 @@ export default function AddEditFormatView({
   if (formatForm.sideGameSplitTies === undefined) {
     formatForm.sideGameSplitTies = false;
   }
+  if (formatForm.sideGameCompetitionMode === undefined) {
+    formatForm.sideGameCompetitionMode = 'full_field';
+  }
 
   if (!formatForm.mulliganConversion) {
     formatForm.mulliganConversion = { strokesPerMulligan: 3, maxMulligans: 10, perHoleLimit: 1 };
@@ -87,6 +90,10 @@ export default function AddEditFormatView({
       if (formatForm.sideGameType === 'skins') {
         const base = formatForm.sideGameVariant === 'net' ? 'Net Skins' : 'Gross Skins';
         return formatForm.sideGameCarryover ? base : `${base} (No Carry)`;
+      }
+      if (formatForm.sideGameType === 'stroke_play') {
+        const base = formatForm.sideGameVariant === 'net' ? 'Net Stroke Play' : 'Gross Stroke Play';
+        return formatForm.sideGameCompetitionMode === 'main_game_exclusion' ? `${base} — Best Of` : base;
       }
       return 'Side Game';
     }
@@ -147,6 +154,15 @@ export default function AddEditFormatView({
           ? ' If exactly 2 players tie, they split the skin points evenly.'
           : '';
         return base + carry + split;
+      }
+      if (formatForm.sideGameType === 'stroke_play') {
+        const scoring = formatForm.sideGameVariant === 'net'
+          ? 'Net scores (after handicap strokes) determine finishing position.'
+          : 'Gross scores determine finishing position.';
+        const mode = formatForm.sideGameCompetitionMode === 'main_game_exclusion'
+          ? ' Each player earns points from whichever competition — Main Game or this Side Game — awards them more.'
+          : ' All players earn side game points independently from the main event.';
+        return scoring + mode;
       }
       return 'A side game played alongside the main event.';
     }
@@ -336,7 +352,7 @@ export default function AddEditFormatView({
         sideGameType: (formatCategory === 'side_game' || formatCategory === 'both')
           ? (formatForm.sideGameType || 'skins')
           : null,
-        sideGameVariant: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'skins'
+        sideGameVariant: (formatCategory === 'side_game' || formatCategory === 'both')
           ? (formatForm.sideGameVariant || 'gross')
           : null,
         sideGameCarryover: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'skins'
@@ -344,6 +360,9 @@ export default function AddEditFormatView({
           : null,
         sideGameSplitTies: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'skins'
           ? (formatForm.sideGameSplitTies === true)
+          : null,
+        sideGameCompetitionMode: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'stroke_play'
+          ? (formatForm.sideGameCompetitionMode || 'full_field')
           : null,
 
         // Main-game fields — populated for main_game and both; null for pure side games
@@ -550,7 +569,64 @@ export default function AddEditFormatView({
                     label="Skins"
                     description="Lowest score wins each hole. Ties carry the skin to the next hole."
                   />
+                  <RadioCard
+                    name="sideGameType"
+                    value="stroke_play"
+                    checked={formatForm.sideGameType === 'stroke_play'}
+                    onChange={() => setFormatForm({ ...formatForm, sideGameType: 'stroke_play' })}
+                    label="Stroke Play"
+                    description="Players ranked by total score. Points awarded by finishing position."
+                  />
                 </div>
+
+                {formatForm.sideGameType === 'stroke_play' && (
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Scoring</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { value: 'gross', label: 'Gross', desc: 'Raw score, no handicap applied' },
+                          { value: 'net', label: 'Net', desc: 'Score after handicap strokes are deducted' }
+                        ].map(opt => (
+                          <label
+                            key={opt.value}
+                            className={`flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-colors ${
+                              formatForm.sideGameVariant === opt.value
+                                ? 'border-[#00285e] bg-[#f0f4ff]'
+                                : 'border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input type="radio" name="sideGameVariant" value={opt.value} checked={formatForm.sideGameVariant === opt.value} onChange={() => setFormatForm({ ...formatForm, sideGameVariant: opt.value })} className="sr-only" />
+                            <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+                            <span className="text-xs text-gray-500 mt-0.5">{opt.desc}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Competition Mode</label>
+                      <div className="space-y-3">
+                        <RadioCard
+                          name="sideGameCompetitionMode"
+                          value="full_field"
+                          checked={formatForm.sideGameCompetitionMode === 'full_field'}
+                          onChange={() => setFormatForm({ ...formatForm, sideGameCompetitionMode: 'full_field' })}
+                          label="Full Field"
+                          description="All players earn side game points independently from the main event."
+                        />
+                        <RadioCard
+                          name="sideGameCompetitionMode"
+                          value="main_game_exclusion"
+                          checked={formatForm.sideGameCompetitionMode === 'main_game_exclusion'}
+                          onChange={() => setFormatForm({ ...formatForm, sideGameCompetitionMode: 'main_game_exclusion' })}
+                          label="Main Game Exclusion"
+                          description="Each player earns points from whichever competition gives them more — Main Game or this Side Game. Resolved at end of round."
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 {formatForm.sideGameType === 'skins' && (
                   <div className="mt-4 space-y-4">
