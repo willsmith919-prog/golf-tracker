@@ -321,17 +321,31 @@ export default function EventForm({
           if (!formatId) return;
           const fmt = sideGameFormats.find(f => f.id === formatId);
           if (!fmt) return;
-          const isSkins = (fmt.sideGameType || 'skins') === 'skins';
+          const sgType = fmt.sideGameType || 'skins';
+          const isSkins = sgType === 'skins';
+          const isVegas = sgType === 'vegas';
+          const isVegas2v2 = isVegas && fmt.sideGameSubType !== 'vegas1v1';
           const newSg = {
             id: `sg-${Date.now()}`,
             formatId: fmt.id,
             name: fmt.name,
-            sideGameType: fmt.sideGameType || 'skins',
+            sideGameType: sgType,
             variant: fmt.sideGameVariant || 'gross',
             ...(isSkins ? {
               pointsPerSkin: 1,
               carryover: fmt.sideGameCarryover !== false,
               splitTies: fmt.sideGameSplitTies === true
+            } : isVegas ? {
+              type: fmt.sideGameSubType || 'vegas2v2',
+              scoringMode: fmt.sideGameVariant || 'gross',
+              ...(isVegas2v2 ? {
+                teams: {
+                  teamA: { name: 'Team A', playerIds: [] },
+                  teamB: { name: 'Team B', playerIds: [] }
+                }
+              } : {
+                players: { playerA: null, playerB: null }
+              })
             } : {
               competitionMode: fmt.sideGameCompetitionMode || 'full_field',
               positions: formData.leaguePoints?.positions
@@ -431,6 +445,56 @@ export default function EventForm({
                         </span>
                       </div>
                     )}
+                  </div>
+                )}
+
+                {sg.sideGameType === 'vegas' && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">Format:</span>
+                        <span className="text-xs font-semibold text-gray-700">
+                          {sg.type === 'vegas1v1' ? 'Vegas 1v1' : 'Vegas 2v2'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">Scoring:</span>
+                        <span className="text-xs font-semibold text-gray-700">
+                          {sg.scoringMode === 'net' ? 'Net' : 'Gross'}
+                        </span>
+                        {sg.scoringMode === 'net' && !handicapEnabled && (
+                          <span className="text-xs text-amber-600">(enable handicap strokes for net to apply)</span>
+                        )}
+                      </div>
+                    </div>
+
+                    {sg.type !== 'vegas1v1' && (
+                      <div className="grid grid-cols-2 gap-3">
+                        {['teamA', 'teamB'].map((key, i) => (
+                          <div key={key}>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">
+                              {i === 0 ? 'Team A name' : 'Team B name'}
+                            </label>
+                            <input
+                              type="text"
+                              value={sg.teams?.[key]?.name || ''}
+                              onChange={(e) => {
+                                const updated = {
+                                  ...sg.teams,
+                                  [key]: { ...(sg.teams?.[key] || {}), name: e.target.value }
+                                };
+                                updateSideGame(sg.id, { teams: updated });
+                              }}
+                              className="w-full px-2 py-1.5 rounded-lg border-2 border-gray-200 focus:border-amber-400 focus:outline-none text-sm"
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <p className="text-xs text-gray-400">
+                      Player assignment happens in the event lobby after players join.
+                    </p>
                   </div>
                 )}
 

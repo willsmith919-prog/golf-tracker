@@ -7,9 +7,11 @@ import EventHeader from './EventHeader';
 import PlayersList from './PlayersList';
 import TeamsList from './TeamsList';
 import HostControls from './HostControls';
+import VegasTeamConfig from './VegasTeamConfig';
 import { calculateEventPoints, writeStandingsToFirebase, allocateStrokePlayPoints } from '../../utils/leaguePoints';
 import { sortLeaderboard, assignPositions } from '../../utils/leaderboard';
 import { calculateSkins, buildSkinsEntries } from '../../utils/skins';
+import { calculateVegasResults, buildVegasEntries } from '../../utils/calculateVegasResults';
 import { buildHoleOrder } from '../../utils/holes';
 
 export default function EventLobbyView({
@@ -128,6 +130,24 @@ export default function EventLobbyView({
   const handleEndEvent = async () => {
     await update(ref(database, `events/${currentEvent.id}/meta`), { status: 'completed' });
     const lpMeta = currentEvent.meta || {};
+    const holeOrder = buildHoleOrder(lpMeta.numHoles || 18, lpMeta.startingHole || 1);
+    const coursePars = lpMeta.coursePars || [];
+    const sideGames = lpMeta.sideGames || [];
+
+    // Vegas results — saved for all events, not just league events
+    const vegasSideGames = sideGames.filter(sg => sg.sideGameType === 'vegas');
+    if (vegasSideGames.length > 0) {
+      try {
+        const vegasEntries = buildVegasEntries(currentEvent);
+        for (const sg of vegasSideGames) {
+          const vegasResults = calculateVegasResults(vegasEntries, holeOrder, coursePars, sg);
+          await set(ref(database, `events/${currentEvent.id}/sideGameResults/vegas/${sg.id}`), vegasResults);
+        }
+      } catch (err) {
+        console.error('Error saving Vegas results:', err);
+      }
+    }
+
     if (lpMeta.leaguePoints && lpMeta.leagueId && lpMeta.seasonId) {
       try {
         const leaderboard = buildSortedLeaderboard();
@@ -148,14 +168,11 @@ export default function EventLobbyView({
         const participationPts = lpMeta.leaguePoints.participationPoints || 0;
 
         // Side game points
-        const sideGames = lpMeta.sideGames || [];
         const skinsSideGames = sideGames.filter(sg => sg.sideGameType === 'skins' || !sg.sideGameType);
         const strokePlaySideGames = sideGames.filter(sg => sg.sideGameType === 'stroke_play');
 
         // Skins
         const skinsEntries = skinsSideGames.length > 0 ? buildSkinsEntries(currentEvent) : [];
-        const holeOrder = buildHoleOrder(lpMeta.numHoles || 18, lpMeta.startingHole || 1);
-        const coursePars = lpMeta.coursePars || [];
 
         const skinsByPlayer = {}; // { uid: { [sgId]: points } }
         for (const sg of skinsSideGames) {
@@ -417,6 +434,15 @@ export default function EventLobbyView({
               players={players}
               setFeedback={setFeedback}
             />
+            {isHost && (currentEvent.meta?.sideGames || []).some(sg => sg.sideGameType === 'vegas' && sg.type !== 'vegas1v1') && (eventStatus === 'open' || eventStatus === 'active') && (
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
+                <VegasTeamConfig
+                  currentEvent={currentEvent}
+                  setFeedback={setFeedback}
+                />
+              </div>
+            )}
+
             {isHost && (
               <HostControls
                 currentEvent={currentEvent}

@@ -7,6 +7,7 @@ import ThroughHoleFilter from './ThroughHoleFilter';
 import LeaderboardRow from './LeaderboardRow';
 import LeagueStandingsPanel from './LeagueStandingsPanel';
 import SideGameLeaderboard from './SideGameLeaderboard';
+import VegasLeaderboard from './VegasLeaderboard';
 import MatchPlayLeaderboard from './MatchPlayLeaderboard';
 
 // ============================================================
@@ -326,6 +327,15 @@ export default function LiveLeaderboard({
         {hasSideGames && activeGameTab !== 'main' && (() => {
           const sg = sideGames.find(s => s.id === activeGameTab);
           if (!sg) return null;
+          if (sg.sideGameType === 'vegas') {
+            return (
+              <VegasLeaderboard
+                sideGame={sg}
+                currentEvent={currentEvent}
+                currentUser={currentUser}
+              />
+            );
+          }
           return (
             <SideGameLeaderboard
               sideGame={sg}
@@ -420,6 +430,15 @@ export default function LiveLeaderboard({
       {hasSideGames && activeGameTab !== 'main' && activeGameTab !== 'standings' && (() => {
         const sg = sideGames.find(s => s.id === activeGameTab);
         if (!sg) return null;
+        if (sg.sideGameType === 'vegas') {
+          return (
+            <VegasLeaderboard
+              sideGame={sg}
+              currentEvent={currentEvent}
+              currentUser={currentUser}
+            />
+          );
+        }
         return (
           <SideGameLeaderboard
             sideGame={sg}

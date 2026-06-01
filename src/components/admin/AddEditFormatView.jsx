@@ -50,6 +50,9 @@ export default function AddEditFormatView({
   if (formatForm.sideGameCompetitionMode === undefined) {
     formatForm.sideGameCompetitionMode = 'full_field';
   }
+  if (formatForm.sideGameSubType === undefined) {
+    formatForm.sideGameSubType = 'vegas2v2';
+  }
 
   if (!formatForm.mulliganConversion) {
     formatForm.mulliganConversion = { strokesPerMulligan: 3, maxMulligans: 10, perHoleLimit: 1 };
@@ -94,6 +97,11 @@ export default function AddEditFormatView({
       if (formatForm.sideGameType === 'stroke_play') {
         const base = formatForm.sideGameVariant === 'net' ? 'Net Stroke Play' : 'Gross Stroke Play';
         return formatForm.sideGameCompetitionMode === 'main_game_exclusion' ? `${base} — Best Of` : base;
+      }
+      if (formatForm.sideGameType === 'vegas') {
+        const sub = formatForm.sideGameSubType === 'vegas1v1' ? '1v1' : '2v2';
+        const scoring = formatForm.sideGameVariant === 'net' ? 'Net' : 'Gross';
+        return `Vegas ${sub} (${scoring})`;
       }
       return 'Side Game';
     }
@@ -163,6 +171,13 @@ export default function AddEditFormatView({
           ? ' Each player earns points from whichever competition — Main Game or this Side Game — awards them more.'
           : ' All players earn side game points independently from the main event.';
         return scoring + mode;
+      }
+      if (formatForm.sideGameType === 'vegas') {
+        const base = formatForm.sideGameSubType === 'vegas1v1'
+          ? 'Two players combine consecutive hole scores into a two-digit number (lower score first). Lowest number wins each pair.'
+          : 'Two teams of two combine their scores into a two-digit number on each hole. Lowest number wins.';
+        const scoring = formatForm.sideGameVariant === 'net' ? ' Handicap strokes applied before combining.' : '';
+        return base + scoring;
       }
       return 'A side game played alongside the main event.';
     }
@@ -363,6 +378,9 @@ export default function AddEditFormatView({
           : null,
         sideGameCompetitionMode: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'stroke_play'
           ? (formatForm.sideGameCompetitionMode || 'full_field')
+          : null,
+        sideGameSubType: (formatCategory === 'side_game' || formatCategory === 'both') && formatForm.sideGameType === 'vegas'
+          ? (formatForm.sideGameSubType || 'vegas2v2')
           : null,
 
         // Main-game fields — populated for main_game and both; null for pure side games
@@ -577,6 +595,14 @@ export default function AddEditFormatView({
                     label="Stroke Play"
                     description="Players ranked by total score. Points awarded by finishing position."
                   />
+                  <RadioCard
+                    name="sideGameType"
+                    value="vegas"
+                    checked={formatForm.sideGameType === 'vegas'}
+                    onChange={() => setFormatForm({ ...formatForm, sideGameType: 'vegas' })}
+                    label="Vegas"
+                    description="Players combine two scores into a two-digit number. Lower number wins each hole or pair."
+                  />
                 </div>
 
                 {formatForm.sideGameType === 'stroke_play' && (
@@ -623,6 +649,55 @@ export default function AddEditFormatView({
                           label="Main Game Exclusion"
                           description="Each player earns points from whichever competition gives them more — Main Game or this Side Game. Resolved at end of round."
                         />
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {formatForm.sideGameType === 'vegas' && (
+                  <div className="mt-4 space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Format</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { value: 'vegas2v2', label: '2v2', desc: 'Two teams of two — combine each team\'s scores on every hole' },
+                          { value: 'vegas1v1', label: '1v1', desc: 'Two players — combine scores on consecutive hole pairs' }
+                        ].map(opt => (
+                          <label
+                            key={opt.value}
+                            className={`flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-colors ${
+                              formatForm.sideGameSubType === opt.value
+                                ? 'border-[#00285e] bg-[#f0f4ff]'
+                                : 'border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input type="radio" name="sideGameSubType" value={opt.value} checked={formatForm.sideGameSubType === opt.value} onChange={() => setFormatForm({ ...formatForm, sideGameSubType: opt.value })} className="sr-only" />
+                            <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+                            <span className="text-xs text-gray-500 mt-0.5">{opt.desc}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Scoring</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { value: 'gross', label: 'Gross', desc: 'Raw scores, no handicap applied' },
+                          { value: 'net', label: 'Net', desc: 'Handicap strokes applied before combining' }
+                        ].map(opt => (
+                          <label
+                            key={opt.value}
+                            className={`flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-colors ${
+                              formatForm.sideGameVariant === opt.value
+                                ? 'border-[#00285e] bg-[#f0f4ff]'
+                                : 'border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input type="radio" name="sideGameVariant" value={opt.value} checked={formatForm.sideGameVariant === opt.value} onChange={() => setFormatForm({ ...formatForm, sideGameVariant: opt.value })} className="sr-only" />
+                            <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+                            <span className="text-xs text-gray-500 mt-0.5">{opt.desc}</span>
+                          </label>
+                        ))}
                       </div>
                     </div>
                   </div>
