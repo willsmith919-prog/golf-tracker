@@ -9,6 +9,8 @@ import LeagueStandingsPanel from './LeagueStandingsPanel';
 import SideGameLeaderboard from './SideGameLeaderboard';
 import VegasLeaderboard from './VegasLeaderboard';
 import MatchPlayLeaderboard from './MatchPlayLeaderboard';
+import TeamMatchPlayLeaderboard from './TeamMatchPlayLeaderboard';
+import { calcWolfTotals } from '../../utils/wolfScoring';
 
 // ============================================================
 // LIVE LEADERBOARD COMPONENT
@@ -63,7 +65,9 @@ export default function LiveLeaderboard({
   const leagueId = meta.leagueId || null;
   const seasonId = meta.seasonId || null;
   const isLeagueEvent = !!(leaguePoints && leagueId && seasonId);
-  const hasTabs = hasSideGames || isLeagueEvent;
+  const isWolfFormat = meta.competition?.structure === 'wolf';
+  const isMatchPlayTeams = meta.scoringMethod === 'match_play' && (meta.teamSize || 1) !== 1;
+  const hasTabs = hasSideGames || isLeagueEvent || isWolfFormat;
 
   // ==================== MATCH PLAY DETECTION ====================
   const isMatchPlay1v1 = meta.scoringMethod === 'match_play' && (meta.teamSize || 1) === 1;
@@ -86,6 +90,12 @@ export default function LiveLeaderboard({
     handicapAllowance: meta.handicap?.allowance || 100,
     courseStrokeIndexes: meta.courseStrokeIndexes || []
   };
+
+  // Net side game support: compute stroke holes even when main game is gross
+  const hasNetSideGame = sideGames.some(sg => sg.variant === 'net');
+  const netHandicapConfig = hasNetSideGame
+    ? { ...handicapConfig, handicapEnabled: true }
+    : handicapConfig;
 
   // ==================== BUILD LEADERBOARD DATA ====================
 
@@ -125,20 +135,24 @@ export default function LiveLeaderboard({
         ...handicapConfig,
         handicapAllowance: effectiveAllowance
       });
-      const strokeHoles = isStartingScore ? {} : getStrokeHoles(courseHandicap, handicapConfig);
+      const netTeamConfig = { ...netHandicapConfig, handicapAllowance: effectiveAllowance };
+      const netCourseHandicap = hasNetSideGame
+        ? getPlayerCourseHandicap(teamBaseHandicap, netTeamConfig)
+        : courseHandicap;
+      const strokeHoles = isStartingScore ? {} : getStrokeHoles(netCourseHandicap, netTeamConfig);
 
       let netTotal = 0;
       let netToPar = 0;
       let parForPlayed = 0;
 
-      if (handicapEnabled) {
+      if (handicapEnabled || hasNetSideGame) {
         if (isStartingScore) {
           netToPar = toPar - courseHandicap;
         } else if (holesPlayed > 0) {
           for (const holeNum of holeOrder) {
             const holeScore = team.scores?.[holeNum] || team.holes?.[holeNum]?.score;
             if (holeScore) {
-              netTotal += getNetScore(holeScore, holeNum, strokeHoles, handicapEnabled);
+              netTotal += getNetScore(holeScore, holeNum, strokeHoles, true);
               parForPlayed += coursePars[holeNum - 1] || 0;
             }
           }
@@ -152,7 +166,7 @@ export default function LiveLeaderboard({
         subtitle: memberNames.join(' & '),
         isMyEntry: isMyTeam,
         role: null,
-        handicap: avgHandicap,
+        handicap: teamBaseHandicap,
         courseHandicap,
         strokeHoles,
         currentHole: team.currentHole || startingHole,
@@ -177,20 +191,23 @@ export default function LiveLeaderboard({
       const toPar = stats.toPar || 0;
 
       const courseHandicap = getPlayerCourseHandicap(player.handicap, handicapConfig);
-      const strokeHoles = isStartingScore ? {} : getStrokeHoles(courseHandicap, handicapConfig);
+      const netCourseHandicap = hasNetSideGame
+        ? getPlayerCourseHandicap(player.handicap, netHandicapConfig)
+        : courseHandicap;
+      const strokeHoles = isStartingScore ? {} : getStrokeHoles(netCourseHandicap, netHandicapConfig);
 
       let netTotal = 0;
       let netToPar = 0;
       let parForPlayed = 0;
 
-      if (handicapEnabled) {
+      if (handicapEnabled || hasNetSideGame) {
         if (isStartingScore) {
           netToPar = toPar - courseHandicap;
         } else if (holesPlayed > 0) {
           for (const holeNum of holeOrder) {
             const holeScore = player.scores?.[holeNum] || player.holes?.[holeNum]?.score;
             if (holeScore) {
-              netTotal += getNetScore(holeScore, holeNum, strokeHoles, handicapEnabled);
+              netTotal += getNetScore(holeScore, holeNum, strokeHoles, true);
               parForPlayed += coursePars[holeNum - 1] || 0;
             }
           }
@@ -250,8 +267,8 @@ export default function LiveLeaderboard({
           const par = coursePars[holeNum - 1] || 0;
           filteredPar += par;
 
-          if (handicapEnabled && !isStartingScore) {
-            filteredNetTotal += getNetScore(holeScore, holeNum, entry.strokeHoles, handicapEnabled);
+          if ((handicapEnabled || hasNetSideGame) && !isStartingScore) {
+            filteredNetTotal += getNetScore(holeScore, holeNum, entry.strokeHoles, true);
           }
 
           if (meta.scoringMethod === 'stableford') {
@@ -279,7 +296,7 @@ export default function LiveLeaderboard({
   const primarySort = sortOverride ?? metaPrimarySort;
   const sortOpts = { scoringMethod: meta.scoringMethod, primarySort, handicapEnabled };
   const isStableford = meta.scoringMethod === 'stableford';
-  if (!isMatchPlay1v1) {
+  if (!isMatchPlay1v1 && !isMatchPlayTeams) {
     sortLeaderboard(leaderboardData, sortOpts);
     assignPositions(leaderboardData, sortOpts);
   }
@@ -318,6 +335,70 @@ export default function LiveLeaderboard({
 
         {activeGameTab === 'main' && (
           <MatchPlayLeaderboard
+            leaderboardData={leaderboardData}
+            currentEvent={currentEvent}
+            currentUser={currentUser}
+          />
+        )}
+
+        {hasSideGames && activeGameTab !== 'main' && (() => {
+          const sg = sideGames.find(s => s.id === activeGameTab);
+          if (!sg) return null;
+          if (sg.sideGameType === 'vegas') {
+            return (
+              <VegasLeaderboard
+                sideGame={sg}
+                currentEvent={currentEvent}
+                currentUser={currentUser}
+              />
+            );
+          }
+          return (
+            <SideGameLeaderboard
+              sideGame={sg}
+              leaderboardEntries={leaderboardData}
+              currentEvent={currentEvent}
+              currentUser={currentUser}
+              players={players}
+            />
+          );
+        })()}
+      </div>
+    );
+  }
+
+  // Team match play — render dedicated team match view
+  if (isMatchPlayTeams) {
+    return (
+      <div>
+        {hasSideGames && (
+          <div className="flex bg-gray-100 rounded-xl p-1 mb-5 overflow-x-auto gap-1">
+            <button
+              onClick={() => setActiveGameTab('main')}
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                activeGameTab === 'main' ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+              }`}
+            >
+              ⚔️ Match Play
+            </button>
+            {sideGames.map((sg) => {
+              const shortName = sg.name.replace(/\s*\([^)]*\)/g, '').trim() || sg.name;
+              return (
+                <button key={sg.id} onClick={() => setActiveGameTab(sg.id)}
+                  title={sg.name}
+                  className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                    activeGameTab === sg.id ? 'bg-white text-gray-900 shadow-md' : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+                  }`}
+                >
+                  🎯 {shortName}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {activeGameTab === 'main' && (
+          <TeamMatchPlayLeaderboard
             leaderboardData={leaderboardData}
             currentEvent={currentEvent}
             currentUser={currentUser}
@@ -403,6 +484,18 @@ export default function LiveLeaderboard({
               }`}
             >
               🏆 League
+            </button>
+          )}
+          {isWolfFormat && (
+            <button
+              onClick={() => setActiveGameTab('wolf')}
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                activeGameTab === 'wolf'
+                  ? 'bg-white text-gray-900 shadow-md'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+              }`}
+            >
+              🐺 Wolf
             </button>
           )}
         </div>

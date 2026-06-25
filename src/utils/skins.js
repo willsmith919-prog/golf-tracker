@@ -154,8 +154,8 @@ export function buildSkinsEntries(currentEvent) {
           : null;
       }
 
-      const courseHandicap = getPlayerCourseHandicap(teamBaseHandicap, handicapConfig);
-      const strokeHoles = handicapEnabled ? getStrokeHoles(courseHandicap, handicapConfig) : {};
+      const courseHandicap = getPlayerCourseHandicap(teamBaseHandicap, { ...handicapConfig, handicapEnabled: true });
+      const strokeHoles = getStrokeHoles(courseHandicap, { ...handicapConfig, handicapEnabled: true });
 
       return {
         id: teamId,
@@ -168,8 +168,8 @@ export function buildSkinsEntries(currentEvent) {
   }
 
   return Object.entries(players).map(([uid, player]) => {
-    const courseHandicap = getPlayerCourseHandicap(player.handicap, handicapConfig);
-    const strokeHoles = handicapEnabled ? getStrokeHoles(courseHandicap, handicapConfig) : {};
+    const courseHandicap = getPlayerCourseHandicap(player.handicap, { ...handicapConfig, handicapEnabled: true });
+    const strokeHoles = getStrokeHoles(courseHandicap, { ...handicapConfig, handicapEnabled: true });
 
     return {
       id: uid,

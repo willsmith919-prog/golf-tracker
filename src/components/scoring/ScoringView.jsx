@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
-import { ref, get, set, remove } from 'firebase/database';
+import { ref, get, set, remove, onValue, off } from 'firebase/database';
 import { database } from '../../firebase';
+import { getWolfOnHole, getWolfSides, calcWolfHoleResult } from '../../utils/wolfScoring';
 import { buildHoleOrder } from '../../utils/holes';
 import { getPlayerCourseHandicap, getStrokeHoles } from '../../utils/handicap';
 import RoundCompleteModal from './RoundCompleteModal';
@@ -127,8 +128,9 @@ export default function ScoringView({
   const applicationMethod = !isSolo ? (currentEvent?.meta?.handicap?.applicationMethod || 'strokes') : 'strokes';
   const isStartingScore = applicationMethod === 'starting_score';
 
-  const { strokeHoles, startingHandicap } = (() => {
-    if (!handicapEnabled) return { strokeHoles: {}, startingHandicap: 0 };
+  const hasNetSideGameInScoring = !isSolo && (currentEvent?.meta?.sideGames || []).some(sg => sg.variant === 'net');
+  const { strokeHoles, startingHandicap, netStrokeHoles } = (() => {
+    if (!handicapEnabled && !hasNetSideGameInScoring) return { strokeHoles: {}, startingHandicap: 0, netStrokeHoles: {} };
     const teamMethod = currentEvent?.meta?.handicap?.teamHandicapMethod || 'average';
     let playerHandicap;
     let effectiveAllowance;
@@ -154,16 +156,21 @@ export default function ScoringView({
     const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
     const useSlope = currentEvent?.meta?.handicap?.useSlope ?? true;
     const courseHandicap = getPlayerCourseHandicap(playerHandicap, {
-      handicapEnabled,
+      handicapEnabled: true,
       courseSlope: useSlope ? (currentEvent?.meta?.courseSlope || null) : null,
       courseRating: useSlope ? (currentEvent?.meta?.courseRating || null) : null,
       coursePar,
       handicapAllowance: effectiveAllowance
     });
     if (isStartingScore) {
-      return { strokeHoles: {}, startingHandicap: courseHandicap };
+      return { strokeHoles: {}, startingHandicap: handicapEnabled ? courseHandicap : 0, netStrokeHoles: {} };
     }
-    return { strokeHoles: getStrokeHoles(courseHandicap, { handicapEnabled, courseStrokeIndexes }), startingHandicap: 0 };
+    const computed = getStrokeHoles(courseHandicap, { handicapEnabled: true, courseStrokeIndexes });
+    return {
+      strokeHoles: handicapEnabled ? computed : {},
+      startingHandicap: 0,
+      netStrokeHoles: computed
+    };
   })();
 
   const getNextHole = (current) => {
@@ -197,6 +204,35 @@ export default function ScoringView({
 
   const scoredByLog = !isSolo && !isScoringForOther
     ? scoringUnit?.scoredByLog || null
+    : null;
+
+  // ==================== WOLF FORMAT DETECTION ====================
+  const isWolfFormat = !isSolo && currentEvent?.meta?.competition?.structure === 'wolf';
+  const wolfVariant = currentEvent?.meta?.competition?.wolf?.variant || 'bestball';
+  const wolfPlayerCount = currentEvent?.meta?.competition?.wolf?.playerCount || 4;
+  const wolfPlayerOrder = currentEvent?.meta?.wolfPlayerOrder || [];
+
+  const [wolfHolesData, setWolfHolesData] = useState({});
+
+  useEffect(() => {
+    if (!isWolfFormat || isSolo || !currentEvent?.id) return;
+    const wolfRef = ref(database, `events/${currentEvent.id}/wolfHoles`);
+    const listener = onValue(wolfRef, snap => setWolfHolesData(snap.val() || {}));
+    return () => off(wolfRef, 'value', listener);
+  }, [currentEvent?.id, isWolfFormat]);
+
+  const currentWolfId = isWolfFormat ? getWolfOnHole(currentHole, wolfPlayerOrder) : null;
+  const isCurrentUserWolf = isWolfFormat && currentUser?.uid === currentWolfId;
+
+  // For scramble wolf, the "opposing recorder" is the first non-wolf player in the order
+  const oppRecorderId = isWolfFormat
+    ? wolfPlayerOrder.find(uid => uid !== currentWolfId) || null
+    : null;
+  const isOppRecorder = isWolfFormat && wolfVariant === 'scramble' && currentUser?.uid === oppRecorderId;
+
+  // Team combination method badge (for variable teams)
+  const teamCombinationMethod = isTeamFormat
+    ? (currentEvent?.teams?.[selectedTeam]?.combinationMethod || null)
     : null;
 
   const handleDismissScoredBy = async () => {
@@ -440,16 +476,14 @@ export default function ScoringView({
         if (format === 'stableford') {
           totalPoints += calculateStablefordPoints(hole.score, par + strokesOnHole);
         }
-        if (handicapEnabled) {
-          netTotal += hole.score - strokesOnHole;
-        }
+        netTotal += hole.score - (netStrokeHoles[holeNum] || 0);
       }
     }
 
     const playedHoleNums = holeOrder.slice(0, holesPlayed);
     const parTotal = playedHoleNums.reduce((sum, h) => sum + (coursePars[h - 1] || 0), 0);
     const toPar = totalScore - parTotal;
-    const netToPar = handicapEnabled ? netTotal - parTotal : toPar;
+    const netToPar = netTotal - parTotal;
 
     return {
       totalScore,
@@ -1052,7 +1086,190 @@ export default function ScoringView({
           onStatModeChange={handleStatModeChange}
           practicalStats={practicalStats}
           isScoringForOther={isScoringForOther}
+          combinationMethodBadge={teamCombinationMethod}
         />
+
+        {/* Variable-team combination method badge */}
+        {teamCombinationMethod && currentEvent?.meta?.variableTeams && (
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl px-4 py-2 mb-3 flex items-center gap-2">
+            <span className="text-white/70 text-xs">Format:</span>
+            <span className="text-white text-sm font-semibold capitalize">
+              {teamCombinationMethod === 'bestball' ? 'Best Ball' : teamCombinationMethod.charAt(0).toUpperCase() + teamCombinationMethod.slice(1)}
+            </span>
+          </div>
+        )}
+
+        {/* Wolf Hole Panel */}
+        {isWolfFormat && wolfPlayerOrder.length === wolfPlayerCount && (() => {
+          const wolfName = currentEvent?.players?.[currentWolfId]?.displayName || 'Unknown';
+          const partnerIds = wolfHolesData?.[currentHole]?.partnerIds || null;
+          const isBlindWolf = wolfHolesData?.[currentHole]?.isBlindWolf || false;
+          const wolfSideScore = wolfHolesData?.[currentHole]?.wolfSideScore ?? null;
+          const oppSideScore = wolfHolesData?.[currentHole]?.oppSideScore ?? null;
+
+          const setPartner = async (partnerUid) => {
+            const current = partnerIds || [];
+            const updated = current.includes(partnerUid)
+              ? current.filter(id => id !== partnerUid)
+              : [...current, partnerUid];
+            await set(ref(database, `events/${currentEvent.id}/wolfHoles/${currentHole}/partnerIds`), updated);
+          };
+
+          const setLoneWolf = async () => {
+            await set(ref(database, `events/${currentEvent.id}/wolfHoles/${currentHole}/partnerIds`), []);
+          };
+
+          const toggleBlindWolf = async () => {
+            await set(ref(database, `events/${currentEvent.id}/wolfHoles/${currentHole}/isBlindWolf`), !isBlindWolf);
+          };
+
+          const saveScrambleScore = async (side, value) => {
+            const parsed = parseInt(value);
+            if (isNaN(parsed) || parsed < 1) return;
+            await set(ref(database, `events/${currentEvent.id}/wolfHoles/${currentHole}/${side}`), parsed);
+          };
+
+          const { wolfSide, oppSide } = getWolfSides(currentHole, wolfPlayerOrder, wolfHolesData);
+          const holeResult = wolfSide.length > 0
+            ? calcWolfHoleResult(wolfSide, oppSide,
+                Object.fromEntries(wolfPlayerOrder.map(uid => [uid, currentEvent?.players?.[uid]?.scores || {}])),
+                wolfHolesData, currentHole, wolfVariant)
+            : null;
+
+          return (
+            <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-4 mb-4">
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-amber-800 font-bold text-sm">Wolf</span>
+                  <span className="text-xs bg-amber-200 text-amber-800 px-2 py-0.5 rounded-full font-semibold">
+                    {wolfVariant === 'scramble' ? 'Scramble' : 'Best Ball'}
+                  </span>
+                </div>
+                {holeResult?.wolfWon != null && !holeResult.tied && (
+                  <span className={`text-xs font-semibold px-2 py-1 rounded-full ${holeResult.wolfWon ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                    Wolf Side {holeResult.wolfWon ? 'Won' : 'Lost'}
+                  </span>
+                )}
+                {holeResult?.tied && (
+                  <span className="text-xs font-semibold px-2 py-1 rounded-full bg-gray-100 text-gray-600">Tied</span>
+                )}
+              </div>
+
+              <div className="text-sm text-amber-900 mb-3">
+                <span className="font-semibold">Wolf: {wolfName}</span>
+                {isBlindWolf && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">Blind Wolf</span>}
+              </div>
+
+              {/* Partner info */}
+              {partnerIds === null ? (
+                <p className="text-xs text-amber-700 mb-3">Wolf has not picked a partner yet</p>
+              ) : partnerIds.length === 0 ? (
+                <p className="text-xs text-amber-700 font-semibold mb-3">Lone Wolf — going it alone</p>
+              ) : (
+                <p className="text-xs text-amber-700 mb-3">
+                  Partner{partnerIds.length > 1 ? 's' : ''}: {partnerIds.map(uid => currentEvent?.players?.[uid]?.displayName || '?').join(', ')}
+                </p>
+              )}
+
+              {/* Wolf controls — only the wolf can pick partners */}
+              {isCurrentUserWolf && (
+                <div>
+                  <p className="text-xs font-semibold text-amber-800 mb-2">Pick partner:</p>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    {wolfPlayerOrder.filter(uid => uid !== currentWolfId).map(uid => {
+                      const name = currentEvent?.players?.[uid]?.displayName || '?';
+                      const selected = (partnerIds || []).includes(uid);
+                      return (
+                        <button
+                          key={uid}
+                          onClick={() => setPartner(uid)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                            selected
+                              ? 'border-amber-500 bg-amber-200 text-amber-900'
+                              : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-50'
+                          }`}
+                        >
+                          {name.split(' ')[0]}
+                        </button>
+                      );
+                    })}
+                    <button
+                      onClick={setLoneWolf}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                        partnerIds !== null && partnerIds.length === 0
+                          ? 'border-amber-500 bg-amber-200 text-amber-900'
+                          : 'border-amber-300 bg-white text-amber-700 hover:bg-amber-50'
+                      }`}
+                    >
+                      Lone Wolf
+                    </button>
+                  </div>
+                  <button
+                    onClick={toggleBlindWolf}
+                    className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
+                      isBlindWolf
+                        ? 'border-purple-400 bg-purple-100 text-purple-700 font-semibold'
+                        : 'border-gray-200 text-gray-500 hover:bg-gray-50'
+                    }`}
+                  >
+                    {isBlindWolf ? 'Blind Wolf ON' : 'Blind Wolf?'}
+                  </button>
+                </div>
+              )}
+
+              {/* Scramble score entry — wolf enters both side scores */}
+              {wolfVariant === 'scramble' && (isCurrentUserWolf || isOppRecorder) && (
+                <div className="mt-3 pt-3 border-t border-amber-200">
+                  <p className="text-xs font-semibold text-amber-800 mb-2">Record scramble scores:</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs text-amber-700 mb-1">
+                        Wolf Side Score {wolfSide.length > 0 ? `(${wolfSide.map(uid => currentEvent?.players?.[uid]?.displayName?.split(' ')[0] || '?').join(' + ')})` : ''}
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        defaultValue={wolfSideScore ?? ''}
+                        key={`wolf-${currentHole}-${wolfSideScore}`}
+                        onBlur={(e) => saveScrambleScore('wolfSideScore', e.target.value)}
+                        placeholder="—"
+                        className="w-full px-3 py-2 rounded-lg border-2 border-amber-300 text-center text-lg font-bold focus:border-amber-500 focus:outline-none bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs text-amber-700 mb-1">
+                        Opp Side Score {oppSide.length > 0 ? `(${oppSide.map(uid => currentEvent?.players?.[uid]?.displayName?.split(' ')[0] || '?').join(' + ')})` : ''}
+                      </label>
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        defaultValue={oppSideScore ?? ''}
+                        key={`opp-${currentHole}-${oppSideScore}`}
+                        onBlur={(e) => saveScrambleScore('oppSideScore', e.target.value)}
+                        placeholder="—"
+                        className="w-full px-3 py-2 rounded-lg border-2 border-amber-300 text-center text-lg font-bold focus:border-amber-500 focus:outline-none bg-white"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Scramble score display for others */}
+              {wolfVariant === 'scramble' && !isCurrentUserWolf && !isOppRecorder && wolfSideScore != null && (
+                <div className="mt-3 pt-3 border-t border-amber-200 grid grid-cols-2 gap-3">
+                  <div className="text-center">
+                    <p className="text-xs text-amber-700">Wolf Side</p>
+                    <p className="text-2xl font-bold text-amber-900">{wolfSideScore}</p>
+                  </div>
+                  <div className="text-center">
+                    <p className="text-xs text-amber-700">Opp Side</p>
+                    <p className="text-2xl font-bold text-amber-900">{oppSideScore ?? '—'}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         <HoleCard
           isScoringForOther={isScoringForOther}
