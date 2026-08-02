@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ref, get, set, remove } from 'firebase/database';
 import { database } from '../../firebase';
+import { removeEventFromStandings } from '../../utils/leaguePoints';
 import {
   PlusIcon,
   CalendarIcon,
@@ -22,6 +23,7 @@ export default function LeagueDashboardView({
 }) {
   const [activeTab, setActiveTab] = useState('events');
   const [editingHandicapUid, setEditingHandicapUid] = useState(null);
+  const [expandedStandingsUid, setExpandedStandingsUid] = useState(null);
   const [editingHandicapValue, setEditingHandicapValue] = useState('');
   const isCommissioner = currentLeague.userRole === 'commissioner';
   const members = Object.entries(currentLeague.members || {}).map(([uid, data]) => ({
@@ -180,6 +182,32 @@ export default function LeagueDashboardView({
     }
   };
 
+  const handleRemoveEventFromStandings = async (eventId, eventName) => {
+    const seasonId = Object.keys(currentLeague.seasons || {}).find(
+      sid => currentLeague.seasons[sid].status === 'active'
+    );
+    if (!seasonId) {
+      setFeedback('No active season found');
+      setTimeout(() => setFeedback(''), 3000);
+      return;
+    }
+    if (!confirm(`Remove "${eventName}" points from all player standings?\n\nThis undoes the standings write for this event. You can re-end the event afterward to recalculate.`)) {
+      return;
+    }
+    try {
+      await removeEventFromStandings(currentLeague.id, seasonId, eventId);
+      const leagueSnapshot = await get(ref(database, `leagues/${currentLeague.id}`));
+      const updatedLeague = leagueSnapshot.val();
+      setCurrentLeague({ id: currentLeague.id, ...updatedLeague, userRole: currentLeague.userRole });
+      setFeedback(`Points from "${eventName}" removed from standings`);
+      setTimeout(() => setFeedback(''), 4000);
+    } catch (error) {
+      console.error('Error removing event standings:', error);
+      setFeedback('Error removing standings. Try again.');
+      setTimeout(() => setFeedback(''), 3000);
+    }
+  };
+
   // Helper to get player count for an event
   const getPlayerCount = (event) => {
     return Object.keys(event.players || {}).length;
@@ -301,6 +329,14 @@ export default function LeagueDashboardView({
                 className="text-red-500 hover:text-red-600 text-xs font-semibold"
               >
                 Delete
+              </button>
+            )}
+            {isCommissioner && section === 'past' && event.meta.leaguePoints && (
+              <button
+                onClick={() => handleRemoveEventFromStandings(event.id, event.meta.name)}
+                className="text-orange-500 hover:text-orange-600 text-xs font-semibold"
+              >
+                Remove Points
               </button>
             )}
           </div>
@@ -470,13 +506,91 @@ export default function LeagueDashboardView({
                           .sort(([, a], [, b]) => (b.points || 0) - (a.points || 0))
                           .map(([uid, data], index) => {
                             const member = members.find(m => m.uid === uid);
+                            const isExpanded = expandedStandingsUid === uid;
+                            const eventEntries = Object.entries(data.events || {})
+                              .sort(([, a], [, b]) => b - a);
                             return (
-                              <div key={uid} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                                <div className="flex items-center gap-3">
-                                  <div className="text-lg font-bold text-gray-400 w-8">#{index + 1}</div>
-                                  <div className="font-semibold text-gray-900">{member?.displayName || 'Unknown'}</div>
+                              <div key={uid} className="bg-gray-50 rounded-lg overflow-hidden">
+                                <div
+                                  className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-100 transition-colors"
+                                  onClick={() => setExpandedStandingsUid(isExpanded ? null : uid)}
+                                >
+                                  <div className="flex items-center gap-3">
+                                    <div className="text-lg font-bold text-gray-400 w-8">#{index + 1}</div>
+                                    <div>
+                                      <div className="font-semibold text-gray-900">{member?.displayName || 'Unknown'}</div>
+                                      {eventEntries.length > 0 && (
+                                        <div className="text-xs text-gray-400">{eventEntries.length} event{eventEntries.length !== 1 ? 's' : ''}</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-lg font-bold text-[#00285e]">{data.points || 0} pts</div>
+                                    {eventEntries.length > 0 && (
+                                      <span className="text-gray-400 text-xs">{isExpanded ? '▲' : '▼'}</span>
+                                    )}
+                                  </div>
                                 </div>
-                                <div className="text-lg font-bold text-[#00285e]">{data.points || 0} pts</div>
+
+                                {isExpanded && eventEntries.length > 0 && (
+                                  <div className="px-4 pb-4 border-t border-gray-200">
+                                    <div className="pt-3 space-y-2">
+                                      <div className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Points by Event</div>
+                                      {eventEntries.map(([eventId, pts]) => {
+                                        const event = leagueEvents.find(e => e.id === eventId);
+                                        const eventName = event?.meta?.name || 'Unknown Event';
+                                        const bd = data.breakdowns?.[eventId];
+                                        const sideGames = event?.meta?.sideGames || [];
+                                        return (
+                                          <div key={eventId} className="bg-white rounded-lg p-3">
+                                            <div className="flex items-center justify-between mb-1">
+                                              <span className="text-sm font-semibold text-gray-800">{eventName}</span>
+                                              <span className="text-sm font-bold text-[#00285e]">+{pts} pts</span>
+                                            </div>
+                                            {bd ? (
+                                              <div className="space-y-0.5 mt-1.5">
+                                                {bd.mainGame > 0 && (
+                                                  <div className="flex justify-between text-xs text-gray-500">
+                                                    <span>Main game</span>
+                                                    <span>+{bd.mainGame} pts</span>
+                                                  </div>
+                                                )}
+                                                {bd.participation > 0 && (
+                                                  <div className="flex justify-between text-xs text-gray-500">
+                                                    <span>Participation</span>
+                                                    <span>+{bd.participation} pts</span>
+                                                  </div>
+                                                )}
+                                                {Object.entries(bd.skins || {}).map(([sgId, skinPts]) => {
+                                                  if (!skinPts) return null;
+                                                  const sg = sideGames.find(s => s.id === sgId);
+                                                  return (
+                                                    <div key={sgId} className="flex justify-between text-xs text-gray-500">
+                                                      <span>{sg?.name || 'Skins'}</span>
+                                                      <span>+{skinPts} pts</span>
+                                                    </div>
+                                                  );
+                                                })}
+                                                {Object.entries(bd.strokePlay || {}).map(([sgId, alloc]) => {
+                                                  if (!alloc?.points) return null;
+                                                  const sg = sideGames.find(s => s.id === sgId);
+                                                  return (
+                                                    <div key={sgId} className="flex justify-between text-xs text-gray-500">
+                                                      <span>{sg?.name || 'Net Game'} <span className="text-gray-400">({alloc.competition})</span></span>
+                                                      <span>+{alloc.points} pts</span>
+                                                    </div>
+                                                  );
+                                                })}
+                                              </div>
+                                            ) : (
+                                              <div className="text-xs text-gray-400 mt-1">No breakdown available</div>
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { ref, set, remove } from 'firebase/database';
 import { database } from '../../firebase';
+import { getPlayerCourseHandicap } from '../../utils/handicap';
 
 export default function PlayersList({
   currentEvent,
@@ -90,6 +91,23 @@ export default function PlayersList({
       setFeedback('Error removing guest');
       setTimeout(() => setFeedback(''), 3000);
     }
+  };
+
+  const meta = currentEvent.meta || {};
+  const handicapEnabled = meta.handicap?.enabled || false;
+  const useSlope = meta.handicap?.useSlope ?? true;
+  const coursePars = meta.coursePars || [];
+  const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
+  const hcConfig = {
+    handicapEnabled: true,
+    courseSlope: useSlope ? (meta.courseSlope || null) : null,
+    courseRating: useSlope ? (meta.courseRating || null) : null,
+    coursePar,
+    handicapAllowance: meta.handicap?.allowance || 100
+  };
+  const getPlayingHandicap = (playerHandicap) => {
+    if (!handicapEnabled || playerHandicap == null) return null;
+    return getPlayerCourseHandicap(playerHandicap, hcConfig);
   };
 
   return (
@@ -186,9 +204,18 @@ export default function PlayersList({
                         <button onClick={() => setEditingHandicapFor(null)} className="text-xs text-gray-500 hover:text-gray-700">Cancel</button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm text-gray-500">
                           {player.handicap != null ? `HCP ${player.handicap}` : 'No handicap'}
+                          {(() => {
+                            const playing = getPlayingHandicap(player.handicap);
+                            if (playing == null) return null;
+                            return (
+                              <span className="ml-1.5 text-xs font-semibold text-[#00285e] bg-[#f0f4ff] px-1.5 py-0.5 rounded">
+                                {playing} playing
+                              </span>
+                            );
+                          })()}
                         </span>
                         {isHost && (eventStatus === 'open' || eventStatus === 'active') && (
                           <button

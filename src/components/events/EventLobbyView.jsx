@@ -13,6 +13,7 @@ import { sortLeaderboard, assignPositions } from '../../utils/leaderboard';
 import { calculateSkins, buildSkinsEntries } from '../../utils/skins';
 import { calculateVegasResults, buildVegasEntries } from '../../utils/calculateVegasResults';
 import { buildHoleOrder } from '../../utils/holes';
+import { getPlayerCourseHandicap, getStrokeHoles } from '../../utils/handicap';
 
 export default function EventLobbyView({
   currentUser,
@@ -27,6 +28,7 @@ export default function EventLobbyView({
   const [activeTab, setActiveTab] = useState(
     eventStatus === 'open' ? 'lobby' : 'leaderboard'
   );
+  const [grossNetResult, setGrossNetResult] = useState(null);
 
   // Real-time listener — updates whenever any player scores or joins
   useEffect(() => {
@@ -71,6 +73,10 @@ export default function EventLobbyView({
   const teamSize = currentEvent?.meta?.teamSize || 2;
   const isTeamFormat = teamSize > 1;
   const usesMulligans = currentEvent?.meta?.handicap?.enabled && currentEvent?.meta?.handicap?.applicationMethod === 'mulligans';
+  const isWolfFormat = currentEvent?.meta?.competition?.structure === 'wolf';
+  const wolfPlayerCount = currentEvent?.meta?.competition?.wolf?.playerCount || 4;
+  const wolfPlayerOrder = currentEvent?.meta?.wolfPlayerOrder || [];
+  const wolfHoleOrder = buildHoleOrder(currentEvent?.meta?.numHoles || 18, currentEvent?.meta?.startingHole || 1);
 
   const myTeamId = (() => {
     for (const [teamId, team] of Object.entries(teams)) {
@@ -79,6 +85,10 @@ export default function EventLobbyView({
     return null;
   })();
 
+  const isLeagueEvent = !!(currentEvent.meta?.leaguePoints && currentEvent.meta?.leagueId && currentEvent.meta?.seasonId);
+  const hasGrossNetSideGame = (currentEvent.meta?.sideGames || []).some(
+    sg => sg.sideGameType === 'stroke_play' && sg.competitionMode === 'main_game_exclusion'
+  );
   const showTabs = eventStatus === 'open' || eventStatus === 'active' || eventStatus === 'completed';
   const showTeamsTab = isTeamFormat && showTabs;
 
@@ -89,14 +99,47 @@ export default function EventLobbyView({
     const evTeams = currentEvent.teams || {};
     const isTeam = (meta.teamSize || 1) > 1 && Object.keys(evTeams).length > 0;
 
+    const useSlope = meta.handicap?.useSlope ?? true;
+    const courseParsLocal = meta.coursePars || [];
+    const coursePar = courseParsLocal.reduce((sum, p) => sum + (p || 0), 0);
+    const holeOrderLocal = buildHoleOrder(meta.numHoles || 18, meta.startingHole || 1);
+    // Always force handicapEnabled:true so net scores compute even for Gross main game
+    const hcConfig = {
+      handicapEnabled: true,
+      courseSlope: useSlope ? (meta.courseSlope || null) : null,
+      courseRating: useSlope ? (meta.courseRating || null) : null,
+      coursePar,
+      handicapAllowance: meta.handicap?.allowance || 100,
+      courseStrokeIndexes: meta.courseStrokeIndexes || []
+    };
+    const computeNetToPar = (handicap, scores, holes) => {
+      const ch = getPlayerCourseHandicap(handicap, hcConfig);
+      const sh = getStrokeHoles(ch, hcConfig);
+      let net = 0, par = 0;
+      for (const h of holeOrderLocal) {
+        const s = scores?.[h] || holes?.[h]?.score;
+        if (s) { net += s - (sh[h] || 0); par += courseParsLocal[h - 1] || 0; }
+      }
+      return net - par;
+    };
+
+    const teamMethod = meta.handicap?.teamHandicapMethod || 'average';
     const entries = isTeam
       ? Object.entries(evTeams).map(([teamId, team]) => {
           const stats = team.stats || {};
-          return { id: teamId, holesPlayed: stats.holesPlayed || 0, toPar: stats.toPar || 0, totalScore: stats.totalScore || 0, stablefordPoints: stats.stablefordPoints || 0, netToPar: stats.netToPar || 0 };
+          const hcps = Object.keys(team.members || {}).map(uid => evPlayers[uid]?.handicap).filter(h => h != null);
+          let teamHcp;
+          if (teamMethod === 'usga_scramble' && hcps.length === 2) {
+            const sorted = [...hcps].sort((a, b) => a - b);
+            teamHcp = sorted[0] * 0.35 + sorted[1] * 0.15;
+          } else {
+            teamHcp = hcps.length > 0 ? hcps.reduce((s, h) => s + h, 0) / hcps.length : null;
+          }
+          return { id: teamId, holesPlayed: stats.holesPlayed || 0, toPar: stats.toPar || 0, totalScore: stats.totalScore || 0, stablefordPoints: stats.stablefordPoints || 0, netToPar: computeNetToPar(teamHcp, team.scores, team.holes) };
         })
       : Object.entries(evPlayers).map(([uid, player]) => {
           const stats = player.stats || {};
-          return { id: uid, holesPlayed: stats.holesPlayed || 0, toPar: stats.toPar || 0, totalScore: stats.totalScore || 0, stablefordPoints: stats.stablefordPoints || 0, netToPar: stats.netToPar || 0 };
+          return { id: uid, holesPlayed: stats.holesPlayed || 0, toPar: stats.toPar || 0, totalScore: stats.totalScore || 0, stablefordPoints: stats.stablefordPoints || 0, netToPar: computeNetToPar(player.handicap, player.scores, player.holes) };
         });
 
     const opts = { scoringMethod: meta.scoringMethod, primarySort: meta.display?.primarySort || 'gross', handicapEnabled: meta.handicap?.enabled || false };
@@ -106,8 +149,26 @@ export default function EventLobbyView({
   };
 
   // ==================== EVENT ACTION HANDLERS ====================
+  const handleWolfReorder = async (fromIndex, toIndex) => {
+    const currentOrder = currentEvent.meta?.wolfPlayerOrder || players.map(p => p.uid);
+    const order = [...currentOrder];
+    const [moved] = order.splice(fromIndex, 1);
+    order.splice(toIndex, 0, moved);
+    await set(ref(database, `events/${currentEvent.id}/meta/wolfPlayerOrder`), order);
+  };
+
   const handleStartEvent = async () => {
     if (!isHost) return;
+    const isWolf = currentEvent.meta?.competition?.structure === 'wolf';
+    if (isWolf) {
+      const wolfPlayerCount = currentEvent.meta?.competition?.wolf?.playerCount || 4;
+      const wolfOrder = currentEvent.meta?.wolfPlayerOrder || [];
+      if (wolfOrder.length !== wolfPlayerCount) {
+        setFeedback(`Set Wolf tee order for all ${wolfPlayerCount} players before starting`);
+        setTimeout(() => setFeedback(''), 3000);
+        return;
+      }
+    }
     if (isTeamFormat) {
       const teamCount = Object.keys(teams).length;
       if (teamCount === 0) { setFeedback('Create at least one team before starting (use the Teams tab)'); setTimeout(() => setFeedback(''), 3000); return; }
@@ -125,6 +186,153 @@ export default function EventLobbyView({
       setFeedback('Error starting event. Try again.');
       setTimeout(() => setFeedback(''), 3000);
     }
+  };
+
+  // Shared league points calculation — used by both End Event and Recalculate
+  const runLeaguePointsCalc = async () => {
+    const lpMeta = currentEvent.meta || {};
+    const holeOrder = buildHoleOrder(lpMeta.numHoles || 18, lpMeta.startingHole || 1);
+    const coursePars = lpMeta.coursePars || [];
+    const sideGames = lpMeta.sideGames || [];
+    const leaderboard = buildSortedLeaderboard();
+
+    let leagueMembersData = null;
+    try {
+      const membersSnap = await get(ref(database, `leagues/${lpMeta.leagueId}/members`));
+      leagueMembersData = membersSnap.val();
+    } catch (err) {
+      console.error('Error loading league members:', err);
+    }
+
+    const mainGamePoints = calculateEventPoints(
+      leaderboard, lpMeta.leaguePoints,
+      currentEvent.teams || {}, lpMeta.teamSize || 1,
+      currentEvent.players || {}, leagueMembersData
+    );
+    const participationPts = lpMeta.leaguePoints.participationPoints || 0;
+
+    const skinsSideGames = sideGames.filter(sg => sg.sideGameType === 'skins' || !sg.sideGameType);
+    const strokePlaySideGames = sideGames.filter(sg => sg.sideGameType === 'stroke_play');
+
+    const skinsEntries = skinsSideGames.length > 0 ? buildSkinsEntries(currentEvent) : [];
+    const skinsByPlayer = {};
+    for (const sg of skinsSideGames) {
+      const { pointTotals } = calculateSkins(skinsEntries, holeOrder, coursePars, sg);
+      for (const [uid, pts] of Object.entries(pointTotals)) {
+        if (!skinsByPlayer[uid]) skinsByPlayer[uid] = {};
+        skinsByPlayer[uid][sg.id] = pts;
+      }
+    }
+
+    const strokePlayByPlayer = {};
+    for (const sg of strokePlaySideGames) {
+      if (sg.competitionMode === 'main_game_exclusion') {
+        const allocation = allocateStrokePlayPoints(
+          leaderboard, lpMeta.leaguePoints, sg,
+          currentEvent.players || {}, leagueMembersData
+        );
+        for (const [uid, alloc] of Object.entries(allocation)) {
+          if (!strokePlayByPlayer[uid]) strokePlayByPlayer[uid] = {};
+          strokePlayByPlayer[uid][sg.id] = alloc;
+        }
+      } else {
+        const sorted = [...leaderboard.filter(e => e.holesPlayed > 0)].sort((a, b) => {
+          return sg.variant === 'net' ? a.netToPar - b.netToPar : a.toPar - b.toPar;
+        });
+        for (let i = 0; i < sorted.length; i++) {
+          if (i === 0) sorted[i]._sgPos = 1;
+          else {
+            const prev = sg.variant === 'net' ? sorted[i - 1].netToPar : sorted[i - 1].toPar;
+            const curr = sg.variant === 'net' ? sorted[i].netToPar : sorted[i].toPar;
+            sorted[i]._sgPos = curr === prev ? sorted[i - 1]._sgPos : i + 1;
+          }
+        }
+        for (const e of sorted) {
+          const pts = (sg.positions || {})[String(e._sgPos)] || 0;
+          if (!strokePlayByPlayer[e.id]) strokePlayByPlayer[e.id] = {};
+          strokePlayByPlayer[e.id][sg.id] = { competition: 'net', points: pts };
+        }
+      }
+    }
+
+    const exclusionSideGames = strokePlaySideGames.filter(sg => sg.competitionMode === 'main_game_exclusion');
+    const combinedPoints = {};
+    const allUids = new Set([
+      ...Object.keys(mainGamePoints),
+      ...Object.keys(skinsByPlayer),
+      ...Object.keys(strokePlayByPlayer)
+    ]);
+
+    for (const uid of allUids) {
+      // For exclusion games: allocation points (from allocateStrokePlayPoints) include
+      // participation and account for the reduced board — use them directly for both
+      // gross-assigned and net-assigned players instead of mainGamePoints (full board).
+      let exclusionAssigned = false;
+      let exclusionTotal = 0;
+      for (const sg of exclusionSideGames) {
+        const alloc = strokePlayByPlayer[uid]?.[sg.id];
+        if (alloc) {
+          exclusionAssigned = true;
+          exclusionTotal += alloc.points;
+        }
+      }
+      const base = exclusionAssigned ? exclusionTotal : (mainGamePoints[uid] || 0);
+      const skinsTotal = Object.values(skinsByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
+      const fullFieldTotal = strokePlaySideGames
+        .filter(sg => sg.competitionMode !== 'main_game_exclusion')
+        .reduce((sum, sg) => sum + (strokePlayByPlayer[uid]?.[sg.id]?.points || 0), 0);
+      combinedPoints[uid] = base + skinsTotal + fullFieldTotal;
+    }
+
+    const breakdowns = {};
+    for (const uid of allUids) {
+      const skinsTotal = Object.values(skinsByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
+      const strokePlayBreakdown = {};
+
+      // Find this player's exclusion allocation (if any)
+      let exclusionAlloc = null;
+      let exclusionSg = null;
+      for (const sg of exclusionSideGames) {
+        const alloc = strokePlayByPlayer[uid]?.[sg.id];
+        if (alloc) { exclusionAlloc = alloc; exclusionSg = sg; break; }
+      }
+
+      let mainGameDisplay, participationDisplay;
+      if (exclusionAlloc) {
+        // allocation points include participation; split it out for clean display
+        const posPts = exclusionAlloc.points - participationPts;
+        if (exclusionAlloc.competition === 'gross') {
+          mainGameDisplay = posPts;
+          participationDisplay = participationPts;
+        } else {
+          mainGameDisplay = 0;
+          participationDisplay = participationPts;
+          strokePlayBreakdown[exclusionSg.id] = { competition: 'net', points: posPts };
+        }
+      } else {
+        const mainTotal = mainGamePoints[uid] || 0;
+        // calculateEventPoints bundles participation into the total; strip it out so it
+        // doesn't double-count with the separate participation line in the breakdown.
+        mainGameDisplay = mainTotal > 0 ? Math.max(0, mainTotal - participationPts) : 0;
+        participationDisplay = mainTotal > 0 ? participationPts : 0;
+      }
+
+      for (const sg of strokePlaySideGames) {
+        if (sg.competitionMode === 'main_game_exclusion') continue;
+        const alloc = strokePlayByPlayer[uid]?.[sg.id];
+        if (alloc) strokePlayBreakdown[sg.id] = alloc;
+      }
+
+      breakdowns[uid] = {
+        mainGame: mainGameDisplay,
+        participation: participationDisplay,
+        skins: skinsByPlayer[uid] || {},
+        strokePlay: strokePlayBreakdown,
+        total: combinedPoints[uid] || 0
+      };
+    }
+
+    await writeStandingsToFirebase(lpMeta.leagueId, lpMeta.seasonId, currentEvent.id, combinedPoints, breakdowns);
   };
 
   const handleEndEvent = async () => {
@@ -150,130 +358,7 @@ export default function EventLobbyView({
 
     if (lpMeta.leaguePoints && lpMeta.leagueId && lpMeta.seasonId) {
       try {
-        const leaderboard = buildSortedLeaderboard();
-        let leagueMembersData = null;
-        try {
-          const membersSnap = await get(ref(database, `leagues/${lpMeta.leagueId}/members`));
-          leagueMembersData = membersSnap.val();
-        } catch (err) {
-          console.error('Error loading league members:', err);
-        }
-
-        // Main game points (includes participation)
-        const mainGamePoints = calculateEventPoints(
-          leaderboard, lpMeta.leaguePoints,
-          currentEvent.teams || {}, lpMeta.teamSize || 1,
-          currentEvent.players || {}, leagueMembersData
-        );
-        const participationPts = lpMeta.leaguePoints.participationPoints || 0;
-
-        // Side game points
-        const skinsSideGames = sideGames.filter(sg => sg.sideGameType === 'skins' || !sg.sideGameType);
-        const strokePlaySideGames = sideGames.filter(sg => sg.sideGameType === 'stroke_play');
-
-        // Skins
-        const skinsEntries = skinsSideGames.length > 0 ? buildSkinsEntries(currentEvent) : [];
-
-        const skinsByPlayer = {}; // { uid: { [sgId]: points } }
-        for (const sg of skinsSideGames) {
-          const { pointTotals } = calculateSkins(skinsEntries, holeOrder, coursePars, sg);
-          for (const [uid, pts] of Object.entries(pointTotals)) {
-            if (!skinsByPlayer[uid]) skinsByPlayer[uid] = {};
-            skinsByPlayer[uid][sg.id] = pts;
-          }
-        }
-
-        // Stroke Play side games — Full Field (independent, additive)
-        // and Main Game Exclusion (allocation replaces main game points for some players)
-        const strokePlayByPlayer = {}; // { uid: { [sgId]: { competition, points } } }
-        for (const sg of strokePlaySideGames) {
-          if (sg.competitionMode === 'main_game_exclusion') {
-            const allocation = allocateStrokePlayPoints(
-              leaderboard, lpMeta.leaguePoints, sg,
-              currentEvent.players || {}, leagueMembersData
-            );
-            for (const [uid, alloc] of Object.entries(allocation)) {
-              if (!strokePlayByPlayer[uid]) strokePlayByPlayer[uid] = {};
-              strokePlayByPlayer[uid][sg.id] = alloc;
-            }
-          } else {
-            // Full Field: compute net stroke play points and add them independently
-            const sorted = [...leaderboard.filter(e => e.holesPlayed > 0)].sort((a, b) => {
-              return sg.variant === 'net' ? a.netToPar - b.netToPar : a.toPar - b.toPar;
-            });
-            for (let i = 0; i < sorted.length; i++) {
-              if (i === 0) sorted[i]._sgPos = 1;
-              else {
-                const prev = sg.variant === 'net' ? sorted[i - 1].netToPar : sorted[i - 1].toPar;
-                const curr = sg.variant === 'net' ? sorted[i].netToPar : sorted[i].toPar;
-                sorted[i]._sgPos = curr === prev ? sorted[i - 1]._sgPos : i + 1;
-              }
-            }
-            for (const e of sorted) {
-              const pts = (sg.positions || {})[String(e._sgPos)] || 0;
-              if (!strokePlayByPlayer[e.id]) strokePlayByPlayer[e.id] = {};
-              strokePlayByPlayer[e.id][sg.id] = { competition: 'net', points: pts };
-            }
-          }
-        }
-
-        // Build combined points
-        // For exclusion side games: the allocation result replaces the player's gross points.
-        // For everyone else, main game points stand and skins/full-field stroke play add on top.
-        const exclusionSideGames = strokePlaySideGames.filter(sg => sg.competitionMode === 'main_game_exclusion');
-        const combinedPoints = {};
-
-        // Collect all UIDs across all point sources
-        const allUids = new Set([
-          ...Object.keys(mainGamePoints),
-          ...Object.keys(skinsByPlayer),
-          ...Object.keys(strokePlayByPlayer)
-        ]);
-
-        for (const uid of allUids) {
-          // Check if this player was allocated away from the main game by any exclusion side game
-          let removedFromMainGame = false;
-          let exclusionPoints = 0;
-          for (const sg of exclusionSideGames) {
-            const alloc = strokePlayByPlayer[uid]?.[sg.id];
-            if (alloc?.competition === 'net') {
-              removedFromMainGame = true;
-              exclusionPoints += alloc.points;
-            }
-          }
-
-          const base = removedFromMainGame ? 0 : (mainGamePoints[uid] || 0);
-          const skinsTotal = Object.values(skinsByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
-          const fullFieldTotal = strokePlaySideGames
-            .filter(sg => sg.competitionMode !== 'main_game_exclusion')
-            .reduce((sum, sg) => sum + (strokePlayByPlayer[uid]?.[sg.id]?.points || 0), 0);
-
-          combinedPoints[uid] = base + skinsTotal + exclusionPoints + fullFieldTotal;
-        }
-
-        // Build breakdowns for storage
-        const breakdowns = {};
-        for (const uid of allUids) {
-          const mainTotal = mainGamePoints[uid] || 0;
-          const skinsTotal = Object.values(skinsByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
-          const participation = mainTotal > 0 ? participationPts : 0;
-
-          const strokePlayBreakdown = {};
-          for (const sg of strokePlaySideGames) {
-            const alloc = strokePlayByPlayer[uid]?.[sg.id];
-            if (alloc) strokePlayBreakdown[sg.id] = alloc;
-          }
-
-          breakdowns[uid] = {
-            mainGame: mainTotal,
-            participation,
-            skins: skinsByPlayer[uid] || {},
-            strokePlay: strokePlayBreakdown,
-            total: combinedPoints[uid] || 0
-          };
-        }
-
-        await writeStandingsToFirebase(lpMeta.leagueId, lpMeta.seasonId, currentEvent.id, combinedPoints, breakdowns);
+        await runLeaguePointsCalc();
         setFeedback('Event ended! League standings updated.');
       } catch (err) {
         console.error('Error updating standings:', err);
@@ -283,6 +368,48 @@ export default function EventLobbyView({
       setFeedback('Event ended!');
     }
     setTimeout(() => setFeedback(''), 3000);
+  };
+
+  const handleRecalculate = async () => {
+    setFeedback('Recalculating league standings...');
+    try {
+      await runLeaguePointsCalc();
+      setFeedback('League standings recalculated!');
+    } catch (err) {
+      console.error('Error recalculating standings:', err);
+      setFeedback('Error recalculating. Try again.');
+    }
+    setTimeout(() => setFeedback(''), 3000);
+  };
+
+  const handleResolveGrossNet = async () => {
+    const lpMeta = currentEvent.meta || {};
+    const sideGames = lpMeta.sideGames || [];
+    const leaderboard = buildSortedLeaderboard();
+
+    let leagueMembersData = null;
+    try {
+      const membersSnap = await get(ref(database, `leagues/${lpMeta.leagueId}/members`));
+      leagueMembersData = membersSnap.val();
+    } catch (err) {
+      console.error('Error loading league members for Gross/Net resolve:', err);
+    }
+
+    const exclusionGames = sideGames.filter(
+      sg => sg.sideGameType === 'stroke_play' && sg.competitionMode === 'main_game_exclusion'
+    );
+
+    const participationPts = lpMeta.leaguePoints?.participationPoints || 0;
+    const results = [];
+    for (const sg of exclusionGames) {
+      const allocation = allocateStrokePlayPoints(
+        leaderboard, lpMeta.leaguePoints, sg,
+        currentEvent.players || {}, leagueMembersData
+      );
+      results.push({ sg, allocation, participationPts });
+    }
+
+    setGrossNetResult(results);
   };
 
   const handleReopenEvent = async () => {
@@ -396,6 +523,67 @@ export default function EventLobbyView({
                 🏁 End Event
               </button>
             )}
+            {isHost && eventStatus === 'completed' && isLeagueEvent && (
+              <button
+                onClick={handleRecalculate}
+                className="w-full bg-[#00285e] hover:bg-[#003a7a] text-white py-3 rounded-xl font-semibold transition-all mb-4"
+              >
+                🔄 Recalculate League Points
+              </button>
+            )}
+            {isHost && isLeagueEvent && hasGrossNetSideGame && (
+              <button
+                onClick={handleResolveGrossNet}
+                className="w-full bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-semibold transition-all mb-4"
+              >
+                ⚖️ Resolve Gross/Net
+              </button>
+            )}
+            {grossNetResult && (
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-5 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-bold text-gray-900 text-base">Gross/Net Allocation</h3>
+                  <button
+                    onClick={() => setGrossNetResult(null)}
+                    className="text-gray-400 hover:text-gray-600 text-sm font-semibold"
+                  >
+                    ✕ Close
+                  </button>
+                </div>
+                {grossNetResult.map(({ sg, allocation, participationPts: ppts }) => (
+                  <div key={sg.id} className="mb-4 last:mb-0">
+                    <div className="text-xs font-semibold text-[#00285e] uppercase tracking-wide mb-2">{sg.name}</div>
+                    <div className="space-y-2">
+                      {Object.entries(allocation)
+                        .sort(([, a], [, b]) => b.points - a.points)
+                        .map(([uid, { competition, points }]) => {
+                          const playerName = players.find(p => p.uid === uid)?.displayName || 'Unknown';
+                          const positionPts = Math.round((points - ppts) * 10) / 10;
+                          return (
+                            <div key={uid} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${competition === 'net' ? 'bg-blue-100 text-blue-700' : 'bg-gray-200 text-gray-600'}`}>
+                                  {competition === 'net' ? 'NET' : 'GROSS'}
+                                </span>
+                                <span className="text-sm text-gray-900">{playerName}</span>
+                              </div>
+                              <div className="text-right">
+                                <span className="text-sm font-bold text-[#00285e]">{positionPts} pts</span>
+                                {ppts > 0 && (
+                                  <span className="text-xs text-gray-400 ml-1">+{ppts} par</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                ))}
+                <div className="mt-3 pt-3 border-t border-gray-100 text-xs text-gray-400">
+                  Each player competes on whichever board awards more points. Gross wins ties.
+                </div>
+              </div>
+            )}
           </>
         )}
 
@@ -440,6 +628,117 @@ export default function EventLobbyView({
                   currentEvent={currentEvent}
                   setFeedback={setFeedback}
                 />
+              </div>
+            )}
+
+            {/* Wolf Setup Section */}
+            {isWolfFormat && isHost && (eventStatus === 'open' || eventStatus === 'active') && (
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
+                <div className="flex items-center justify-between mb-1">
+                  <h3 className="text-lg font-bold text-gray-900">Wolf Tee Order</h3>
+                  {wolfPlayerOrder.length === wolfPlayerCount
+                    ? <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-semibold">Set</span>
+                    : <span className="text-xs bg-amber-100 text-amber-700 px-2 py-1 rounded-full font-semibold">Required</span>
+                  }
+                </div>
+                <p className="text-sm text-gray-500 mb-4">
+                  Set the order players tee off. The Wolf rotates each hole based on this order.
+                </p>
+
+                {/* Build ordered player list — start from wolfPlayerOrder if set, else use players */}
+                {(() => {
+                  const orderedUids = wolfPlayerOrder.length === wolfPlayerCount
+                    ? wolfPlayerOrder
+                    : players.map(p => p.uid);
+                  const playerMap = Object.fromEntries(players.map(p => [p.uid, p]));
+                  return (
+                    <div className="space-y-2 mb-4">
+                      {orderedUids.map((uid, idx) => {
+                        const player = playerMap[uid];
+                        if (!player) return null;
+                        return (
+                          <div key={uid} className="flex items-center gap-3 bg-gray-50 rounded-xl px-4 py-3">
+                            <span className="text-sm font-bold text-gray-400 w-5">{idx + 1}</span>
+                            <div className="w-8 h-8 rounded-full bg-[#00285e] flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
+                              {(player.displayName || '?').charAt(0).toUpperCase()}
+                            </div>
+                            <span className="flex-1 text-sm font-medium text-gray-900">{player.displayName}</span>
+                            <div className="flex gap-1">
+                              <button
+                                onClick={() => idx > 0 && handleWolfReorder(idx, idx - 1)}
+                                disabled={idx === 0}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-200 disabled:opacity-20 transition-colors"
+                              >▲</button>
+                              <button
+                                onClick={() => idx < orderedUids.length - 1 && handleWolfReorder(idx, idx + 1)}
+                                disabled={idx === orderedUids.length - 1}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-200 disabled:opacity-20 transition-colors"
+                              >▼</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                {/* Initialize order button if not yet set */}
+                {wolfPlayerOrder.length !== wolfPlayerCount && players.length === wolfPlayerCount && (
+                  <button
+                    onClick={async () => {
+                      const order = players.map(p => p.uid);
+                      await set(ref(database, `events/${currentEvent.id}/meta/wolfPlayerOrder`), order);
+                    }}
+                    className="w-full mb-4 py-2 rounded-xl bg-[#f0f4ff] text-[#00285e] text-sm font-semibold hover:bg-[#e8eef8] transition-all"
+                  >
+                    Use Current Player Order
+                  </button>
+                )}
+                {players.length !== wolfPlayerCount && (
+                  <p className="text-xs text-amber-600 mb-4">
+                    Need exactly {wolfPlayerCount} players for this Wolf format ({players.length} currently joined)
+                  </p>
+                )}
+
+                {/* Hole rotation preview */}
+                {wolfPlayerOrder.length === wolfPlayerCount && (
+                  <div>
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Wolf Rotation Preview</p>
+                    <div className="flex flex-wrap gap-2">
+                      {wolfHoleOrder.slice(0, 9).map(holeNum => {
+                        const wolfUid = wolfPlayerOrder[(holeNum - 1) % wolfPlayerCount];
+                        const wolfName = players.find(p => p.uid === wolfUid)?.displayName || '?';
+                        return (
+                          <div key={holeNum} className="bg-gray-50 rounded-lg px-3 py-1.5 text-xs">
+                            <span className="text-gray-400 font-medium">H{holeNum} </span>
+                            <span className="text-gray-900 font-semibold">{wolfName.split(' ')[0]}</span>
+                          </div>
+                        );
+                      })}
+                      {wolfHoleOrder.length > 9 && (
+                        <div className="text-xs text-gray-400 self-center">+ {wolfHoleOrder.length - 9} more...</div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Wolf Setup — read-only view for non-hosts */}
+            {isWolfFormat && !isHost && wolfPlayerOrder.length === wolfPlayerCount && (
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
+                <h3 className="text-lg font-bold text-gray-900 mb-3">Wolf Tee Order</h3>
+                <div className="flex flex-wrap gap-2">
+                  {wolfPlayerOrder.map((uid, idx) => {
+                    const name = players.find(p => p.uid === uid)?.displayName || '?';
+                    return (
+                      <div key={uid} className="flex items-center gap-1.5 bg-gray-50 rounded-lg px-3 py-1.5 text-xs">
+                        <span className="text-gray-400 font-medium">{idx + 1}.</span>
+                        <span className="text-gray-900 font-semibold">{name}</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 

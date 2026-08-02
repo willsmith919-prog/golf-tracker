@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { calculateSkins } from '../../utils/skins';
 import { buildHoleOrder } from '../../utils/holes';
+import { getPlayerCourseHandicap } from '../../utils/handicap';
 
 export default function SideGameLeaderboard({
   sideGame,
@@ -120,6 +121,20 @@ export default function SideGameLeaderboard({
   if (sideGame.sideGameType === 'stroke_play') {
     const isNetVariant = sideGame.variant === 'net';
 
+    const useSlope = meta.handicap?.useSlope ?? true;
+    const coursePar = coursePars.reduce((sum, p) => sum + (p || 0), 0);
+    const hcConfig = {
+      handicapEnabled: true,
+      courseSlope: useSlope ? (meta.courseSlope || null) : null,
+      courseRating: useSlope ? (meta.courseRating || null) : null,
+      coursePar,
+      handicapAllowance: meta.handicap?.allowance || 100
+    };
+    const getPlayingHcp = (handicapIndex) => {
+      if (handicapIndex == null) return null;
+      return getPlayerCourseHandicap(handicapIndex, hcConfig);
+    };
+
     const strokePlayEntries = leaderboardEntries
       .filter(e => e.holesPlayed > 0)
       .map(e => ({ ...e }))
@@ -203,6 +218,18 @@ export default function SideGameLeaderboard({
                   {entry.subtitle && (
                     <div className="text-xs text-gray-400 truncate">{entry.subtitle}</div>
                   )}
+                  {isNetVariant && (() => {
+                    const ph = getPlayingHcp(entry.handicap);
+                    if (ph == null) return null;
+                    return (
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        HCP {entry.handicap}
+                        <span className="ml-1.5 font-semibold text-[#00285e] bg-[#f0f4ff] px-1.5 py-0.5 rounded">
+                          {ph} playing
+                        </span>
+                      </div>
+                    );
+                  })()}
                 </div>
                 <div className={`text-center text-sm font-bold ${isUnder ? 'text-green-700' : isOver ? 'text-red-600' : 'text-gray-700'}`}>
                   <span className={`inline-block px-2 py-0.5 rounded ${isUnder ? 'bg-green-100' : isOver ? 'bg-red-100' : ''}`}>

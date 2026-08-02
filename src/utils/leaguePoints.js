@@ -248,6 +248,13 @@ export function allocateStrokePlayPoints(grossLeaderboard, leaguePoints, sideGam
     return sorted;
   };
 
+  // Compute tie-split prize: players tied across positions N..N+k-1 share the sum, rounded to 1dp
+  const splitPrize = (positionsMap, startPos, tieCount) => {
+    let total = 0;
+    for (let i = 0; i < tieCount; i++) total += positionsMap[String(startPos + i)] || 0;
+    return Math.round((total / tieCount) * 10) / 10;
+  };
+
   // Points for a given subset on the gross leaderboard (respects nonLeagueHandling)
   const calcGrossPoints = (group) => {
     const sorted = sortAndAssign(group, false);
@@ -256,77 +263,77 @@ export function allocateStrokePlayPoints(grossLeaderboard, leaguePoints, sideGam
       let leaguePos = 1;
       for (const e of sorted) {
         if (!isLeagueMember(e.id)) continue;
-        const pts = (leaguePoints.positions[String(leaguePos)] || 0) + participationPoints;
-        result[e.id] = pts;
+        result[e.id] = (leaguePoints.positions[String(leaguePos)] || 0) + participationPoints;
         leaguePos++;
       }
     } else {
+      const tieCount = {};
       for (const e of sorted) {
         if (!isLeagueMember(e.id)) continue;
-        const pts = (leaguePoints.positions[String(e.position)] || 0) + participationPoints;
-        result[e.id] = pts;
+        tieCount[e.position] = (tieCount[e.position] || 0) + 1;
+      }
+      for (const e of sorted) {
+        if (!isLeagueMember(e.id)) continue;
+        const count = tieCount[e.position] || 1;
+        const posPts = count > 1
+          ? splitPrize(leaguePoints.positions, e.position, count)
+          : (leaguePoints.positions[String(e.position)] || 0);
+        result[e.id] = posPts + participationPoints;
       }
     }
     return result;
   };
 
-  // Points for a given subset on the net stroke play side game ('skip' only — side game has no award_around)
+  // Points for a given subset on the net stroke play side game.
+  // Includes participation so the gross vs net comparison is symmetrical.
   const calcNetPoints = (group) => {
     const sorted = sortAndAssign(group, isNet);
+    const positions = sideGame.positions || {};
+    const tieCount = {};
+    for (const e of sorted) {
+      if (!isLeagueMember(e.id)) continue;
+      tieCount[e.position] = (tieCount[e.position] || 0) + 1;
+    }
     const result = {};
     for (const e of sorted) {
       if (!isLeagueMember(e.id)) continue;
-      const pts = (sideGame.positions || {})[String(e.position)] || 0;
-      result[e.id] = pts;
+      const count = tieCount[e.position] || 1;
+      const posPts = count > 1
+        ? splitPrize(positions, e.position, count)
+        : (positions[String(e.position)] || 0);
+      result[e.id] = posPts + participationPoints;
     }
     return result;
   };
 
-  // Iterative allocation — repeat until no player wants to switch
-  let assignments = {}; // uid → 'gross' | 'net'
-  // Seed: everyone starts on gross
-  for (const e of active) assignments[e.id] = 'gross';
+  // Seed: each player compares their points on both full boards for initial assignment
+  const grossAll = calcGrossPoints(active);
+  const netAll = calcNetPoints(active);
+  let assignments = {};
+  for (const e of active) {
+    assignments[e.id] = (netAll[e.id] || 0) > (grossAll[e.id] || 0) ? 'net' : 'gross';
+  }
 
-  for (let iter = 0; iter < 10; iter++) {
-    const grossGroup = active.filter(e => assignments[e.id] === 'gross');
-    const netGroup = active.filter(e => assignments[e.id] === 'net');
-
-    const grossPts = calcGrossPoints(grossGroup);
-    const netPts = calcNetPoints(netGroup);
-
-    // First pass: everyone re-evaluates against BOTH boards (with everyone on them)
-    // using the current assignment context — compare their own points
-    const grossAll = calcGrossPoints(active);
-    const netAll = calcNetPoints(active);
-
-    let changed = false;
-    const newAssignments = {};
-    for (const e of active) {
-      const g = grossAll[e.id] || 0;
-      const n = netAll[e.id] || 0;
-      // Net wins only if strictly greater; gross wins ties
-      newAssignments[e.id] = n > g ? 'net' : 'gross';
-      if (newAssignments[e.id] !== assignments[e.id]) changed = true;
-    }
-    assignments = newAssignments;
-    if (!changed) break;
-
-    // After initial split, re-evaluate within each group
+  // Refine: each player checks whether switching to the other group would benefit them.
+  // Uses hypothetical group composition (player added to other group) so players
+  // who would gain a prize slot by switching (e.g. moving from 5th→4th) are caught.
+  for (let iter = 0; iter < 20; iter++) {
     const gGroup = active.filter(e => assignments[e.id] === 'gross');
     const nGroup = active.filter(e => assignments[e.id] === 'net');
-    const gPts = calcGrossPoints(gGroup);
-    const nPts = calcNetPoints(nGroup);
 
-    let changed2 = false;
+    let changed = false;
     const refined = {};
     for (const e of active) {
-      const g = gPts[e.id] || 0;
-      const n = nPts[e.id] || 0;
+      const isGross = assignments[e.id] === 'gross';
+      // Gross player: compare staying in gGroup vs joining nGroup
+      // Net player: compare staying in nGroup vs joining gGroup
+      const g = calcGrossPoints(isGross ? gGroup : [...gGroup, e])[e.id] || 0;
+      const n = calcNetPoints(isGross ? [...nGroup, e] : nGroup)[e.id] || 0;
       refined[e.id] = n > g ? 'net' : 'gross';
-      if (refined[e.id] !== assignments[e.id]) changed2 = true;
+      if (refined[e.id] !== assignments[e.id]) changed = true;
     }
     assignments = refined;
-    if (!changed2) break;
+    if (!changed) break;
   }
 
   // Final point calculation with stable assignments
@@ -341,6 +348,50 @@ export function allocateStrokePlayPoints(grossLeaderboard, leaguePoints, sideGam
     result[e.id] = { competition: comp, points: pts };
   }
   return result;
+}
+
+/**
+ * Removes one event's points from all players in the season standings.
+ * Use this when an event was ended incorrectly and the points need to be
+ * rolled back before re-running the calculation.
+ *
+ * @param {string} leagueId
+ * @param {string} seasonId
+ * @param {string} eventId
+ */
+export async function removeEventFromStandings(leagueId, seasonId, eventId) {
+  if (!leagueId || !seasonId || !eventId) {
+    console.error('removeEventFromStandings: missing required params');
+    return;
+  }
+
+  const standingsRef = ref(database, `leagues/${leagueId}/seasons/${seasonId}/standings`);
+
+  try {
+    const snapshot = await get(standingsRef);
+    const currentStandings = snapshot.val() || {};
+
+    let changed = false;
+    for (const uid of Object.keys(currentStandings)) {
+      const ps = currentStandings[uid];
+      const prev = ps.events?.[eventId];
+      if (prev != null) {
+        ps.points = Math.max(0, (ps.points || 0) - prev);
+        delete ps.events[eventId];
+        if (ps.breakdowns?.[eventId] != null) delete ps.breakdowns[eventId];
+        currentStandings[uid] = ps;
+        changed = true;
+      }
+    }
+
+    if (changed) {
+      await set(standingsRef, currentStandings);
+      console.log('Event points removed from standings');
+    }
+  } catch (error) {
+    console.error('Error removing event from standings:', error);
+    throw error;
+  }
 }
 
 /**
