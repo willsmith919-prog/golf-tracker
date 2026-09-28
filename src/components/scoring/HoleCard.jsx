@@ -48,6 +48,7 @@ export default function HoleCard({
   onFairwaySelect,
   onPuttsSelect,
   onConfirmAndNext,
+  entryMode = 'confirm',
   onClearScore,
   onStartMulligan,
   onConfirmMulligan,
@@ -415,8 +416,8 @@ export default function HoleCard({
           </>
         )}
 
-        {/* Save & Next / Clear Confirmation Bar */}
-        {currentScore && !showCustomScore && (
+        {/* Save & Next / Clear Confirmation Bar — not needed in Quick mode (the last tap saves) */}
+        {currentScore && !showCustomScore && entryMode !== 'quick' && (
           <div className="mb-4 bg-[#f0f4ff] border-2 border-[#dce8f5] rounded-xl p-4">
             <div className="text-center mb-3">
               <div className="text-sm text-gray-600">

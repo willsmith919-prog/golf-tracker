@@ -8,6 +8,8 @@ import LeaderboardRow from './LeaderboardRow';
 import LeagueStandingsPanel from './LeagueStandingsPanel';
 import SideGameLeaderboard from './SideGameLeaderboard';
 import VegasLeaderboard from './VegasLeaderboard';
+import NinesLeaderboard from './NinesLeaderboard';
+import StatGamesLeaderboard from './StatGamesLeaderboard';
 import MatchPlayLeaderboard from './MatchPlayLeaderboard';
 import TeamMatchPlayLeaderboard from './TeamMatchPlayLeaderboard';
 import { calcWolfTotals } from '../../utils/wolfScoring';
@@ -67,6 +69,7 @@ export default function LiveLeaderboard({
   const isLeagueEvent = !!(leaguePoints && leagueId && seasonId);
   const isWolfFormat = meta.competition?.structure === 'wolf';
   const isMatchPlayTeams = meta.scoringMethod === 'match_play' && (meta.teamSize || 1) !== 1;
+  const hasStatGames = isLeagueEvent && ((leaguePoints.statGames || []).length > 0 || (leaguePoints.bonusPoints || []).length > 0);
   const hasTabs = hasSideGames || isLeagueEvent || isWolfFormat;
 
   // ==================== MATCH PLAY DETECTION ====================
@@ -344,6 +347,9 @@ export default function LiveLeaderboard({
         {hasSideGames && activeGameTab !== 'main' && (() => {
           const sg = sideGames.find(s => s.id === activeGameTab);
           if (!sg) return null;
+          if (sg.sideGameType === 'nines') {
+            return <NinesLeaderboard sideGame={sg} currentEvent={currentEvent} currentUser={currentUser} />;
+          }
           if (sg.sideGameType === 'vegas') {
             return (
               <VegasLeaderboard
@@ -408,6 +414,9 @@ export default function LiveLeaderboard({
         {hasSideGames && activeGameTab !== 'main' && (() => {
           const sg = sideGames.find(s => s.id === activeGameTab);
           if (!sg) return null;
+          if (sg.sideGameType === 'nines') {
+            return <NinesLeaderboard sideGame={sg} currentEvent={currentEvent} currentUser={currentUser} />;
+          }
           if (sg.sideGameType === 'vegas') {
             return (
               <VegasLeaderboard
@@ -483,7 +492,19 @@ export default function LiveLeaderboard({
                   : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
               }`}
             >
-              🏆 League
+              {meta.leagueType === 'series' ? '🧳 Series' : '🏆 League'}
+            </button>
+          )}
+          {hasStatGames && (
+            <button
+              onClick={() => setActiveGameTab('stats')}
+              className={`flex-shrink-0 px-3 py-2 rounded-lg text-xs font-semibold transition-all whitespace-nowrap ${
+                activeGameTab === 'stats'
+                  ? 'bg-white text-gray-900 shadow-md'
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-white/50'
+              }`}
+            >
+              📊 Stats
             </button>
           )}
           {isWolfFormat && (
@@ -512,6 +533,7 @@ export default function LiveLeaderboard({
           teamSize={teamSize}
           players={players}
           currentEventId={currentEvent?.id}
+          currentEvent={currentEvent}
           sideGames={sideGames}
           holeOrder={holeOrder}
           coursePars={coursePars}
@@ -519,10 +541,18 @@ export default function LiveLeaderboard({
         />
       )}
 
+      {/* Stat games tab content */}
+      {hasStatGames && activeGameTab === 'stats' && (
+        <StatGamesLeaderboard currentEvent={currentEvent} currentUser={currentUser} />
+      )}
+
       {/* Side game tab content */}
       {hasSideGames && activeGameTab !== 'main' && activeGameTab !== 'standings' && (() => {
         const sg = sideGames.find(s => s.id === activeGameTab);
         if (!sg) return null;
+        if (sg.sideGameType === 'nines') {
+          return <NinesLeaderboard sideGame={sg} currentEvent={currentEvent} currentUser={currentUser} />;
+        }
         if (sg.sideGameType === 'vegas') {
           return (
             <VegasLeaderboard

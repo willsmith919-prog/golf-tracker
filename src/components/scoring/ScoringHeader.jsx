@@ -14,7 +14,9 @@ export default function ScoringHeader({
   onTrackStatsToggle,
   statMode = 'traditional',
   onStatModeChange = () => {},
-  isScoringForOther = false
+  isScoringForOther = false,
+  quickEntry = false,
+  onQuickEntryToggle = () => {}
 }) {
   const gridCols = (isSolo || trackStats)
     ? 'grid-cols-2 md:grid-cols-5'
@@ -136,9 +138,32 @@ export default function ScoringHeader({
         )}
       </div>
 
+      <div className="mt-4 pt-4 border-t border-gray-200">
+        {/* Quick Entry — per-user preference, all formats */}
+        <div className={`flex items-center justify-between ${!isTeamFormat ? 'mb-3' : ''}`}>
+          <div>
+            <div className="text-sm font-semibold text-gray-700">Quick Entry</div>
+            <div className="text-xs text-gray-500">
+              {quickEntry ? 'Last tap saves & goes to next hole' : 'Off — confirm with Save & Next'}
+            </div>
+          </div>
+          <button
+            onClick={onQuickEntryToggle}
+            className={`relative inline-flex h-7 w-12 items-center rounded-full transition-colors ${
+              quickEntry ? 'bg-green-500' : 'bg-gray-300'
+            }`}
+          >
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform ${
+                quickEntry ? 'translate-x-6' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+
       {/* Track Stats section — solo always shows tabs; event individual shows toggle + tabs */}
       {!isTeamFormat && (
-        <div className="mt-4 pt-4 border-t border-gray-200">
+        <div>
           {!isSolo && (
             <div className="flex items-center justify-between mb-3">
               <div>
@@ -189,6 +214,7 @@ export default function ScoringHeader({
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

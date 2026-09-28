@@ -9,6 +9,8 @@ export default function JoinEventConfirm({
   setCurrentEvent,
   loadUserEvents,
   setUserEvents,
+  loadUserLeagues,
+  setUserLeagues,
 }) {
   const [event, setEvent] = useState(null);
   const [eventId, setEventId] = useState(null);
@@ -93,6 +95,27 @@ export default function JoinEventConfirm({
         role: 'player',
         joinedAt: Date.now(),
       });
+
+      // Series rounds: joining the round also joins the series, so a player who
+      // only got the EV- code from the group chat still earns series points.
+      // (League events don't do this — non-league guests are intentional there.)
+      const meta = event?.meta || {};
+      if (meta.leagueType === 'series' && meta.leagueId) {
+        const memberRef = ref(database, `leagues/${meta.leagueId}/members/${currentUser.uid}`);
+        const memberSnapshot = await get(memberRef);
+        if (!memberSnapshot.exists()) {
+          const memberEntry = { displayName, role: 'member', joinedAt: Date.now() };
+          if (handicap !== null) memberEntry.handicap = handicap;
+          await set(memberRef, memberEntry);
+          await set(ref(database, `users/${currentUser.uid}/leagueMemberships/${meta.leagueId}`), {
+            role: 'member',
+            joinedAt: Date.now(),
+          });
+          if (loadUserLeagues && setUserLeagues) {
+            setUserLeagues(await loadUserLeagues(currentUser.uid));
+          }
+        }
+      }
 
       // Refresh the home screen event list so the event appears immediately
       if (loadUserEvents && setUserEvents) {
@@ -194,7 +217,7 @@ export default function JoinEventConfirm({
           <button
             onClick={handleJoin}
             disabled={joining}
-            className="w-full bg-[#00285e] hover:bg-[#003a7d] disabled:bg-gray-400 text-white font-bold py-4 rounded-2xl shadow-lg transition-all text-lg"
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-4 rounded-2xl shadow-lg transition-all text-lg"
           >
             {joining ? 'Joining...' : 'Join Event'}
           </button>

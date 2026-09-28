@@ -508,9 +508,12 @@ function App() {
     );
   }
 
-  if (view === 'create-league') {
+  // A Series (golf trip) reuses the League screens with series wording
+  if (view === 'create-league' || view === 'create-series') {
     return (
       <CreateLeagueView
+        key={view}
+        mode={view === 'create-series' ? 'series' : 'league'}
         currentUser={currentUser}
         userProfile={userProfile}
         newLeague={newLeague}
@@ -542,7 +545,7 @@ function App() {
     );
   }
 
-  if (view === 'join-league-confirm') {
+  if (view === 'join-league-confirm' || view === 'join-series-confirm') {
     return (
       <JoinLeagueConfirmView
         currentUser={currentUser}
@@ -619,6 +622,8 @@ function App() {
       setCurrentEvent={setCurrentEvent}
       loadUserEvents={loadUserEvents}
       setUserEvents={setUserEvents}
+      loadUserLeagues={loadUserLeagues}
+      setUserLeagues={setUserLeagues}
     />
   );
 }

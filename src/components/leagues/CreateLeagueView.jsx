@@ -1,6 +1,9 @@
-import { useState } from 'react';
-import { ref, set } from 'firebase/database';
+import { useState, useEffect } from 'react';
+import { ref, get, set } from 'firebase/database';
 import { createCode } from '../../utils/codes';
+import { getGroupLabels } from '../../utils/groupLabels';
+import StatGamesEditor from '../shared/StatGamesEditor';
+import BonusPointsEditor from '../shared/BonusPointsEditor';
 import { database } from '../../firebase';
 
 // Suggested default point values for up to 16 positions
@@ -16,9 +19,21 @@ export default function CreateLeagueView({
   setView,
   setCurrentLeague,
   setUserLeagues,
-  loadUserLeagues
+  loadUserLeagues,
+  mode = 'league' // 'league' or 'series' (a golf trip — one season, no drop-lowest)
 }) {
+  const isSeries = mode === 'series';
+  const labels = getGroupLabels(isSeries);
   const [showPointsConfig, setShowPointsConfig] = useState(false);
+
+  // Trips don't usually award points just for showing up, and never drop rounds
+  useEffect(() => {
+    setNewLeague(prev => ({
+      ...prev,
+      participationPoints: isSeries ? 0 : 5,
+      dropLowest: isSeries ? 0 : 2
+    }));
+  }, [isSeries]);
 
   // --- Helpers for dynamic point position rows ---
 
@@ -59,52 +74,58 @@ export default function CreateLeagueView({
     setFeedback('');
 
     if (!newLeague.name.trim()) {
-      setFeedback('Please enter a league name');
+      setFeedback(`Please enter a ${labels.nounLower} name`);
       return;
     }
 
-    if (!newLeague.seasonName.trim()) {
+    if (!isSeries && !newLeague.seasonName.trim()) {
       setFeedback('Please enter a season name');
       return;
     }
 
-    if (!userProfile) {
-      setFeedback('User profile not loaded. Please try again.');
-      return;
-    }
-
     try {
+      // Read the profile fresh instead of relying on the copy loaded at login —
+      // that copy can be empty (e.g. an account with no users/{uid} record yet),
+      // which used to block creation with "User profile not loaded".
+      const profileSnapshot = await get(ref(database, `users/${currentUser.uid}/profile`));
+      const profile = profileSnapshot.val() || userProfile?.profile || {};
+      const memberEntry = {
+        displayName: profile.displayName || currentUser.email || 'Unknown',
+        role: 'commissioner',
+        joinedAt: Date.now()
+      };
+      if (profile.handicap != null) memberEntry.handicap = profile.handicap;
+
       const leagueId = 'league-' + Date.now();
       const seasonId = 'season-' + Date.now();
-      const code = await createCode('league', leagueId);
+      const code = await createCode(isSeries ? 'series' : 'league', leagueId);
 
       const leagueData = {
         meta: {
           name: newLeague.name.trim(),
+          type: isSeries ? 'series' : 'league',
           code: code,
           commissionerId: currentUser.uid,
           description: newLeague.description.trim(),
           createdAt: Date.now()
         },
         members: {
-          [currentUser.uid]: {
-            displayName: userProfile?.profile?.displayName || userProfile?.displayName || currentUser.email || 'Unknown',
-            role: 'commissioner',
-            handicap: userProfile?.profile?.handicap || userProfile?.handicap || null,
-            joinedAt: Date.now()
-          }
+          [currentUser.uid]: memberEntry
         },
         seasons: {
           [seasonId]: {
-            name: newLeague.seasonName.trim(),
+            // A series has exactly one "season", named after the series itself
+            name: isSeries ? newLeague.name.trim() : newLeague.seasonName.trim(),
             status: 'active',
             startDate: newLeague.seasonStartDate || null,
             endDate: newLeague.seasonEndDate || null,
             defaultPointsConfig: {
               positions: { ...newLeague.pointSystem },
-              participationPoints: newLeague.participationPoints
+              participationPoints: newLeague.participationPoints,
+              statGames: newLeague.statGames || [],
+              bonusPoints: (newLeague.bonusPoints || []).filter(b => b.name.trim())
             },
-            dropLowest: newLeague.dropLowest,
+            dropLowest: isSeries ? 0 : newLeague.dropLowest,
             events: [],
             standings: {}
           }
@@ -125,7 +146,7 @@ export default function CreateLeagueView({
       setUserLeagues(leagues);
       setCurrentLeague({ id: leagueId, ...leagueData, userRole: 'commissioner' });
 
-      setFeedback(`League created! Code: ${code}`);
+      setFeedback(`${labels.noun} created! Code: ${code}`);
       setTimeout(() => {
         setView('league-dashboard');
         setFeedback('');
@@ -133,7 +154,7 @@ export default function CreateLeagueView({
 
     } catch (error) {
       console.error('Error creating league:', error);
-      setFeedback('Error creating league. Please try again.');
+      setFeedback(`Error creating ${labels.nounLower}. Please try again.`);
     }
   };
 
@@ -145,7 +166,12 @@ export default function CreateLeagueView({
         </button>
 
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-6">Create League</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-6">Create {labels.noun}</h2>
+          {isSeries && (
+            <p className="text-sm text-gray-500 -mt-4 mb-6">
+              For a golf trip or multi-round tournament. Add each round as an event and points roll up into one running leaderboard.
+            </p>
+          )}
 
           {feedback && (
             <div className={`border-2 p-3 rounded-lg mb-4 text-sm ${
@@ -161,13 +187,13 @@ export default function CreateLeagueView({
 
             {/* ===== LEAGUE INFO ===== */}
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2">League Name</label>
+              <label className="block text-sm font-semibold text-gray-700 mb-2">{labels.noun} Name</label>
               <input
                 type="text"
                 value={newLeague.name}
                 onChange={(e) => setNewLeague({ ...newLeague, name: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                placeholder="Sunday Golf League"
+                placeholder={isSeries ? 'Myrtle Beach 2026' : 'Sunday Golf League'}
                 required
               />
             </div>
@@ -178,26 +204,28 @@ export default function CreateLeagueView({
                 value={newLeague.description}
                 onChange={(e) => setNewLeague({ ...newLeague, description: e.target.value })}
                 className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                placeholder="Weekly competitive league for golfers of all levels"
+                placeholder={isSeries ? '4 rounds in 3 days, winner takes the trophy' : 'Weekly competitive league for golfers of all levels'}
                 rows={3}
               />
             </div>
 
             {/* ===== SEASON INFO ===== */}
             <div className="border-t-2 border-gray-100 pt-6">
-              <h3 className="text-lg font-bold text-gray-900 mb-4">First Season</h3>
+              <h3 className="text-lg font-bold text-gray-900 mb-4">{isSeries ? 'Trip Dates' : 'First Season'}</h3>
 
               <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Season Name</label>
-                  <input
-                    type="text"
-                    value={newLeague.seasonName}
-                    onChange={(e) => setNewLeague({ ...newLeague, seasonName: e.target.value })}
-                    className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                    placeholder="2026 Season"
-                  />
-                </div>
+                {!isSeries && (
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Season Name</label>
+                    <input
+                      type="text"
+                      value={newLeague.seasonName}
+                      onChange={(e) => setNewLeague({ ...newLeague, seasonName: e.target.value })}
+                      className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
+                      placeholder="2026 Season"
+                    />
+                  </div>
+                )}
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
@@ -260,22 +288,24 @@ export default function CreateLeagueView({
                     />
                   </div>
 
-                  {/* Drop Lowest */}
-                  <div className="bg-[#f0f4ff] p-4 rounded-xl">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Drop Lowest Scores
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">
-                      How many of a player's worst event results to exclude from final standings. Set to 0 to count all events.
-                    </p>
-                    <input
-                      type="number"
-                      min="0"
-                      value={newLeague.dropLowest}
-                      onChange={(e) => setNewLeague({ ...newLeague, dropLowest: parseInt(e.target.value) || 0 })}
-                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
-                    />
-                  </div>
+                  {/* Drop Lowest — leagues only; every round counts on a trip */}
+                  {!isSeries && (
+                    <div className="bg-[#f0f4ff] p-4 rounded-xl">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Drop Lowest Scores
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">
+                        How many of a player's worst event results to exclude from final standings. Set to 0 to count all events.
+                      </p>
+                      <input
+                        type="number"
+                        min="0"
+                        value={newLeague.dropLowest}
+                        onChange={(e) => setNewLeague({ ...newLeague, dropLowest: parseInt(e.target.value) || 0 })}
+                        className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
+                      />
+                    </div>
+                  )}
 
                   {/* Position Points */}
                   <div className="bg-gray-50 p-4 rounded-xl">
@@ -331,9 +361,33 @@ export default function CreateLeagueView({
                 <div className="bg-gray-50 p-4 rounded-xl text-sm text-gray-600">
                   {Object.keys(newLeague.pointSystem).length} positions configured
                   · {newLeague.participationPoints} participation pts
-                  · Drop lowest {newLeague.dropLowest}
+                  {!isSeries && ` · Drop lowest ${newLeague.dropLowest}`}
                 </div>
               )}
+            </div>
+
+            {/* ===== STAT GAMES ===== */}
+            <div className="border-t-2 border-gray-100 pt-6">
+              <h3 className="text-lg font-bold text-gray-900">Stat Games <span className="text-sm font-normal text-gray-400">(optional)</span></h3>
+              <p className="text-sm text-gray-500 mt-1 mb-4">
+                Bonus points each round, counted automatically from scores — e.g. Most Birdies or Fewest Bogeys. Individual formats only.
+              </p>
+              <StatGamesEditor
+                statGames={newLeague.statGames || []}
+                onChange={(statGames) => setNewLeague({ ...newLeague, statGames })}
+              />
+            </div>
+
+            {/* ===== BONUS POINTS ===== */}
+            <div className="border-t-2 border-gray-100 pt-6">
+              <h3 className="text-lg font-bold text-gray-900">Bonus Points <span className="text-sm font-normal text-gray-400">(optional)</span></h3>
+              <p className="text-sm text-gray-500 mt-1 mb-4">
+                Tap-to-award extras on the scoring screen — chip-ins, sandies, greenies.
+              </p>
+              <BonusPointsEditor
+                bonusPoints={newLeague.bonusPoints || []}
+                onChange={(bonusPoints) => setNewLeague({ ...newLeague, bonusPoints })}
+              />
             </div>
 
             {/* ===== SUBMIT ===== */}
@@ -341,7 +395,7 @@ export default function CreateLeagueView({
               type="submit"
               className="w-full bg-[#00285e] text-white py-4 rounded-xl font-semibold hover:bg-[#003a7d] text-lg"
             >
-              Create League
+              Create {labels.noun}
             </button>
           </form>
         </div>

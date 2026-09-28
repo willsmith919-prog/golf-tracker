@@ -61,6 +61,7 @@ const eventCode = await createCode('event', eventId);
           formatName: formData.formatName || '',
           scoringMethod: formData.scoringMethod || 'stroke',
           teamSize: formData.teamSize || 2,
+          variableTeams: formData.variableTeams || null,
           handicap: formData.handicap || { enabled: false, allowance: 100 },
           stablefordPoints: formData.stablefordPoints || null,
           competition: formData.competition || { structure: 'full_field' },
@@ -74,6 +75,7 @@ const eventCode = await createCode('event', eventId);
           status: "open",
           leagueId: creatingEventForLeague?.leagueId || null,
           seasonId: creatingEventForLeague?.seasonId || null,
+          leagueType: creatingEventForLeague ? (creatingEventForLeague.isSeries ? 'series' : 'league') : null,
           createdAt: Date.now(),
           eventCode: eventCode,
           leaguePoints: formData.leaguePoints || null,
@@ -163,7 +165,8 @@ const eventCode = await createCode('event', eventId);
           <EventForm
             globalCourses={globalCourses}
             formats={formats}
-            showRoundOptions={!creatingEventForLeague}
+            showRoundOptions={!creatingEventForLeague || !!creatingEventForLeague.isSeries}
+            pointsLabel={creatingEventForLeague?.isSeries ? 'Series' : 'League'}
             submitLabel="Create Event"
             onSubmit={handleCreate}
             feedback={feedback}

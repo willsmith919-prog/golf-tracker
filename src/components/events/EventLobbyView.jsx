@@ -12,6 +12,10 @@ import { calculateEventPoints, writeStandingsToFirebase, allocateStrokePlayPoint
 import { sortLeaderboard, assignPositions } from '../../utils/leaderboard';
 import { calculateSkins, buildSkinsEntries } from '../../utils/skins';
 import { calculateVegasResults, buildVegasEntries } from '../../utils/calculateVegasResults';
+import { buildNinesEntries, calculateNines, calculateNinesSeriesPoints } from '../../utils/ninesScoring';
+import NinesGroupConfig from './NinesGroupConfig';
+import { calculateStatGames } from '../../utils/statGames';
+import { calculateBonusPoints } from '../../utils/bonusPoints';
 import { buildHoleOrder } from '../../utils/holes';
 import { getPlayerCourseHandicap, getStrokeHoles } from '../../utils/handicap';
 
@@ -86,6 +90,7 @@ export default function EventLobbyView({
   })();
 
   const isLeagueEvent = !!(currentEvent.meta?.leaguePoints && currentEvent.meta?.leagueId && currentEvent.meta?.seasonId);
+  const groupNoun = currentEvent.meta?.leagueType === 'series' ? 'Series' : 'League';
   const hasGrossNetSideGame = (currentEvent.meta?.sideGames || []).some(
     sg => sg.sideGameType === 'stroke_play' && sg.competitionMode === 'main_game_exclusion'
   );
@@ -255,12 +260,36 @@ export default function EventLobbyView({
       }
     }
 
+    // 9's — converted to league/series points per the side game's own setting
+    // (raw 9's points, by finish in the threesome, or "this game only")
+    const ninesSideGames = sideGames.filter(sg => sg.sideGameType === 'nines');
+    const ninesByPlayer = {};
+    if (ninesSideGames.length > 0) {
+      const ninesEntries = buildNinesEntries(currentEvent);
+      for (const sg of ninesSideGames) {
+        const pts = calculateNinesSeriesPoints(calculateNines(ninesEntries, holeOrder, sg), sg);
+        for (const [uid, p] of Object.entries(pts)) {
+          if (uid.startsWith('guest-')) continue;
+          if (!ninesByPlayer[uid]) ninesByPlayer[uid] = {};
+          ninesByPlayer[uid][sg.id] = p;
+        }
+      }
+    }
+
+    // Stat games (Most Birdies, Fewest Bogeys, ...) — counted from scores
+    const { byPlayer: statGamesByPlayer } = calculateStatGames(currentEvent, lpMeta.leaguePoints.statGames || []);
+    // Bonus points tapped in during the round (chip-ins, sandies...)
+    const { byPlayer: bonusByPlayer } = calculateBonusPoints(currentEvent, lpMeta.leaguePoints.bonusPoints || []);
+
     const exclusionSideGames = strokePlaySideGames.filter(sg => sg.competitionMode === 'main_game_exclusion');
     const combinedPoints = {};
     const allUids = new Set([
       ...Object.keys(mainGamePoints),
       ...Object.keys(skinsByPlayer),
-      ...Object.keys(strokePlayByPlayer)
+      ...Object.keys(strokePlayByPlayer),
+      ...Object.keys(ninesByPlayer),
+      ...Object.keys(statGamesByPlayer),
+      ...Object.keys(bonusByPlayer)
     ]);
 
     for (const uid of allUids) {
@@ -281,7 +310,10 @@ export default function EventLobbyView({
       const fullFieldTotal = strokePlaySideGames
         .filter(sg => sg.competitionMode !== 'main_game_exclusion')
         .reduce((sum, sg) => sum + (strokePlayByPlayer[uid]?.[sg.id]?.points || 0), 0);
-      combinedPoints[uid] = base + skinsTotal + fullFieldTotal;
+      const ninesTotal = Object.values(ninesByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
+      const statGamesTotal = Object.values(statGamesByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
+      const bonusTotal = Object.values(bonusByPlayer[uid] || {}).reduce((s, v) => s + v, 0);
+      combinedPoints[uid] = Math.round((base + skinsTotal + fullFieldTotal + ninesTotal + statGamesTotal + bonusTotal) * 10) / 10;
     }
 
     const breakdowns = {};
@@ -328,6 +360,9 @@ export default function EventLobbyView({
         participation: participationDisplay,
         skins: skinsByPlayer[uid] || {},
         strokePlay: strokePlayBreakdown,
+        nines: ninesByPlayer[uid] || {},
+        statGames: statGamesByPlayer[uid] || {},
+        bonuses: bonusByPlayer[uid] || {},
         total: combinedPoints[uid] || 0
       };
     }
@@ -359,10 +394,10 @@ export default function EventLobbyView({
     if (lpMeta.leaguePoints && lpMeta.leagueId && lpMeta.seasonId) {
       try {
         await runLeaguePointsCalc();
-        setFeedback('Event ended! League standings updated.');
+        setFeedback(`Event ended! ${groupNoun} standings updated.`);
       } catch (err) {
         console.error('Error updating standings:', err);
-        setFeedback('Event ended! (Error updating league standings)');
+        setFeedback(`Event ended! (Error updating ${groupNoun.toLowerCase()} standings)`);
       }
     } else {
       setFeedback('Event ended!');
@@ -371,10 +406,10 @@ export default function EventLobbyView({
   };
 
   const handleRecalculate = async () => {
-    setFeedback('Recalculating league standings...');
+    setFeedback(`Recalculating ${groupNoun.toLowerCase()} standings...`);
     try {
       await runLeaguePointsCalc();
-      setFeedback('League standings recalculated!');
+      setFeedback(`${groupNoun} standings recalculated!`);
     } catch (err) {
       console.error('Error recalculating standings:', err);
       setFeedback('Error recalculating. Try again.');
@@ -528,7 +563,7 @@ export default function EventLobbyView({
                 onClick={handleRecalculate}
                 className="w-full bg-[#00285e] hover:bg-[#003a7a] text-white py-3 rounded-xl font-semibold transition-all mb-4"
               >
-                🔄 Recalculate League Points
+                🔄 Recalculate {groupNoun} Points
               </button>
             )}
             {isHost && isLeagueEvent && hasGrossNetSideGame && (
@@ -625,6 +660,15 @@ export default function EventLobbyView({
             {isHost && (currentEvent.meta?.sideGames || []).some(sg => sg.sideGameType === 'vegas' && sg.type !== 'vegas1v1') && (eventStatus === 'open' || eventStatus === 'active') && (
               <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
                 <VegasTeamConfig
+                  currentEvent={currentEvent}
+                  setFeedback={setFeedback}
+                />
+              </div>
+            )}
+
+            {isHost && (currentEvent.meta?.sideGames || []).some(sg => sg.sideGameType === 'nines') && (eventStatus === 'open' || eventStatus === 'active') && (
+              <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-6 mb-6">
+                <NinesGroupConfig
                   currentEvent={currentEvent}
                   setFeedback={setFeedback}
                 />

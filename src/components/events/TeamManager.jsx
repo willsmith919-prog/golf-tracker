@@ -22,6 +22,9 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
   const teams = currentEvent?.teams || {};
   const meta = currentEvent?.meta || {};
   const teamSize = meta.teamSize || 2;
+  const variableTeams = meta.variableTeams === true;
+  // For variable teams: max 4 per team; for fixed: use teamSize
+  const maxTeamSize = variableTeams ? 4 : teamSize;
 
   // ==================== HELPER: FIND WHICH TEAM A PLAYER IS ON ====================
   // Returns the teamId if the player is already assigned, or null if unassigned.
@@ -79,12 +82,22 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
 
   // ==================== ADD PLAYER TO TEAM ====================
 
+  const setTeamCombinationMethod = async (teamId, method) => {
+    try {
+      await set(ref(database, `events/${eventId}/teams/${teamId}/combinationMethod`), method);
+    } catch (error) {
+      console.error('Error setting team mode:', error);
+      setFeedback('Error updating team mode');
+      setTimeout(() => setFeedback(''), 3000);
+    }
+  };
+
   const addPlayerToTeam = async (playerId, teamId) => {
     const team = teams[teamId];
     const currentMembers = Object.keys(team?.members || {});
 
-    if (currentMembers.length >= teamSize) {
-      setFeedback(`Team is full (max ${teamSize} players)`);
+    if (currentMembers.length >= maxTeamSize) {
+      setFeedback(`Team is full (max ${maxTeamSize} players)`);
       setTimeout(() => setFeedback(''), 3000);
       return;
     }
@@ -171,14 +184,16 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
     // Shuffle players randomly
     const shuffled = [...allPlayers].sort(() => Math.random() - 0.5);
 
-    // Create teams of teamSize
+    // For variable teams, default to pairs of 2; otherwise use the configured teamSize
+    const assignSize = variableTeams ? 2 : teamSize;
+
     const newTeams = {};
     let teamNum = 1;
 
-    for (let i = 0; i < shuffled.length; i += teamSize) {
+    for (let i = 0; i < shuffled.length; i += assignSize) {
       const teamId = `team-${Date.now()}-${teamNum}`;
       const members = {};
-      for (let j = i; j < i + teamSize && j < shuffled.length; j++) {
+      for (let j = i; j < i + assignSize && j < shuffled.length; j++) {
         members[shuffled[j].uid] = true;
       }
       newTeams[teamId] = {
@@ -302,7 +317,7 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
                       ✏️
                     </button>
                     <span className="text-xs text-gray-500">
-                      ({team.memberDetails.length}/{teamSize})
+                      ({team.memberDetails.length}/{variableTeams ? 'max ' + maxTeamSize : teamSize})
                     </span>
                   </div>
                 )}
@@ -349,8 +364,38 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
                 </div>
               )}
 
+              {/* Per-team combination method — only for variable teams */}
+              {variableTeams && (
+                <div className="mb-3">
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Play Mode</label>
+                  <div className="flex gap-2">
+                    {[
+                      { value: 'scramble', label: 'Scramble' },
+                      { value: 'bestball', label: 'Best Ball' },
+                      { value: 'individual', label: 'Individual' }
+                    ].map(opt => (
+                      <button
+                        key={opt.value}
+                        type="button"
+                        onClick={() => setTeamCombinationMethod(team.teamId, opt.value)}
+                        className={`flex-1 py-1.5 rounded-lg text-xs font-semibold border-2 transition-colors ${
+                          team.combinationMethod === opt.value
+                            ? 'border-[#00285e] bg-[#f0f4ff] text-[#00285e]'
+                            : 'border-gray-200 text-gray-500 hover:border-gray-300'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  {!team.combinationMethod && (
+                    <p className="text-xs text-amber-600 mt-1">Mode not set — select Scramble, Best Ball, or Individual</p>
+                  )}
+                </div>
+              )}
+
               {/* Add Player Dropdown — only show if team isn't full and there are unassigned players */}
-              {team.memberDetails.length < teamSize && unassignedPlayers.length > 0 && (
+              {team.memberDetails.length < maxTeamSize && unassignedPlayers.length > 0 && (
                 <select
                   defaultValue=""
                   onChange={(e) => {
@@ -371,8 +416,8 @@ export default function TeamManager({ currentEvent, currentUser, setFeedback }) 
                 </select>
               )}
 
-              {/* Full indicator */}
-              {team.memberDetails.length >= teamSize && (
+              {/* Full indicator — only for fixed-size teams */}
+              {!variableTeams && team.memberDetails.length >= teamSize && (
                 <div className="text-xs text-green-600 font-semibold text-center">
                   ✓ Team full
                 </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { ref, get, set, remove, onValue, off } from 'firebase/database';
 import { database } from '../../firebase';
 import { getWolfOnHole, getWolfSides, calcWolfHoleResult } from '../../utils/wolfScoring';
@@ -9,6 +9,7 @@ import ScoringHeader from './ScoringHeader';
 import HoleCard from './HoleCard';
 import Scorecard from './Scorecard';
 import LiveLeaderboard from './LiveLeaderboard';
+import BonusButtons from './BonusButtons';
 
 // ============================================================
 // UNIFIED SCORING VIEW
@@ -321,6 +322,41 @@ export default function ScoringView({
   const emptyPractical = { teeShot: null, secondShot: null, approach: null, wedgePlay: null, threePutt: null, putt610: null, putt36: null };
   const [currentPractical, setCurrentPractical] = useState(emptyPractical);
 
+  // ==================== SCORE ENTRY MODE (user preference) ====================
+  // 'confirm' = tap score, then "Save & Next" (default)
+  // 'quick'   = the last tap for a hole saves and moves on automatically
+  // Saved on the user's profile so it follows them to every round.
+  const entryUserId = isSolo ? user?.uid : currentUser?.uid;
+  const [entryMode, setEntryMode] = useState('confirm');
+  // Set only by user taps, so loading a hole's existing score never triggers a save
+  const autoSaveRequested = useRef(false);
+  // Bumped on every tap so re-tapping the already-selected score still saves & advances
+  const [autoSaveTick, setAutoSaveTick] = useState(0);
+
+  useEffect(() => {
+    if (!entryUserId) return;
+    get(ref(database, `users/${entryUserId}/profile/scoreEntryMode`))
+      .then(snap => { if (snap.val() === 'quick') setEntryMode('quick'); })
+      .catch(err => console.error('Error loading score entry mode:', err));
+  }, [entryUserId]);
+
+  const handleEntryModeChange = async (mode) => {
+    setEntryMode(mode);
+    autoSaveRequested.current = false;
+    if (!entryUserId) return;
+    try {
+      await set(ref(database, `users/${entryUserId}/profile/scoreEntryMode`), mode);
+    } catch (err) {
+      console.error('Error saving score entry mode:', err);
+    }
+  };
+
+  const requestAutoSave = () => {
+    if (entryMode !== 'quick') return;
+    autoSaveRequested.current = true;
+    setAutoSaveTick(t => t + 1);
+  };
+
   // Handler for the Track Stats toggle — saves preference to Firebase
   const handleTrackStatsToggle = async () => {
     const newValue = !trackStats;
@@ -359,6 +395,7 @@ export default function ScoringView({
 
   const handlePracticalStatSelect = (field, value) => {
     setCurrentPractical(prev => ({ ...prev, [field]: value }));
+    requestAutoSave();
   };
 
   // ==================== HOLE DATA ACCESS ====================
@@ -407,6 +444,7 @@ export default function ScoringView({
     }
     setConfirmingMulligan(false);
     setShowCustomScore(false);
+    autoSaveRequested.current = false;
   }, [currentHole]);
 
   useEffect(() => {
@@ -544,6 +582,7 @@ export default function ScoringView({
     if (useStatFlow && currentPar < 4) {
       setCurrentFairway(null);
     }
+    requestAutoSave();
   };
 
   const handleCustomScoreConfirm = () => {
@@ -553,15 +592,18 @@ export default function ScoringView({
     if (useStatFlow && currentPar < 4) {
       setCurrentFairway(null);
     }
+    requestAutoSave();
   };
 
   const handleFairwaySelect = (fairway) => {
     setCurrentFairway(fairway);
+    requestAutoSave();
   };
 
   const handlePuttsSelect = (putts) => {
     const finalPutts = putts === '3+' ? 3 : putts;
     setCurrentPutts(finalPutts);
+    requestAutoSave();
   };
 
   const isReadyToSave = (() => {
@@ -599,6 +641,14 @@ export default function ScoringView({
 
     saveHoleData(currentScore, finalFairway, finalPutts, null);
   };
+
+  // Quick Enter: once the tap that completes a hole lands in state, save & advance
+  useEffect(() => {
+    if (entryMode !== 'quick' || !autoSaveRequested.current) return;
+    if (showCustomScore || !isReadyToSave) return;
+    autoSaveRequested.current = false;
+    handleConfirmAndNext();
+  }, [autoSaveTick, currentScore, currentFairway, currentPutts, currentPractical, showCustomScore]);
 
   const handleClearScore = () => {
     setCurrentScore(null);
@@ -817,6 +867,29 @@ export default function ScoringView({
     } catch (error) {
       console.error('Error undoing mulligan:', error);
       setFeedback('Error undoing mulligan');
+      setTimeout(() => setFeedback(''), 2000);
+    }
+  };
+
+  // ==================== BONUS POINTS (chip-ins, sandies...) ====================
+  // Direct write on tap — bonuses always belong to an individual player
+  const bonusDefs = !isSolo ? (currentEvent?.meta?.leaguePoints?.bonusPoints || []) : [];
+  const bonusRecipients = isSolo
+    ? []
+    : isTeamFormat
+      ? Object.keys(scoringUnit?.members || {}).map(uid => ({ uid, name: currentEvent.players?.[uid]?.displayName || 'Unknown' }))
+      : [{ uid: selectedTeam, name: scoringDisplayName }];
+
+  const handleBonusToggle = async (uid, bonusId, awarded) => {
+    const bonusRef = ref(database, `events/${currentEvent.id}/players/${uid}/bonuses/${currentHole}/${bonusId}`);
+    try {
+      if (awarded) await set(bonusRef, true);
+      else await remove(bonusRef);
+      const eventSnapshot = await get(ref(database, `events/${currentEvent.id}`));
+      setCurrentEvent({ id: currentEvent.id, ...eventSnapshot.val() });
+    } catch (error) {
+      console.error('Error saving bonus:', error);
+      setFeedback('Error saving bonus');
       setTimeout(() => setFeedback(''), 2000);
     }
   };
@@ -1087,6 +1160,8 @@ export default function ScoringView({
           practicalStats={practicalStats}
           isScoringForOther={isScoringForOther}
           combinationMethodBadge={teamCombinationMethod}
+          quickEntry={entryMode === 'quick'}
+          onQuickEntryToggle={() => handleEntryModeChange(entryMode === 'quick' ? 'confirm' : 'quick')}
         />
 
         {/* Variable-team combination method badge */}
@@ -1313,12 +1388,21 @@ export default function ScoringView({
           onFairwaySelect={handleFairwaySelect}
           onPuttsSelect={handlePuttsSelect}
           onConfirmAndNext={handleConfirmAndNext}
+          entryMode={entryMode}
           onClearScore={handleClearScore}
           onStartMulligan={() => setConfirmingMulligan(true)}
           onConfirmMulligan={useMulligan}
           onCancelMulligan={() => setConfirmingMulligan(false)}
           onUndoMulligan={handleUndoMulligan}
           onNotesChange={(e) => setNotes(e.target.value)}
+        />
+
+        <BonusButtons
+          bonusDefs={bonusDefs}
+          recipients={bonusRecipients}
+          holeNum={currentHole}
+          players={currentEvent?.players}
+          onToggle={handleBonusToggle}
         />
 
         <Scorecard

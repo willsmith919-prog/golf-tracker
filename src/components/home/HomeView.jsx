@@ -3,6 +3,7 @@ import { ref, get, set, update } from 'firebase/database';
 import { lookupCode } from '../../utils/codes';
 import { useEffect, useState } from 'react';
 import { auth, database } from '../../firebase';
+import { isSeriesGroup } from '../../utils/groupLabels';
 
 export default function HomeView({
   currentUser,
@@ -106,6 +107,10 @@ export default function HomeView({
       return (a.eventName || '').localeCompare(b.eventName || '');
     });
   const hasEventHistory = userEvents.some(e => e.status === 'completed');
+
+  // Series (golf trips) are stored alongside leagues — split them for display
+  const leaguesOnly = userLeagues.filter(l => !isSeriesGroup(l));
+  const seriesOnly = userLeagues.filter(l => isSeriesGroup(l));
 
   const handleCodeEntry = async () => {
     if (!joinCode.trim()) {
@@ -274,12 +279,50 @@ export default function HomeView({
           </div>
         )}
 
+        {/* MY SERIES — golf trips / multi-round tournaments */}
+        {seriesOnly.length > 0 && (
+          <div className="mb-6">
+            <h2 className="text-white text-lg font-semibold mb-3">MY SERIES</h2>
+            <div className="space-y-3">
+              {seriesOnly.map(series => {
+                const season = Object.values(series.seasons || {}).find(s => s.status === 'active');
+                const roundCount = (season?.events || []).length;
+                return (
+                  <button
+                    key={series.id}
+                    onClick={() => {
+                      setCurrentLeague(series);
+                      setView('league-dashboard');
+                    }}
+                    className="w-full bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all text-left"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <div className="text-xl font-bold text-gray-900 flex items-center gap-2">
+                          🧳 {series.meta.name}
+                          {series.userRole === 'commissioner' && (
+                            <span className="text-yellow-500">⭐</span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-600">
+                          {series.userRole === 'commissioner' ? 'Organizer' : 'Player'} · {roundCount} round{roundCount !== 1 ? 's' : ''}
+                        </div>
+                      </div>
+                      <div className="text-gray-400">›</div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         {/* MY LEAGUES */}
-        {userLeagues.length > 0 && (
+        {leaguesOnly.length > 0 && (
           <div className="mb-6">
             <h2 className="text-white text-lg font-semibold mb-3">MY LEAGUES</h2>
             <div className="space-y-3">
-              {userLeagues.map(league => (
+              {leaguesOnly.map(league => (
                 <button
                   key={league.id}
                   onClick={() => {
@@ -391,23 +434,33 @@ export default function HomeView({
         {/* CREATE */}
         <div className="mb-6">
           <h2 className="text-white text-lg font-semibold mb-3">CREATE</h2>
-          <div className="grid grid-cols-2 gap-3">
-            <button
-              onClick={() => setView('create-league')}
-              className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
-            >
-              <div className="text-center">
-                <div className="text-3xl mb-2">🏆</div>
-                <div className="font-bold text-gray-900">Create League</div>
-              </div>
-            </button>
+          <div className="grid grid-cols-3 gap-3">
             <button
               onClick={() => setView('create-event')}
-              className="bg-white/95 backdrop-blur-sm p-5 rounded-2xl shadow-xl hover:bg-white transition-all"
+              className="bg-white/95 backdrop-blur-sm p-4 rounded-2xl shadow-xl hover:bg-white transition-all"
             >
               <div className="text-center">
                 <div className="text-3xl mb-2">📋</div>
-                <div className="font-bold text-gray-900">Create Event</div>
+                <div className="font-bold text-gray-900 text-sm">Event</div>
+              </div>
+            </button>
+            <button
+              onClick={() => setView('create-series')}
+              className="bg-white/95 backdrop-blur-sm p-4 rounded-2xl shadow-xl hover:bg-white transition-all"
+            >
+              <div className="text-center">
+                <div className="text-3xl mb-2">🧳</div>
+                <div className="font-bold text-gray-900 text-sm">Series</div>
+                <div className="text-xs text-gray-500">Golf trip</div>
+              </div>
+            </button>
+            <button
+              onClick={() => setView('create-league')}
+              className="bg-white/95 backdrop-blur-sm p-4 rounded-2xl shadow-xl hover:bg-white transition-all"
+            >
+              <div className="text-center">
+                <div className="text-3xl mb-2">🏆</div>
+                <div className="font-bold text-gray-900 text-sm">League</div>
               </div>
             </button>
           </div>

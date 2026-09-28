@@ -2,6 +2,9 @@ import { useState } from 'react';
 import CourseSelector from './CourseSelector.jsx';
 import RoundOptions from './RoundOptions.jsx';
 import FormatSelector from './FormatSelector.jsx';
+import { DEFAULT_NINES_POSITIONS } from '../../utils/ninesScoring';
+import StatGamesEditor from './StatGamesEditor.jsx';
+import BonusPointsEditor from './BonusPointsEditor.jsx';
 
 /**
  * Shared event form used by both CreateEventView and EditEventView.
@@ -24,7 +27,8 @@ export default function EventForm({
   onSubmit,
   feedback,
   preFillEvent = null,
-  leaguePointsConfig = null
+  leaguePointsConfig = null,
+  pointsLabel = 'League' // 'League' or 'Series' — wording only
 }) {
   const mergedData = { ...initialData, ...(preFillEvent || {}) };
 
@@ -36,7 +40,9 @@ export default function EventForm({
         positions: { ...(leaguePointsConfig.positions || {}) },
         participationPoints: leaguePointsConfig.participationPoints ?? 5,
         teamPointDistribution: leaguePointsConfig.teamPointDistribution || 'full',
-        nonLeagueHandling: leaguePointsConfig.nonLeagueHandling || 'skip'
+        nonLeagueHandling: leaguePointsConfig.nonLeagueHandling || 'skip',
+        statGames: leaguePointsConfig.statGames || [],
+        bonusPoints: leaguePointsConfig.bonusPoints || []
       }
     : null;
   
@@ -58,6 +64,7 @@ export default function EventForm({
       formatName: mergedData.formatName || '',
       scoringMethod: mergedData.scoringMethod || 'stroke',
       teamSize: mergedData.teamSize || 2,
+      variableTeams: mergedData.variableTeams || false,
       handicap: mergedData.handicap || { enabled: false, allowance: 100 },
       stablefordPoints: mergedData.stablefordPoints || null,
       competition: mergedData.competition || { structure: 'full_field' },
@@ -123,12 +130,14 @@ export default function EventForm({
     };
 
     const baseHandicap = formatData?.handicap || { enabled: false, allowance: 100 };
+    const isVariableTeams = formatData?.combinationMethod === 'mixed' || formatData?.variableTeams === true;
     setFormData({
       ...formData,
       formatId: formatId,
       format: formatData?.combinationMethod || 'scramble',
       scoringMethod: scoringMethod,
       teamSize: formatData?.teamSize || 2,
+      variableTeams: isVariableTeams,
       formatName: formatData?.name || '',
       handicap: { ...baseHandicap, useSlope: baseHandicap.useSlope ?? true },
       stablefordPoints: formatData?.stablefordPoints || null,
@@ -159,6 +168,17 @@ export default function EventForm({
     if (!formData.name || !formData.courseId || !formData.selectedTeeId) {
       // Let the parent handle feedback — just pass back null to indicate validation failed
       onSubmit(null, 'Please add event name and select a course/tee');
+      return;
+    }
+    // Drop bonus rows that were added but never named
+    if (formData.leaguePoints?.bonusPoints) {
+      onSubmit({
+        ...formData,
+        leaguePoints: {
+          ...formData.leaguePoints,
+          bonusPoints: formData.leaguePoints.bonusPoints.filter(b => b.name.trim())
+        }
+      });
       return;
     }
     onSubmit(formData);
@@ -313,7 +333,9 @@ export default function EventForm({
       {/* ===== SIDE GAMES — shown after a format is selected ===== */}
       {formData.formatId && (() => {
         const sideGameFormats = formats.filter(f =>
-          f.formatCategory === 'side_game' || f.formatCategory === 'both'
+          (f.formatCategory === 'side_game' || f.formatCategory === 'both') &&
+          // 9's is scored player-by-player, so it needs an individual main game
+          (f.sideGameType !== 'nines' || formData.teamSize === 1)
         );
         const handicapEnabled = formData.handicap?.enabled && formData.handicap?.applicationMethod === 'strokes';
 
@@ -325,6 +347,21 @@ export default function EventForm({
           const isSkins = sgType === 'skins';
           const isVegas = sgType === 'vegas';
           const isVegas2v2 = isVegas && fmt.sideGameSubType !== 'vegas1v1';
+          if (sgType === 'nines') {
+            setFormData({
+              ...formData,
+              sideGames: [...(formData.sideGames || []), {
+                id: `sg-${Date.now()}`,
+                formatId: fmt.id,
+                name: fmt.name,
+                sideGameType: 'nines',
+                variant: fmt.sideGameVariant || 'gross',
+                seriesPointsMode: 'raw',
+                positions: { ...DEFAULT_NINES_POSITIONS }
+              }]
+            });
+            return;
+          }
           const newSg = {
             id: `sg-${Date.now()}`,
             formatId: fmt.id,
@@ -498,6 +535,80 @@ export default function EventForm({
                   </div>
                 )}
 
+                {sg.sideGameType === 'nines' && (
+                  <div className="space-y-3">
+                    <div className="flex flex-wrap gap-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-gray-500">Scoring:</span>
+                        <span className="text-xs font-semibold text-gray-700">
+                          {sg.variant === 'net' ? 'Net' : 'Gross'} · 5 / 3 / 1 per hole
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs text-gray-400">
+                      With exactly 3 players there's nothing to set up. With more, split players into threesomes in the event lobby.
+                    </p>
+
+                    {/* Series/League points — only for events inside a series or league */}
+                    {formData.leaguePoints && (
+                      <div className="bg-gray-50 rounded-lg p-3">
+                        <div className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                          Counts toward {pointsLabel} points?
+                        </div>
+                        <div className="space-y-2">
+                          {[
+                            { value: 'raw', label: `Add to ${pointsLabel} points`, desc: `Every 9's point is 1 ${pointsLabel.toLowerCase()} point` },
+                            { value: 'position', label: 'By finish in threesome', desc: 'Points for 1st / 2nd / 3rd in the group' },
+                            { value: 'none', label: 'This game only', desc: `Doesn't affect ${pointsLabel.toLowerCase()} standings` }
+                          ].map(opt => (
+                            <label
+                              key={opt.value}
+                              className={`flex flex-col p-2.5 rounded-lg border-2 cursor-pointer transition-colors ${
+                                (sg.seriesPointsMode || 'raw') === opt.value
+                                  ? 'border-[#00285e] bg-[#f0f4ff]'
+                                  : 'border-gray-200 bg-white hover:bg-gray-50'
+                              }`}
+                            >
+                              <input
+                                type="radio"
+                                name={`ninesMode-${sg.id}`}
+                                checked={(sg.seriesPointsMode || 'raw') === opt.value}
+                                onChange={() => updateSideGame(sg.id, { seriesPointsMode: opt.value })}
+                                className="sr-only"
+                              />
+                              <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+                              <span className="text-xs text-gray-500">{opt.desc}</span>
+                            </label>
+                          ))}
+                        </div>
+
+                        {sg.seriesPointsMode === 'position' && (
+                          <div className="flex gap-3 mt-3">
+                            {[1, 2, 3].map(place => (
+                              <div key={place} className="flex items-center gap-1.5">
+                                <span className="text-xs font-medium text-gray-600">{['1st', '2nd', '3rd'][place - 1]}</span>
+                                <input
+                                  type="text"
+                                  inputMode="numeric"
+                                  pattern="[0-9]*"
+                                  value={(sg.positions || DEFAULT_NINES_POSITIONS)[place]}
+                                  onChange={(e) => {
+                                    const val = e.target.value.replace(/[^0-9]/g, '');
+                                    updateSideGame(sg.id, {
+                                      positions: { ...(sg.positions || DEFAULT_NINES_POSITIONS), [place]: val === '' ? 0 : parseInt(val) }
+                                    });
+                                  }}
+                                  className="w-12 px-2 py-1.5 text-center rounded-lg border-2 border-gray-200 focus:border-amber-400 focus:outline-none text-sm"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {sg.sideGameType === 'stroke_play' && (
                   <div className="space-y-3">
                     {/* Variant + mode labels */}
@@ -606,9 +717,9 @@ export default function EventForm({
       {/* ===== LEAGUE POINTS — only shown when creating from a league ===== */}
       {formData.leaguePoints && (
         <div className="border-2 border-[#dce8f5] bg-[#f0f4ff] rounded-xl p-5">
-          <label className="block text-sm font-semibold text-gray-700 mb-1">🏆 League Points</label>
+          <label className="block text-sm font-semibold text-gray-700 mb-1">🏆 {pointsLabel} Points</label>
           <p className="text-sm text-gray-500 mb-4">
-            Points awarded to players based on finishing position. Pre-filled from league defaults — adjust for this event if needed.
+            Points awarded to players based on finishing position. Pre-filled from {pointsLabel.toLowerCase()} defaults — adjust for this event if needed.
           </p>
 
           {/* Point Positions */}
@@ -695,12 +806,38 @@ export default function EventForm({
             </div>
           </div>
 
+          {/* Stat Games — bonus points from scoring stats (individual formats only) */}
+          <div className="bg-white rounded-lg p-4 mb-4">
+            <div className="text-sm font-medium text-gray-700">Stat Games</div>
+            <div className="text-xs text-gray-500 mb-3">
+              {formData.teamSize === 1
+                ? 'Bonus points counted automatically from scores, e.g. Most Birdies or Fewest Bogeys'
+                : 'Only scored for individual formats — these will be skipped for this team event'}
+            </div>
+            <StatGamesEditor
+              statGames={formData.leaguePoints.statGames || []}
+              onChange={(statGames) => setFormData({ ...formData, leaguePoints: { ...formData.leaguePoints, statGames } })}
+            />
+          </div>
+
+          {/* Bonus Points — tap-to-award on the scoring screen */}
+          <div className="bg-white rounded-lg p-4 mb-4">
+            <div className="text-sm font-medium text-gray-700">Bonus Points</div>
+            <div className="text-xs text-gray-500 mb-3">
+              Buttons on the scoring screen — tap when someone chips in, makes a sandy, etc.
+            </div>
+            <BonusPointsEditor
+              bonusPoints={formData.leaguePoints.bonusPoints || []}
+              onChange={(bonusPoints) => setFormData({ ...formData, leaguePoints: { ...formData.leaguePoints, bonusPoints } })}
+            />
+          </div>
+
           {/* Team Point Distribution — only shown when format has teamSize > 1 */}
           {formData.teamSize > 1 && (
             <div className="bg-white rounded-lg p-4">
               <div className="text-sm font-medium text-gray-700 mb-1">Team Point Distribution</div>
               <p className="text-xs text-gray-500 mb-3">
-                When a team finishes in a given place, how are the league points distributed to individual members?
+                When a team finishes in a given place, how are the {pointsLabel.toLowerCase()} points distributed to individual members?
               </p>
               <div className="flex gap-3">
                 {[
@@ -733,9 +870,9 @@ export default function EventForm({
               </div>
               {/* Non-League Player Handling */}
           <div className="bg-white rounded-lg p-4">
-            <div className="text-sm font-medium text-gray-700 mb-1">Non-League Player Handling</div>
+            <div className="text-sm font-medium text-gray-700 mb-1">Non-{pointsLabel} Player Handling</div>
             <p className="text-xs text-gray-500 mb-3">
-              When a guest or non-league member finishes in a scoring position, how should the points be handled?
+              When a guest or non-{pointsLabel.toLowerCase()} member finishes in a scoring position, how should the points be handled?
             </p>
             <div className="flex gap-3">
               {[

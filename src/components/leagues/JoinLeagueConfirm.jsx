@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ref, get, set } from 'firebase/database';
 import { database } from '../../firebase';
+import { getGroupLabels, isSeriesGroup } from '../../utils/groupLabels';
 
 export default function JoinLeagueConfirm({
   currentUser,
@@ -8,6 +9,8 @@ export default function JoinLeagueConfirm({
   joinCode,
   setView,
   setCurrentLeague,
+  setUserLeagues,
+  loadUserLeagues,
 }) {
   const [league, setLeague] = useState(null);
   const [leagueId, setLeagueId] = useState(null);
@@ -84,8 +87,13 @@ export default function JoinLeagueConfirm({
       });
 
       // Load the full league and take user to the dashboard
+      // Refresh the home screen list so the new league/series shows up right away
+      if (loadUserLeagues && setUserLeagues) {
+        setUserLeagues(await loadUserLeagues(currentUser.uid));
+      }
+
       const leagueSnapshot = await get(ref(database, `leagues/${leagueId}`));
-      setCurrentLeague({ id: leagueId, ...leagueSnapshot.val() });
+      setCurrentLeague({ id: leagueId, ...leagueSnapshot.val(), userRole: 'member' });
       setView('league-dashboard');
 
     } catch (err) {
@@ -119,6 +127,8 @@ export default function JoinLeagueConfirm({
     );
   }
 
+  const labels = getGroupLabels(isSeriesGroup(league));
+
   return (
     <div className="min-h-screen bg-[#00285e] p-6 font-sans">
       <div className="max-w-2xl mx-auto">
@@ -133,9 +143,9 @@ export default function JoinLeagueConfirm({
 
         {/* League card */}
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-xl p-6 mb-4">
-          <div className="text-3xl mb-3">🏆</div>
+          <div className="text-3xl mb-3">{labels.icon}</div>
           <h1 className="text-2xl font-bold text-gray-900 mb-1">
-            {league?.meta?.name || 'Unnamed League'}
+            {league?.meta?.name || `Unnamed ${labels.noun}`}
           </h1>
           {league?.meta?.description && (
             <p className="text-gray-600 text-sm mb-4">{league.meta.description}</p>
@@ -148,7 +158,7 @@ export default function JoinLeagueConfirm({
         {/* Already a member message */}
         {alreadyMember ? (
           <div className="bg-yellow-50 border border-yellow-200 rounded-2xl p-5 text-center">
-            <p className="text-yellow-800 font-semibold mb-1">You're already a member of this league.</p>
+            <p className="text-yellow-800 font-semibold mb-1">You're already a member of this {labels.nounLower}.</p>
             <p className="text-yellow-700 text-sm mb-4">No need to join again.</p>
             <button
               onClick={() => setView('home')}
@@ -161,9 +171,9 @@ export default function JoinLeagueConfirm({
           <button
             onClick={handleJoin}
             disabled={joining}
-            className="w-full bg-[#00285e] hover:bg-[#003a7d] disabled:bg-gray-400 text-white font-bold py-4 rounded-2xl shadow-lg transition-all text-lg"
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-bold py-4 rounded-2xl shadow-lg transition-all text-lg"
           >
-            {joining ? 'Joining...' : 'Join League'}
+            {joining ? 'Joining...' : `Join ${labels.noun}`}
           </button>
         )}
 

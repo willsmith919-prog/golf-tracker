@@ -3,6 +3,9 @@ import { ref, get } from 'firebase/database';
 import { database } from '../../firebase';
 import { calculateEventPoints } from '../../utils/leaguePoints';
 import { calculateSkins } from '../../utils/skins';
+import { buildNinesEntries, calculateNines, calculateNinesSeriesPoints } from '../../utils/ninesScoring';
+import { calculateStatGames, statGameLabel } from '../../utils/statGames';
+import { calculateBonusPoints } from '../../utils/bonusPoints';
 
 export default function LeagueStandingsPanel({
   leagueId,
@@ -13,6 +16,7 @@ export default function LeagueStandingsPanel({
   teamSize,
   players,
   currentEventId,
+  currentEvent = null,
   sideGames = [],
   holeOrder = [],
   coursePars = [],
@@ -44,12 +48,32 @@ export default function LeagueStandingsPanel({
     loadStandings();
   }, [showLeagueProjection]);
 
+  // Only true Skins games use skins math (stroke play resolves at event end;
+  // Vegas never feeds points; 9's has its own calculation below)
+  const skinsSideGames = sideGames.filter(sg => sg.sideGameType === 'skins' || !sg.sideGameType);
+  const ninesSideGames = sideGames.filter(sg => sg.sideGameType === 'nines');
+
+  // 9's projection: { uid: { [sgId]: points } }, using each game's series-points setting
+  const computeNinesProjection = () => {
+    if (!ninesSideGames.length || !currentEvent || !holeOrder.length) return {};
+    const entries = buildNinesEntries(currentEvent);
+    const result = {};
+    for (const sg of ninesSideGames) {
+      const pts = calculateNinesSeriesPoints(calculateNines(entries, holeOrder, sg), sg);
+      for (const [uid, p] of Object.entries(pts)) {
+        if (uid.startsWith('guest-')) continue;
+        if (!result[uid]) result[uid] = {};
+        result[uid][sg.id] = p;
+      }
+    }
+    return result;
+  };
+
   // Pre-compute skins totals per player for each side game
   const computeSkinsProjection = () => {
     if (!sideGames.length || !holeOrder.length) return {};
     const result = {}; // { uid: { [sgId]: points } }
-    for (const sg of sideGames) {
-      if (sg.sideGameType === 'stroke_play') continue; // allocation happens at event end
+    for (const sg of skinsSideGames) {
       const { pointTotals } = calculateSkins(leaderboardData, holeOrder, coursePars, sg);
       for (const [uid, pts] of Object.entries(pointTotals)) {
         if (!result[uid]) result[uid] = {};
@@ -106,6 +130,37 @@ export default function LeagueStandingsPanel({
               }
             }
 
+            // Add stat game points (Most Birdies, etc.) on top — can be negative
+            const statGamesProjection = currentEvent
+              ? calculateStatGames(currentEvent, leaguePoints.statGames || []).byPlayer
+              : {};
+            for (const [uid, byGame] of Object.entries(statGamesProjection)) {
+              const total = Object.values(byGame).reduce((s, v) => s + v, 0);
+              if (total !== 0) {
+                projectedPoints[uid] = Math.round(((projectedPoints[uid] || 0) + total) * 10) / 10;
+              }
+            }
+
+            // Add bonus points (chip-ins, sandies...) on top
+            const bonusProjection = currentEvent
+              ? calculateBonusPoints(currentEvent, leaguePoints.bonusPoints || [])
+              : { byPlayer: {}, counts: {} };
+            for (const [uid, byBonus] of Object.entries(bonusProjection.byPlayer)) {
+              const total = Object.values(byBonus).reduce((s, v) => s + v, 0);
+              if (total !== 0) {
+                projectedPoints[uid] = Math.round(((projectedPoints[uid] || 0) + total) * 10) / 10;
+              }
+            }
+
+            // Add 9's points on top
+            const ninesProjection = computeNinesProjection();
+            for (const [uid, byGame] of Object.entries(ninesProjection)) {
+              const ninesTotal = Object.values(byGame).reduce((s, v) => s + v, 0);
+              if (ninesTotal > 0) {
+                projectedPoints[uid] = (projectedPoints[uid] || 0) + ninesTotal;
+              }
+            }
+
             const allUids = new Set([
               ...Object.keys(projectedPoints),
               ...Object.keys(currentStandings.standings)
@@ -126,7 +181,24 @@ export default function LeagueStandingsPanel({
               const lbEntry = leaderboardData.find(e => e.id === uid);
               const position = lbEntry?.position;
 
-              const skinsBreakdown = sideGames.map(sg => ({
+              const ninesBreakdown = ninesSideGames.map(sg => ({
+                id: sg.id,
+                name: sg.name,
+                points: ninesProjection[uid]?.[sg.id] || 0
+              }));
+
+              const statGamesBreakdown = (leaguePoints.statGames || [])
+                .map(game => ({ id: game.id, name: statGameLabel(game), points: statGamesProjection[uid]?.[game.id] || 0 }))
+                .filter(g => g.points !== 0);
+
+              const bonusBreakdown = (leaguePoints.bonusPoints || [])
+                .map(def => {
+                  const count = bonusProjection.counts[uid]?.[def.id] || 0;
+                  return { id: def.id, name: count > 1 ? `${def.name} ×${count}` : def.name, points: bonusProjection.byPlayer[uid]?.[def.id] || 0 };
+                })
+                .filter(b => b.points !== 0);
+
+              const skinsBreakdown = skinsSideGames.map(sg => ({
                 name: sg.name,
                 variant: sg.variant,
                 points: skinsProjection[uid]?.[sg.id] || 0,
@@ -148,7 +220,10 @@ export default function LeagueStandingsPanel({
                 positionPoints: Math.max(0, positionPoints),
                 participationPoints: mainGamePoints > 0 ? participationPoints : 0,
                 position,
-                skinsBreakdown
+                skinsBreakdown,
+                ninesBreakdown,
+                statGamesBreakdown,
+                bonusBreakdown
               };
             });
 
@@ -167,7 +242,7 @@ export default function LeagueStandingsPanel({
             return (
               <>
                 <div className="text-xs text-[#00285e] mb-3 font-medium">
-                  If the round ended now, here's how league standings would change:
+                  If the round ended now, here's how the standings would change:
                 </div>
                 {hasExclusionSideGame && (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-3 text-xs text-amber-700">
@@ -257,6 +332,26 @@ export default function LeagueStandingsPanel({
                                 </div>
                               ))}
 
+                              {/* Stat games + bonuses */}
+                              {[...row.statGamesBreakdown, ...row.bonusBreakdown].map(g => (
+                                <div key={g.id} className="flex justify-between text-xs text-gray-600">
+                                  <span>{g.name}</span>
+                                  <span className={`font-semibold ${g.points > 0 ? 'text-green-700' : 'text-red-600'}`}>
+                                    {g.points > 0 ? `+${g.points}` : g.points}
+                                  </span>
+                                </div>
+                              ))}
+
+                              {/* 9's per side game */}
+                              {row.ninesBreakdown.map(sg => (
+                                <div key={sg.id} className="flex justify-between text-xs text-gray-600">
+                                  <span>{sg.name}</span>
+                                  <span className={`font-semibold ${sg.points > 0 ? 'text-green-700' : 'text-gray-400'}`}>
+                                    {sg.points > 0 ? `+${sg.points}` : '0'}
+                                  </span>
+                                </div>
+                              ))}
+
                               {/* Total */}
                               <div className="flex justify-between text-xs font-bold text-[#00285e] border-t border-[#dce8f5] pt-1 mt-1">
                                 <span>Total this event</span>
@@ -293,7 +388,7 @@ export default function LeagueStandingsPanel({
                         Participation: {leaguePoints.participationPoints}pts
                       </span>
                     )}
-                    {sideGames.filter(sg => sg.sideGameType !== 'stroke_play').map(sg => (
+                    {skinsSideGames.map(sg => (
                       <span key={sg.id} className="text-xs bg-amber-50 text-amber-800 px-2 py-1 rounded-full border border-amber-200">
                         {sg.name}: {sg.pointsPerSkin}pt/skin
                       </span>

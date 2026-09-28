@@ -99,6 +99,7 @@ export default function EditEventView({
             submitLabel="Save Changes"
             onSubmit={handleSave}
             feedback={feedback}
+            pointsLabel={meta.leagueType === 'series' ? 'Series' : 'League'}
             leaguePointsConfig={
               // If leaguePoints already exists on this event, pass it through
               // so EventForm pre-fills the section for editing.

@@ -64,8 +64,10 @@ export default function AddEditFormatView({
     };
   }
   if (!formatForm.wolf) {
-    formatForm.wolf = { blindWolfBonus: 2, loneWolfBonus: 1, pointsPerHoleWon: 1, pointsPerHoleLost: 1 };
+    formatForm.wolf = { blindWolfBonus: 2, loneWolfBonus: 1, pointsPerHoleWon: 1, pointsPerHoleLost: 1, playerCount: 4, variant: 'bestball' };
   }
+  if (!formatForm.wolf.playerCount) formatForm.wolf.playerCount = 4;
+  if (!formatForm.wolf.variant) formatForm.wolf.variant = 'bestball';
   const handicapApplicationMethod = formatForm.handicapApplicationMethod ?? 'strokes';
   const competitionStructure = formatForm.competitionStructure ?? 'full_field';
 
@@ -103,13 +105,20 @@ export default function AddEditFormatView({
         const scoring = formatForm.sideGameVariant === 'net' ? 'Net' : 'Gross';
         return `Vegas ${sub} (${scoring})`;
       }
+      if (formatForm.sideGameType === 'nines') {
+        return formatForm.sideGameVariant === 'net' ? "9's (Net)" : "9's (Gross)";
+      }
       return 'Side Game';
     }
 
     const parts = [];
 
     if (formatForm.competitionStructure === 'wolf') {
-      parts.push('Wolf');
+      const pc = formatForm.wolf?.playerCount || 4;
+      const variant = formatForm.wolf?.variant === 'scramble' ? 'Scramble' : 'Best Ball';
+      parts.push(`Wolf (${pc}-Player ${variant})`);
+    } else if (formatForm.teamSize === 0) {
+      parts.push('Custom Teams');
     } else if (formatForm.teamSize === 1) {
       parts.push('Individual');
     } else {
@@ -179,13 +188,21 @@ export default function AddEditFormatView({
         const scoring = formatForm.sideGameVariant === 'net' ? ' Handicap strokes applied before combining.' : '';
         return base + scoring;
       }
+      if (formatForm.sideGameType === 'nines') {
+        const scoring = formatForm.sideGameVariant === 'net' ? ' Net scores (after handicap strokes) decide each hole.' : '';
+        return "3-player game, 9 points per hole: 5 / 3 / 1 for 1st / 2nd / 3rd. Tie for 1st: 4 / 4 / 1. Tie for 2nd: 5 / 2 / 2. Three-way tie: 3 each." + scoring;
+      }
       return 'A side game played alongside the main event.';
     }
 
     const lines = [];
 
     if (formatForm.competitionStructure === 'wolf') {
-      lines.push('4-player Wolf format. Each hole, one player is the Wolf who picks a partner or goes alone.');
+      const pc = formatForm.wolf?.playerCount || 4;
+      const variant = formatForm.wolf?.variant === 'scramble' ? 'Scramble' : 'Best Ball';
+      lines.push(`${pc}-player Wolf format (${variant}). Each hole, one player is the Wolf who picks a partner or goes alone.`);
+    } else if (formatForm.teamSize === 0) {
+      lines.push('Custom Teams — team sizes and combination methods (scramble/best ball/individual) are assigned per-team in the event lobby.');
     } else if (formatForm.teamSize === 1) {
       lines.push('Individual play.');
     } else {
@@ -263,10 +280,12 @@ export default function AddEditFormatView({
 
   const handleTeamSizeChange = (size) => {
     const newSize = parseInt(size);
-    const defaultCombination = newSize === 1 ? 'individual' : 'scramble';
-    
-    // If switching away from 4-person and competition is wolf, reset it
-    const newStructure = (formatForm.competitionStructure === 'wolf' && newSize !== 4)
+    let defaultCombination = 'scramble';
+    if (newSize === 1) defaultCombination = 'individual';
+    if (newSize === 0) defaultCombination = 'mixed';
+
+    const wolfPlayerCount = formatForm.wolf?.playerCount || 4;
+    const newStructure = (formatForm.competitionStructure === 'wolf' && newSize !== wolfPlayerCount)
       ? 'full_field'
       : formatForm.competitionStructure;
 
@@ -298,9 +317,9 @@ export default function AddEditFormatView({
   const handleCompetitionStructureChange = (structure) => {
     const updates = { competitionStructure: structure };
 
-    // Wolf requires 4 individual players
+    // Wolf requires individual players matching the player count
     if (structure === 'wolf') {
-      updates.teamSize = 4;
+      updates.teamSize = formatForm.wolf?.playerCount || 4;
       updates.combinationMethod = 'individual';
     }
 
@@ -318,13 +337,11 @@ export default function AddEditFormatView({
   };
 
   const handleWolfChange = (key, value) => {
-    setFormatForm({
-      ...formatForm,
-      wolf: {
-        ...formatForm.wolf,
-        [key]: value
-      }
-    });
+    const newWolf = { ...formatForm.wolf, [key]: value };
+    const updates = { wolf: newWolf };
+    // Keep teamSize in sync when playerCount changes
+    if (key === 'playerCount') updates.teamSize = value;
+    setFormatForm({ ...formatForm, ...updates });
   };
 
   const handleMulliganChange = (key, value) => {
@@ -387,6 +404,7 @@ export default function AddEditFormatView({
         teamSize: isSideOnly ? null : formatForm.teamSize,
         scoringMethod: isSideOnly ? null : formatForm.scoringMethod,
         combinationMethod: isSideOnly ? null : formatForm.combinationMethod,
+        variableTeams: (!isSideOnly && formatForm.combinationMethod === 'mixed') ? true : null,
 
         handicap: isSideOnly ? null : {
           enabled: formatForm.handicapEnabled,
@@ -603,7 +621,40 @@ export default function AddEditFormatView({
                     label="Vegas"
                     description="Players combine two scores into a two-digit number. Lower number wins each hole or pair."
                   />
+                  <RadioCard
+                    name="sideGameType"
+                    value="nines"
+                    checked={formatForm.sideGameType === 'nines'}
+                    onChange={() => setFormatForm({ ...formatForm, sideGameType: 'nines' })}
+                    label="9's"
+                    description="3-player game. Each hole is worth 9 points: 5 / 3 / 1 by finish, with ties splitting the points."
+                  />
                 </div>
+
+                {formatForm.sideGameType === 'nines' && (
+                  <div className="mt-4">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Scoring</label>
+                    <div className="grid grid-cols-2 gap-3">
+                      {[
+                        { value: 'gross', label: 'Gross', desc: 'Raw scores decide each hole' },
+                        { value: 'net', label: 'Net', desc: 'Handicap strokes applied first' }
+                      ].map(opt => (
+                        <label
+                          key={opt.value}
+                          className={`flex flex-col p-4 rounded-xl border-2 cursor-pointer transition-colors ${
+                            formatForm.sideGameVariant === opt.value
+                              ? 'border-[#00285e] bg-[#f0f4ff]'
+                              : 'border-gray-200 hover:bg-gray-50'
+                          }`}
+                        >
+                          <input type="radio" name="sideGameVariant" value={opt.value} checked={formatForm.sideGameVariant === opt.value} onChange={() => setFormatForm({ ...formatForm, sideGameVariant: opt.value })} className="sr-only" />
+                          <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+                          <span className="text-xs text-gray-500 mt-0.5">{opt.desc}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {formatForm.sideGameType === 'stroke_play' && (
                   <div className="mt-4 space-y-4">
@@ -831,11 +882,32 @@ export default function AddEditFormatView({
                   </label>
                 ))}
               </div>
+              {/* Custom / Mixed Teams option */}
+              <label
+                className={`flex items-center p-4 rounded-xl border-2 cursor-pointer transition-colors mt-3 ${
+                  formatForm.teamSize === 0
+                    ? 'border-[#00285e] bg-[#f0f4ff]'
+                    : 'border-gray-200 hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="teamSize"
+                  value={0}
+                  checked={formatForm.teamSize === 0}
+                  onChange={(e) => handleTeamSizeChange(e.target.value)}
+                  className="w-5 h-5 text-[#00285e]"
+                />
+                <div className="ml-3">
+                  <span className="text-gray-900 font-medium">Custom / Mixed Teams</span>
+                  <p className="text-xs text-gray-500 mt-0.5">Teams can have different sizes and play modes — assigned per-team in the event lobby</p>
+                </div>
+              </label>
 
               {/* Note when Wolf has locked team size */}
               {formatForm.competitionStructure === 'wolf' && (
                 <p className="text-xs text-[#00285e] mt-2">
-                  Team size is set to 4-Person because Wolf requires exactly 4 players.
+                  Team size is set to {formatForm.wolf?.playerCount || 4}-Person because Wolf requires exactly {formatForm.wolf?.playerCount || 4} players.
                 </p>
               )}
             </div>
@@ -1221,9 +1293,68 @@ export default function AddEditFormatView({
                 <div className="mt-4 bg-amber-50 border-2 border-amber-200 rounded-xl p-4">
                   <SectionHeader
                     title="Wolf Settings"
-                    description="Configure point values for the Wolf format."
+                    description="Configure the Wolf format."
                   />
                   <div className="space-y-4">
+                    {/* Player Count */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Number of Players</label>
+                      <div className="grid grid-cols-3 gap-3">
+                        {[3, 4, 5].map(count => (
+                          <label
+                            key={count}
+                            className={`flex items-center justify-center p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                              formatForm.wolf.playerCount === count
+                                ? 'border-[#00285e] bg-[#f0f4ff]'
+                                : 'border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="wolfPlayerCount"
+                              value={count}
+                              checked={formatForm.wolf.playerCount === count}
+                              onChange={() => handleWolfChange('playerCount', count)}
+                              className="sr-only"
+                            />
+                            <span className="font-medium text-gray-900">{count} Players</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Variant */}
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">Scoring Variant</label>
+                      <div className="grid grid-cols-2 gap-3">
+                        {[
+                          { value: 'bestball', label: 'Best Ball', desc: 'Each player plays their own ball; best score on each side wins the hole' },
+                          { value: 'scramble', label: 'Scramble', desc: "Wolf's side scrambles together; opposing side scrambles together" }
+                        ].map(opt => (
+                          <label
+                            key={opt.value}
+                            className={`flex flex-col p-3 rounded-xl border-2 cursor-pointer transition-colors ${
+                              formatForm.wolf.variant === opt.value
+                                ? 'border-[#00285e] bg-[#f0f4ff]'
+                                : 'border-gray-200 hover:bg-gray-50'
+                            }`}
+                          >
+                            <input
+                              type="radio"
+                              name="wolfVariant"
+                              value={opt.value}
+                              checked={formatForm.wolf.variant === opt.value}
+                              onChange={() => handleWolfChange('variant', opt.value)}
+                              className="sr-only"
+                            />
+                            <span className="text-sm font-semibold text-gray-900">{opt.label}</span>
+                            <span className="text-xs text-gray-500 mt-0.5">{opt.desc}</span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Point Values */}
                     <div className="grid grid-cols-2 gap-4">
                       <NumberInput
                         label="Blind Wolf bonus"
@@ -1259,8 +1390,7 @@ export default function AddEditFormatView({
                       />
                     </div>
                     <p className="text-xs text-gray-500">
-                      In Wolf, the Wolf (with or without a partner) plays against the remaining players. 
-                      Points swing both directions — winners gain and losers lose the same amount.
+                      Points swing both directions — winners gain and losers lose the same amount per hole.
                     </p>
                   </div>
                 </div>

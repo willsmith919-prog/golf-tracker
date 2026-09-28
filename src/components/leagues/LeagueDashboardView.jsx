@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { ref, get, set, remove } from 'firebase/database';
 import { database } from '../../firebase';
 import { removeEventFromStandings } from '../../utils/leaguePoints';
+import { getGroupLabels, isSeriesGroup } from '../../utils/groupLabels';
+import { statGameLabel } from '../../utils/statGames';
 import {
   PlusIcon,
   CalendarIcon,
@@ -26,6 +28,8 @@ export default function LeagueDashboardView({
   const [expandedStandingsUid, setExpandedStandingsUid] = useState(null);
   const [editingHandicapValue, setEditingHandicapValue] = useState('');
   const isCommissioner = currentLeague.userRole === 'commissioner';
+  const isSeries = isSeriesGroup(currentLeague);
+  const labels = getGroupLabels(isSeries);
   const members = Object.entries(currentLeague.members || {}).map(([uid, data]) => ({
     uid,
     ...data
@@ -123,19 +127,19 @@ export default function LeagueDashboardView({
   };
 
   const handleRemoveMember = async (memberUid, memberName) => {
-    if (!confirm(`Remove ${memberName} from the league?`)) {
+    if (!confirm(`Remove ${memberName} from the ${labels.nounLower}?`)) {
       return;
     }
 
     try {
       await remove(ref(database, `leagues/${currentLeague.id}/members/${memberUid}`));
-      await remove(ref(database, `users/${memberUid}/leagueMemberships/${memberUid}`));
+      await remove(ref(database, `users/${memberUid}/leagueMemberships/${currentLeague.id}`));
 
       const leagueSnapshot = await get(ref(database, `leagues/${currentLeague.id}`));
       const updatedLeague = leagueSnapshot.val();
       setCurrentLeague({ id: currentLeague.id, ...updatedLeague, userRole: currentLeague.userRole });
 
-      setFeedback(`${memberName} removed from league`);
+      setFeedback(`${memberName} removed from ${labels.nounLower}`);
       setTimeout(() => setFeedback(''), 3000);
     } catch (error) {
       console.error('Error removing member:', error);
@@ -206,6 +210,18 @@ export default function LeagueDashboardView({
       setFeedback('Error removing standings. Try again.');
       setTimeout(() => setFeedback(''), 3000);
     }
+  };
+
+  // Open the Create Event form pre-linked to this league/series' active season
+  const startCreateEvent = () => {
+    setCreatingEventForLeague({
+      leagueId: currentLeague.id,
+      seasonId: Object.keys(currentLeague.seasons || {}).find(
+        sid => currentLeague.seasons[sid].status === 'active'
+      ),
+      isSeries
+    });
+    setView('create-event');
   };
 
   // Helper to get player count for an event
@@ -358,7 +374,7 @@ export default function LeagueDashboardView({
               <button
                 onClick={() => setView('edit-league')}
                 className="text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition-colors"
-                title="League Settings"
+                title={`${labels.noun} Settings`}
               >
                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="3"></circle>
@@ -373,7 +389,7 @@ export default function LeagueDashboardView({
           
           <div className="flex items-center gap-3">
             <div className="bg-[#f0f4ff] px-4 py-2 rounded-lg">
-              <div className="text-xs text-gray-600 mb-1">League Code</div>
+              <div className="text-xs text-gray-600 mb-1">{labels.noun} Code</div>
               <div className="font-mono font-bold text-[#00285e] text-lg">{currentLeague.meta.code}</div>
             </div>
             <button
@@ -416,15 +432,7 @@ export default function LeagueDashboardView({
                 {isCommissioner && (
                   <div className="flex justify-end mb-4">
                     <button
-                      onClick={() => {
-                        setCreatingEventForLeague({
-                          leagueId: currentLeague.id,
-                          seasonId: Object.keys(currentLeague.seasons || {}).find(
-                            sid => currentLeague.seasons[sid].status === 'active'
-                          )
-                        });
-                        setView('create-event');
-                      }}
+                      onClick={startCreateEvent}
                       className="bg-[#00285e] text-white px-4 py-2 rounded-lg hover:bg-[#003a7d] text-sm font-semibold flex items-center gap-2"
                     >
                       <PlusIcon />
@@ -439,15 +447,7 @@ export default function LeagueDashboardView({
                     <p className="text-gray-600 mb-4">No events yet</p>
                     {isCommissioner && (
                       <button
-                        onClick={() => {
-                          setCreatingEventForLeague({
-                            leagueId: currentLeague.id,
-                            seasonId: Object.keys(currentLeague.seasons || {}).find(
-                              sid => currentLeague.seasons[sid].status === 'active'
-                            )
-                          });
-                          setView('create-event');
-                        }}
+                        onClick={startCreateEvent}
                         className="bg-[#00285e] text-white px-6 py-3 rounded-xl hover:bg-[#003a7d] font-semibold"
                       >
                         Create First Event
@@ -498,7 +498,7 @@ export default function LeagueDashboardView({
                 {activeSeason ? (
                   <>
                     <h2 className="text-base font-semibold text-gray-700 mb-4">
-                      {activeSeason.name || 'Season'} Standings
+                      {isSeries ? 'Series Standings' : `${activeSeason.name || 'Season'} Standings`}
                     </h2>
                     {activeSeason.standings && Object.keys(activeSeason.standings).length > 0 ? (
                       <div className="space-y-2">
@@ -545,7 +545,7 @@ export default function LeagueDashboardView({
                                           <div key={eventId} className="bg-white rounded-lg p-3">
                                             <div className="flex items-center justify-between mb-1">
                                               <span className="text-sm font-semibold text-gray-800">{eventName}</span>
-                                              <span className="text-sm font-bold text-[#00285e]">+{pts} pts</span>
+                                              <span className="text-sm font-bold text-[#00285e]">{pts >= 0 ? '+' : ''}{pts} pts</span>
                                             </div>
                                             {bd ? (
                                               <div className="space-y-0.5 mt-1.5">
@@ -581,6 +581,37 @@ export default function LeagueDashboardView({
                                                     </div>
                                                   );
                                                 })}
+                                                {Object.entries(bd.statGames || {}).map(([gameId, gamePts]) => {
+                                                  if (!gamePts) return null;
+                                                  const game = (event?.meta?.leaguePoints?.statGames || []).find(g => g.id === gameId);
+                                                  return (
+                                                    <div key={gameId} className="flex justify-between text-xs text-gray-500">
+                                                      <span>{game ? statGameLabel(game) : 'Stat game'}</span>
+                                                      <span>{gamePts > 0 ? '+' : ''}{gamePts} pts</span>
+                                                    </div>
+                                                  );
+                                                })}
+                                                {Object.entries(bd.bonuses || {}).map(([bonusId, bonusPts]) => {
+                                                  if (!bonusPts) return null;
+                                                  const def = (event?.meta?.leaguePoints?.bonusPoints || []).find(b => b.id === bonusId);
+                                                  const times = def?.points ? Math.round(bonusPts / def.points) : null;
+                                                  return (
+                                                    <div key={bonusId} className="flex justify-between text-xs text-gray-500">
+                                                      <span>{def?.name || 'Bonus'}{times > 1 ? ` ×${times}` : ''}</span>
+                                                      <span>{bonusPts > 0 ? '+' : ''}{bonusPts} pts</span>
+                                                    </div>
+                                                  );
+                                                })}
+                                                {Object.entries(bd.nines || {}).map(([sgId, ninesPts]) => {
+                                                  if (!ninesPts) return null;
+                                                  const sg = sideGames.find(s => s.id === sgId);
+                                                  return (
+                                                    <div key={sgId} className="flex justify-between text-xs text-gray-500">
+                                                      <span>{sg?.name || "9's"}</span>
+                                                      <span>+{ninesPts} pts</span>
+                                                    </div>
+                                                  );
+                                                })}
                                               </div>
                                             ) : (
                                               <div className="text-xs text-gray-400 mt-1">No breakdown available</div>
@@ -599,7 +630,9 @@ export default function LeagueDashboardView({
                       <div className="text-center py-8">
                         <TrophyIcon className="mx-auto mb-3 text-gray-400" />
                         <p className="text-gray-600">No standings yet</p>
-                        <p className="text-sm text-gray-500 mt-2">Standings appear after events are completed</p>
+                        <p className="text-sm text-gray-500 mt-2">
+                          {isSeries ? 'Standings appear after each round is ended' : 'Standings appear after events are completed'}
+                        </p>
                       </div>
                     )}
                   </>

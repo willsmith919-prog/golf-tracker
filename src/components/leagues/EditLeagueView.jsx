@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react';
 import { ref, update, get } from 'firebase/database';
 import { database } from '../../firebase';
+import { getGroupLabels, isSeriesGroup } from '../../utils/groupLabels';
+import StatGamesEditor from '../shared/StatGamesEditor';
+import BonusPointsEditor from '../shared/BonusPointsEditor';
 
 // Same suggested defaults as CreateLeagueView
 const SUGGESTED_DEFAULTS = [25, 20, 16, 13, 10, 8, 6, 5, 4, 3, 2, 1];
@@ -16,6 +19,8 @@ export default function EditLeagueView({
   // Which section is active: 'league' or 'season'
   const [activeTab, setActiveTab] = useState('league');
   const [saving, setSaving] = useState(false);
+  const isSeries = isSeriesGroup(currentLeague);
+  const labels = getGroupLabels(isSeries);
 
   // Find the active season ID and data
   const activeSeasonId = Object.keys(currentLeague.seasons || {}).find(
@@ -35,6 +40,8 @@ export default function EditLeagueView({
     activeSeason?.defaultPointsConfig?.participationPoints ?? 5
   );
   const [dropLowest, setDropLowest] = useState(activeSeason?.dropLowest ?? 0);
+  const [statGames, setStatGames] = useState(activeSeason?.defaultPointsConfig?.statGames || []);
+  const [bonusPoints, setBonusPoints] = useState(activeSeason?.defaultPointsConfig?.bonusPoints || []);
   const [pointPositions, setPointPositions] = useState(() => {
     // Load existing positions, or fall back to defaults
     const existing = activeSeason?.defaultPointsConfig?.positions;
@@ -81,7 +88,7 @@ export default function EditLeagueView({
   // --- Save League Info ---
   const handleSaveLeagueInfo = async () => {
     if (!leagueName.trim()) {
-      setFeedback('League name is required');
+      setFeedback(`${labels.noun} name is required`);
       return;
     }
 
@@ -91,13 +98,19 @@ export default function EditLeagueView({
         name: leagueName.trim(),
         description: leagueDescription.trim()
       });
+      // A series' single season is named after the series — keep them in sync
+      if (isSeries && activeSeasonId) {
+        await update(ref(database, `leagues/${currentLeague.id}/seasons/${activeSeasonId}`), {
+          name: leagueName.trim()
+        });
+      }
 
       // Refresh the currentLeague object so the dashboard reflects changes
       const snapshot = await get(ref(database, `leagues/${currentLeague.id}`));
       const updatedLeague = snapshot.val();
       setCurrentLeague({ id: currentLeague.id, ...updatedLeague, userRole: currentLeague.userRole });
 
-      setFeedback('League info saved!');
+      setFeedback(`${labels.noun} info saved!`);
       setTimeout(() => {
         setFeedback('');
         setView('league-dashboard');
@@ -117,7 +130,7 @@ export default function EditLeagueView({
       return;
     }
 
-    if (!seasonName.trim()) {
+    if (!isSeries && !seasonName.trim()) {
       setFeedback('Season name is required');
       return;
     }
@@ -127,13 +140,15 @@ export default function EditLeagueView({
       const seasonPath = `leagues/${currentLeague.id}/seasons/${activeSeasonId}`;
 
       await update(ref(database, seasonPath), {
-        name: seasonName.trim(),
+        name: isSeries ? (currentLeague.meta?.name || seasonName) : seasonName.trim(),
         startDate: seasonStartDate || null,
         endDate: seasonEndDate || null,
-        dropLowest: dropLowest,
+        dropLowest: isSeries ? 0 : dropLowest,
         defaultPointsConfig: {
           positions: { ...pointPositions },
-          participationPoints: participationPoints
+          participationPoints: participationPoints,
+          statGames,
+          bonusPoints: bonusPoints.filter(b => b.name.trim())
         }
       });
 
@@ -142,7 +157,7 @@ export default function EditLeagueView({
       const updatedLeague = snapshot.val();
       setCurrentLeague({ id: currentLeague.id, ...updatedLeague, userRole: currentLeague.userRole });
 
-      setFeedback('Season config saved!');
+      setFeedback(isSeries ? 'Points config saved!' : 'Season config saved!');
       setTimeout(() => {
         setFeedback('');
         setView('league-dashboard');
@@ -166,7 +181,7 @@ export default function EditLeagueView({
         </button>
 
         <div className="bg-white/95 backdrop-blur-sm rounded-2xl shadow-2xl p-8">
-          <h2 className="text-3xl font-bold text-gray-900 mb-6">League Settings</h2>
+          <h2 className="text-3xl font-bold text-gray-900 mb-6">{labels.noun} Settings</h2>
 
           {/* Feedback */}
           {feedback && (
@@ -189,7 +204,7 @@ export default function EditLeagueView({
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              League Info
+              {labels.noun} Info
             </button>
             <button
               onClick={() => setActiveTab('season')}
@@ -199,7 +214,7 @@ export default function EditLeagueView({
                   : 'text-gray-500 hover:text-gray-700'
               }`}
             >
-              Season Config
+              {isSeries ? 'Dates & Points' : 'Season Config'}
             </button>
           </div>
 
@@ -207,7 +222,7 @@ export default function EditLeagueView({
           {activeTab === 'league' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">League Name</label>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{labels.noun} Name</label>
                 <input
                   type="text"
                   value={leagueName}
@@ -233,7 +248,7 @@ export default function EditLeagueView({
                 disabled={saving}
                 className="w-full bg-[#00285e] text-white py-3 rounded-xl font-semibold hover:bg-[#003a7d] disabled:bg-gray-400 text-lg"
               >
-                {saving ? 'Saving...' : 'Save League Info'}
+                {saving ? 'Saving...' : `Save ${labels.noun} Info`}
               </button>
             </div>
           )}
@@ -250,16 +265,18 @@ export default function EditLeagueView({
                 <>
                   {/* Season Name & Dates */}
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">Season Name</label>
-                      <input
-                        type="text"
-                        value={seasonName}
-                        onChange={(e) => setSeasonName(e.target.value)}
-                        className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
-                        placeholder="2026 Season"
-                      />
-                    </div>
+                    {!isSeries && (
+                      <div>
+                        <label className="block text-sm font-semibold text-gray-700 mb-2">Season Name</label>
+                        <input
+                          type="text"
+                          value={seasonName}
+                          onChange={(e) => setSeasonName(e.target.value)}
+                          className="w-full px-4 py-3 rounded-xl border-2 border-gray-200 focus:border-[#00285e] focus:outline-none"
+                          placeholder="2026 Season"
+                        />
+                      </div>
+                    )}
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -300,22 +317,24 @@ export default function EditLeagueView({
                     />
                   </div>
 
-                  {/* Drop Lowest */}
-                  <div className="bg-[#f0f4ff] p-4 rounded-xl">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      Drop Lowest Scores
-                    </label>
-                    <p className="text-xs text-gray-500 mb-2">
-                      How many of a player's worst event results to exclude from final standings. Set to 0 to count all events.
-                    </p>
-                    <input
-                      type="number"
-                      min="0"
-                      value={dropLowest}
-                      onChange={(e) => setDropLowest(parseInt(e.target.value) || 0)}
-                      className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
-                    />
-                  </div>
+                  {/* Drop Lowest — leagues only */}
+                  {!isSeries && (
+                    <div className="bg-[#f0f4ff] p-4 rounded-xl">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        Drop Lowest Scores
+                      </label>
+                      <p className="text-xs text-gray-500 mb-2">
+                        How many of a player's worst event results to exclude from final standings. Set to 0 to count all events.
+                      </p>
+                      <input
+                        type="number"
+                        min="0"
+                        value={dropLowest}
+                        onChange={(e) => setDropLowest(parseInt(e.target.value) || 0)}
+                        className="w-24 px-3 py-2 rounded-lg border-2 border-gray-200 focus:border-[#00285e] focus:outline-none text-center"
+                      />
+                    </div>
+                  )}
 
                   {/* Point Positions */}
                   <div className="bg-gray-50 p-4 rounded-xl">
@@ -368,13 +387,35 @@ export default function EditLeagueView({
                     </div>
                   </div>
 
+                  {/* Stat Games */}
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                      Stat Games
+                    </label>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Bonus points each round, counted automatically from scores (individual formats only). New events start with these — each event can be adjusted.
+                    </p>
+                    <StatGamesEditor statGames={statGames} onChange={setStatGames} />
+                  </div>
+
+                  {/* Bonus Points */}
+                  <div className="bg-gray-50 p-4 rounded-xl">
+                    <label className="block text-sm font-semibold text-gray-700 mb-1">
+                      Bonus Points
+                    </label>
+                    <p className="text-xs text-gray-500 mb-3">
+                      Tap-to-award extras on the scoring screen — chip-ins, sandies, greenies. New events start with these.
+                    </p>
+                    <BonusPointsEditor bonusPoints={bonusPoints} onChange={setBonusPoints} />
+                  </div>
+
                   {/* Save Button */}
                   <button
                     onClick={handleSaveSeasonConfig}
                     disabled={saving}
                     className="w-full bg-[#00285e] text-white py-3 rounded-xl font-semibold hover:bg-[#003a7d] disabled:bg-gray-400 text-lg"
                   >
-                    {saving ? 'Saving...' : 'Save Season Config'}
+                    {saving ? 'Saving...' : (isSeries ? 'Save Dates & Points' : 'Save Season Config')}
                   </button>
                 </>
               )}

@@ -443,7 +443,7 @@ export default function ManageFormatsView({
                         {/* Side game type badge */}
                         {format.sideGameType && (
                           <span className="inline-block bg-amber-50 text-amber-700 text-xs font-semibold px-2.5 py-1 rounded-lg border border-amber-200">
-                            {format.sideGameType === 'skins' ? 'Skins' : format.sideGameType}
+                            {{ skins: 'Skins', stroke_play: 'Stroke Play', vegas: 'Vegas', nines: "9's" }[format.sideGameType] || format.sideGameType}
                           </span>
                         )}
                       </div>
