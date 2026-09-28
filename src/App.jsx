@@ -493,6 +493,8 @@ function App() {
         userProfile={userProfile}
         setUserProfile={setUserProfile}
         userLeagues={userLeagues}
+        setUserLeagues={setUserLeagues}
+        loadUserLeagues={loadUserLeagues}
         userEvents={userEvents}
         setUserEvents={setUserEvents}
         loadUserEvents={loadUserEvents}

@@ -10,6 +10,8 @@ export default function HomeView({
   userProfile,
   setUserProfile,
   userLeagues,
+  setUserLeagues,
+  loadUserLeagues,
   userEvents = [],
   setUserEvents,
   loadUserEvents,
@@ -88,11 +90,17 @@ export default function HomeView({
     }
   };
 
-  // Refresh events every time HomeView is shown
+  // Refresh events and leagues/series every time HomeView is shown,
+  // so new rounds and memberships appear without a page refresh
   useEffect(() => {
     if (currentUser?.uid && loadUserEvents) {
       loadUserEvents(currentUser.uid).then(events => {
         setUserEvents(events);
+      });
+    }
+    if (currentUser?.uid && loadUserLeagues && setUserLeagues) {
+      loadUserLeagues(currentUser.uid).then(leagues => {
+        setUserLeagues(leagues);
       });
     }
   }, [currentUser?.uid]);

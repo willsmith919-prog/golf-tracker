@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { ref, get, set, remove } from 'firebase/database';
+import { useState, useEffect } from 'react';
+import { ref, get, set, remove, onValue, off } from 'firebase/database';
 import { database } from '../../firebase';
 import { removeEventFromStandings } from '../../utils/leaguePoints';
 import { getGroupLabels, isSeriesGroup } from '../../utils/groupLabels';
@@ -27,6 +27,22 @@ export default function LeagueDashboardView({
   const [editingHandicapUid, setEditingHandicapUid] = useState(null);
   const [expandedStandingsUid, setExpandedStandingsUid] = useState(null);
   const [editingHandicapValue, setEditingHandicapValue] = useState('');
+  // Read-only live listener: keeps the dashboard in sync with Firebase so newly
+  // created events, standings, and members appear without a page refresh.
+  // (The copy passed in from Home can be stale — it's loaded once at login.)
+  // Never writes, so it can't cause an update loop.
+  useEffect(() => {
+    if (!currentLeague?.id) return;
+    const leagueRef = ref(database, `leagues/${currentLeague.id}`);
+    const listener = onValue(leagueRef, (snapshot) => {
+      const latest = snapshot.val();
+      if (latest) {
+        setCurrentLeague(prev => ({ id: currentLeague.id, ...latest, userRole: prev?.userRole ?? currentLeague.userRole }));
+      }
+    });
+    return () => off(leagueRef, 'value', listener);
+  }, [currentLeague?.id]);
+
   const isCommissioner = currentLeague.userRole === 'commissioner';
   const isSeries = isSeriesGroup(currentLeague);
   const labels = getGroupLabels(isSeries);
